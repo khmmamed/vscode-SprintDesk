@@ -1,0 +1,108 @@
+h1 {
+  font-family: var(--vscode-editor-font-family);
+}
+
+.app {
+  margin: 15px auto;
+  max-width: 1000rem;
+}
+
+.app__actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.app__error {
+  color: var(--vscode-editorError-foreground);
+}
+
+.sprintdesk-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+  margin-top: 1em;
+}
+
+.sprintdesk-table th,
+.sprintdesk-table td {
+  padding: 0.75em 1.2em;
+  text-align: left;
+}
+
+.sprintdesk-table th {
+
+  font-weight: 600;
+  border-bottom: 2px solid #282829ff;
+}
+
+.sprintdesk-table tr:hover td {
+  transition: background 0.2s;
+}
+
+.branch-container {
+      display: flex;
+      align-items: center;
+      padding: 10px 20px;
+      position: relative;
+    }
+
+    .branch-badge {
+      display: inline-flex;
+      align-items: center;
+      background-color: #30363d;
+      border-radius: 6px;
+      padding: 2px 8px;
+      margin-right: 10px;
+    }
+
+    .branch-icon {
+      width: 20px;
+      height: 20px;
+      margin-right: 5px;
+    }
+
+    .branch-name {
+      font-weight: bold;
+      font-size: 14px;
+      color: #ffffff;
+    }
+
+    .commit-count {
+      background-color: #5a6370;
+      color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      line-height: 20px;
+      font-size: 12px;
+      margin-left: 8px;
+    }
+
+    .avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background-color: #30363d;
+      margin-left: 10px;
+      position: relative;
+    }
+
+    .commit-message {
+      margin-left: 10px;
+      font-size: 14px;
+      color: #e6edf3;
+    }
+
+    /* Connecting line */
+    .connecting-line {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 1px;
+      background-color: #30363d;
+      z-index: -1;
+    }
