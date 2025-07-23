@@ -1,4 +1,4 @@
-## ✅ Task: Render Sidebar Content
+## 📌 Task: Render Sidebar Content
 
 - **🗂 Type:** Feature Task  
 - **⏳ Estimated Duration:** 1 day  

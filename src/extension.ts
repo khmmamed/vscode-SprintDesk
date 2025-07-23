@@ -6,6 +6,7 @@ import { addMultipleTasksCommand } from "./commands/addMultipleTasksCommand";
 import { registerViewEpicsCommand } from "./commands/viewEpics";
 import { getWebviewContent } from "./webview/getWebviewContent";
 import { SprintsTreeDataProvider } from './sidebar/SprintsTreeDataProvider';
+import { TasksTreeDataProvider } from './sidebar/TasksTreeDataProvider';
 
 const SIDEBAR_VIEW_IDS = [
   "sprintdesk-sprints",
@@ -58,6 +59,17 @@ export async function activate(context: vscode.ExtensionContext) {
       new SprintsTreeDataProvider()
     )
   );
+
+  // Register the Tasks tree data provider for the Tasks view
+  if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+    const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    context.subscriptions.push(
+      vscode.window.registerTreeDataProvider(
+        'sprintdesk-tasks',
+        new TasksTreeDataProvider(workspaceRoot)
+      )
+    );
+  }
 
   // === Auto-copy .SprintDesk template on activation ===
   const workspaceFolders = vscode.workspace.workspaceFolders;

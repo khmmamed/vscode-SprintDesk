@@ -1,4 +1,4 @@
-## ✅ Task: Save Sidebar State
+## 📌 Task: Save Sidebar State
 
 - **🗂 Type:** Feature Task  
 - **⏳ Estimated Duration:** 0.5 day  

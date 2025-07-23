@@ -1,4 +1,4 @@
-## ✅ Task: Add Activity Bar Icon
+## 📌 Task: Add Activity Bar Icon
 
 - **🗂 Type:** Feature Task  
 - **⏳ Estimated Duration:** 0.5 day  
