@@ -7,4 +7,4 @@
 
 ## tasks
 
-- 📌 the links in epic tasks not yet renamed the folder they just link older names
+- [Fixed] 📌 the links in epic tasks not yet renamed the folder they just link older names

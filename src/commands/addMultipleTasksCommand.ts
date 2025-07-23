@@ -121,7 +121,7 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
               const taskLinks = taskFiles
                 .map((taskFile) => {
                   const title = getTaskTitle(taskFile);
-                  return `- 📌 [${title}](../🚀_tasks/${taskFile})`;
+                  return `- 📌 [${title}](../tasks/${taskFile})`;
                 })
                 .join("\n");
 
