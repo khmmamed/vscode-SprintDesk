@@ -3,6 +3,7 @@ import { registerOpenWebviewCommand } from "./commands/openWebview";
 import { registerViewTasksCommand } from "./commands/viewTasks";
 import { registerViewBacklogsCommand } from "./commands/viewBacklogs";
 import { addMultipleTasksCommand } from "./commands/addMultipleTasksCommand";
+import { registerViewEpicsCommand } from "./commands/viewEpics";
 
 export async function activate(context: vscode.ExtensionContext) {
   // Register your existing commands
@@ -10,6 +11,7 @@ export async function activate(context: vscode.ExtensionContext) {
   registerViewTasksCommand(context);
   registerViewBacklogsCommand(context);
   addMultipleTasksCommand(context);
+  registerViewEpicsCommand(context);
 
   // === Auto-copy .SprintDesk template on activation ===
   const workspaceFolders = vscode.workspace.workspaceFolders;

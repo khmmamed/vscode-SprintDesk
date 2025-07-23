@@ -33,6 +33,10 @@
         "title": "SprintDesk: View Backlogs"
       },
       {
+        "command": "sprintdesk.viewEpics",
+        "title": "SprintDesk: View Epics"
+      },
+      {
         "command": "sprintdesk.addMultipleTasks",
         "title": "SprintDesk: Add Multiple Tasks"
       }
