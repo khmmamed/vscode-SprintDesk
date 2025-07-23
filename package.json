@@ -44,17 +44,29 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "sprintdesk-activitybar",
+          "id": "sprintdesk",
           "title": "SprintDesk",
           "icon": "./assets/activitybar-icon.svg"
         }
       ]
     },
     "views": {
-      "sprintdesk-activitybar": [
+      "sprintdesk": [
         {
-          "id": "sprintdesk-home-view",
-          "name": "SprintDesk Home"
+          "id": "sprintdesk-sprints",
+          "name": "Sprints"
+        },
+        {
+          "id": "sprintdesk-backlogs",
+          "name": "Backlogs"
+        },
+        {
+          "id": "sprintdesk-epics",
+          "name": "Epics"
+        },
+        {
+          "id": "sprintdesk-tasks",
+          "name": "Tasks"
         }
       ]
     }

@@ -1,5 +1,5 @@
 
-## ✅ Task: Handle UI Events
+## 📌 Task: Handle UI Events
 
 - **🗂 Type:** Feature Task  
 - **⏳ Estimated Duration:** 0.5 day  

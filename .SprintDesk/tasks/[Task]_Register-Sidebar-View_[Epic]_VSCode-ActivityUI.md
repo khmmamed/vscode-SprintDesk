@@ -1,4 +1,4 @@
-## ✅ Task: Register Sidebar View
+## 📌 Task: Register Sidebar View
 
 - **🗂 Type:** Feature Task  
 - **⏳ Estimated Duration:** 0.5 day  
