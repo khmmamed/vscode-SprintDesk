@@ -16,7 +16,7 @@ const SIDEBAR_VIEW_IDS = [
 ];
 
 class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext, private readonly viewId: string) {}
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -31,6 +31,12 @@ class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
       ]
     };
     webviewView.webview.html = getWebviewContent(this.context, webviewView.webview);
+    // If this is the epics sidebar, notify the webview to render the epics tree
+    if (this.viewId === 'sprintdesk-epics') {
+      setTimeout(() => {
+        webviewView.webview.postMessage({ type: 'showEpicsTree' });
+      }, 100);
+    }
   }
 }
 
@@ -47,7 +53,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.window.registerWebviewViewProvider(
         viewId,
-        new SprintDeskSidebarProvider(context)
+        new SprintDeskSidebarProvider(context, viewId)
       )
     );
   }
