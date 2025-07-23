@@ -44,24 +44,29 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "sprintdesk-activitybar",
+          "id": "sprintdesk",
           "title": "SprintDesk",
           "icon": "./assets/activitybar-icon.svg"
         }
       ]
     },
     "views": {
-      "sprintdesk-activitybar": [
+      "sprintdesk": [
         {
-          "id": "sprintdesk-sidebar-view",
-          "name": "SprintDesk Sidebar",
-          "type": "webview",
-          "icon": "./assets/activitybar-icon.svg",
-          "when": "viewContainer == sprintdesk-activitybar",
-          "visibility": "visible",
-          "description": "Your agile workspace for tasks, backlogs, and epics.",
-          "canToggleVisibility": true,
-          "collapsed": false
+          "id": "sprintdesk-sprints",
+          "name": "Sprints"
+        },
+        {
+          "id": "sprintdesk-backlogs",
+          "name": "Backlogs"
+        },
+        {
+          "id": "sprintdesk-epics",
+          "name": "Epics"
+        },
+        {
+          "id": "sprintdesk-tasks",
+          "name": "Tasks"
         }
       ]
     }
