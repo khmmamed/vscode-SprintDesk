@@ -26,8 +26,8 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
       }
 
       const workspaceRoot = workspaceFolders[0].uri;
-      const tasksDir = vscode.Uri.joinPath(workspaceRoot, ".SprintDesk", "🚀_tasks");
-      const epicsDir = vscode.Uri.joinPath(workspaceRoot, ".SprintDesk", "🚩_Epics");
+      const tasksDir = vscode.Uri.joinPath(workspaceRoot, ".SprintDesk", "tasks");
+      const epicsDir = vscode.Uri.joinPath(workspaceRoot, ".SprintDesk", "Epics");
 
       const panel = vscode.window.createWebviewPanel(
         "sprintDeskAddMultipleTasks",

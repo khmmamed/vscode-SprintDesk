@@ -18,7 +18,7 @@ export function registerViewBacklogsCommand(context: vscode.ExtensionContext) {
 
         if (workspaceFolders && workspaceFolders.length > 0) {
             const rootPath = workspaceFolders[0].uri.fsPath;
-            const backlogsFolder = path.join(rootPath, ".SprintDesk", "📌_Backlogs");
+            const backlogsFolder = path.join(rootPath, ".SprintDesk", "Backlogs");
             const mdFiles = glob.sync("**/*.md", { cwd: backlogsFolder, absolute: true });
 
             for (const file of mdFiles) {

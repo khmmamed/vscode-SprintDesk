@@ -14,7 +14,7 @@ export function registerViewTasksCommand(context: vscode.ExtensionContext) {
     let taskRows: { task: string; epic: string; file: string }[] = [];
     if (workspaceFolders && workspaceFolders.length > 0) {
       const rootPath = workspaceFolders[0].uri.fsPath;
-      const tasksFolder = path.join(rootPath, ".SprintDesk", "🚀_tasks");
+      const tasksFolder = path.join(rootPath, ".SprintDesk", "tasks");
       const mdFiles = glob.sync("**/*.md", { cwd: tasksFolder, absolute: true });
 
       for (const file of mdFiles) {
