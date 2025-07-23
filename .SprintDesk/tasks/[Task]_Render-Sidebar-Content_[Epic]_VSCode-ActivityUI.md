@@ -7,7 +7,7 @@
 - **📍 Status:** ⏳ Waiting
 
 ### Objective:  
-Display custom HTML/React content inside the registered sidebar using a webview.
+Display custom React content inside the registered sidebar using a webview.
 
 ### Checklist:
 - [ ] Create a webview provider using `vscode.WebviewViewProvider`  
