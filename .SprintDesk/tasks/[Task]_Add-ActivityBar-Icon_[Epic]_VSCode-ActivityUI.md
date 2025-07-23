@@ -10,15 +10,15 @@
 Add a custom icon to the VS Code Activity Bar to represent the extension visually and provide easy access to its features.
 
 ### Checklist:
-- [ ] Create a unique icon (SVG or PNG, 32x32 preferred)  
-- [ ] Register the icon using `contributes.viewsContainers` in `package.json`  
-- [ ] Set a title and tooltip for the icon  
-- [ ] Test icon visibility in both light and dark themes  
+- [x] Create a unique icon (SVG or PNG, 32x32 preferred)  
+- [x] Register the icon using `contributes.viewsContainers` in `package.json`  
+- [x] Set a title and tooltip for the icon  
+- [x] Test icon visibility in both light and dark themes  
 
 ### Acceptance Criteria:
-- [ ] Icon appears consistently in the Activity Bar  
-- [ ] Clicking the icon opens the corresponding sidebar view  
-- [ ] Icon works in light/dark themes without distortion  
+- [x] Icon appears consistently in the Activity Bar  
+- [x] Clicking the icon opens the corresponding sidebar view  
+- [x] Icon works in light/dark themes without distortion  
 
 ### Helpful Notes:
 - VS Code recommends a monochrome icon for best compatibility  

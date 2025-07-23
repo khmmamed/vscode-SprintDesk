@@ -40,7 +40,24 @@
         "command": "sprintdesk.addMultipleTasks",
         "title": "SprintDesk: Add Multiple Tasks"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sprintdesk-activitybar",
+          "title": "SprintDesk",
+          "icon": "./assets/activitybar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sprintdesk-activitybar": [
+        {
+          "id": "sprintdesk-home-view",
+          "name": "SprintDesk Home"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
