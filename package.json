@@ -29,7 +29,11 @@
       {
         "command": "sprintdesk.viewBacklogs",
         "title": "SprintDesk: View Backlogs"
-      }
+      },
+      {
+      "command": "sprintdesk.addMultipleTasks",
+      "title": "SprintDesk: Add Multiple Tasks"
+    }
     ]
   },
   "scripts": {

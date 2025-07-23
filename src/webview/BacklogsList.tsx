@@ -15,10 +15,9 @@ export const BacklogsList: React.FC<BacklogsListProps> = ({ backlogs }) => {
 
   return (
     <div>
-      <h2>Backlogs</h2>
-      <ul className="tree-root">
-        {backlogs.map(({ title, tasks }, idx) => (
-          <li className="branch-container" key={idx} style={{ marginBottom: '1rem' }}>
+
+        {backlogs.map(({ title, tasks }, backlogIndex) => (
+          <div className="branch-container" key={`${title}-${backlogIndex}`} style={{ marginBottom: '1rem' }}>
             <div className="branch-badge" style={{ alignSelf: "flex-start" }}>
               <img
                 src="https://github.com/favicon.ico"
@@ -29,16 +28,15 @@ export const BacklogsList: React.FC<BacklogsListProps> = ({ backlogs }) => {
               <span className="commit-count">+{tasks.length}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {tasks.map((task, index) => (
-                <div style={{ display: "flex" }} key={index}>
+              {tasks.map((task, taskIndex) => (
+                <div style={{ display: "flex" }} key={`${task}-${taskIndex}`}>
                   <div className="avatar">📌</div>
                   <div className="commit-message">{task}</div>
                 </div>
               ))}
             </div>
-          </li>
+          </div>
         ))}
-      </ul>
     </div>
   );
 };
