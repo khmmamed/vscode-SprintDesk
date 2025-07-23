@@ -53,8 +53,15 @@
     "views": {
       "sprintdesk-activitybar": [
         {
-          "id": "sprintdesk-home-view",
-          "name": "SprintDesk Home"
+          "id": "sprintdesk-sidebar-view",
+          "name": "SprintDesk Sidebar",
+          "type": "webview",
+          "icon": "./assets/activitybar-icon.svg",
+          "when": "viewContainer == sprintdesk-activitybar",
+          "visibility": "visible",
+          "description": "Your agile workspace for tasks, backlogs, and epics.",
+          "canToggleVisibility": true,
+          "collapsed": false
         }
       ]
     }
