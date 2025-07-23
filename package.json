@@ -3,7 +3,7 @@
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
   "description": "",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -14,7 +14,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -31,9 +33,9 @@
         "title": "SprintDesk: View Backlogs"
       },
       {
-      "command": "sprintdesk.addMultipleTasks",
-      "title": "SprintDesk: Add Multiple Tasks"
-    }
+        "command": "sprintdesk.addMultipleTasks",
+        "title": "SprintDesk: Add Multiple Tasks"
+      }
     ]
   },
   "scripts": {
