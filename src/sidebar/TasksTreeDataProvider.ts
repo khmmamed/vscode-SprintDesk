@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { exec } from 'child_process';
 
 export class TasksTreeItem extends vscode.TreeItem {
   constructor(
@@ -22,34 +23,55 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TasksTreeI
     return element;
   }
 
-  getChildren(element?: TasksTreeItem): Thenable<TasksTreeItem[]> {
+  async getChildren(element?: TasksTreeItem): Promise<TasksTreeItem[]> {
     if (!this.workspaceRoot) {
-      return Promise.resolve([]);
+      return [];
     }
     if (!element) {
-      // Flat list: each task with its epic title
-      return Promise.resolve(this.getAllTasksWithEpics());
+      // Flat list: each task with its epic title and last commit datetime
+      return this.getAllTasksWithEpics();
     }
-    return Promise.resolve([]);
+    return [];
   }
 
-  private getAllTasksWithEpics(): TasksTreeItem[] {
+  private async getAllTasksWithEpics(): Promise<TasksTreeItem[]> {
     const tasksDir = path.join(this.workspaceRoot, '.SprintDesk', 'tasks');
     if (!fs.existsSync(tasksDir)) return [];
     const files = fs.readdirSync(tasksDir);
     const tasks: TasksTreeItem[] = [];
-    for (const file of files) {
+    const promises = files.map(file => {
       const match = file.match(/^\[Task\]_(.+)_\[Epic\]_(.+)\.md$/);
       if (match) {
         const taskTitle = match[1];
         const epicTitle = match[2];
-        tasks.push(Object.assign(
-          new TasksTreeItem(`📌${taskTitle}`, vscode.TreeItemCollapsibleState.None),
-          { description: `🚩${epicTitle}` }
-        ));
+        const filePath = path.join(tasksDir, file);
+        return this.getLastCommitDate(filePath).then(date => {
+          const desc = `🚩${epicTitle} | 🕒 ${date}`;
+          return Object.assign(
+            new TasksTreeItem(`📌${taskTitle}`, vscode.TreeItemCollapsibleState.None),
+            { description: desc }
+          );
+        });
       }
-    }
-    return tasks;
+      return null;
+    });
+    const results = await Promise.all(promises);
+    return results.filter(Boolean) as TasksTreeItem[];
   }
 
+  private getLastCommitDate(filePath: string): Promise<string> {
+    return new Promise(resolve => {
+      exec(
+        `git log -1 --format=%ci -- "${filePath}"`,
+        { cwd: this.workspaceRoot },
+        (err, stdout) => {
+          if (err || !stdout) {
+            resolve('N/A');
+          } else {
+            resolve(stdout.trim());
+          }
+        }
+      );
+    });
+  }
 }

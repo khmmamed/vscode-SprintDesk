@@ -7,4 +7,5 @@
 
 ** tasks
 
-- 📌 we want after to add dropdown menu todo choose the backlog and create tasks with this name [Task]_task-title_[Bug]_backlog-title.md or [Task]_task-title_[Improvement] and so..
+- [Open] 📌 we want after to add dropdown menu todo choose the backlog and create tasks with this name [Task]_task-title_[Bug]_backlog-title.md or [Task]_task-title_[Improvement] and so..
+- [Open] 📌 use different random color for Epics
