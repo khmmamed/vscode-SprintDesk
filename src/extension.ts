@@ -35,7 +35,7 @@ class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
     if (this.viewId === 'sprintdesk-epics') {
       setTimeout(() => {
         webviewView.webview.postMessage({ type: 'showEpicsTree' });
-      }, 100);
+      }, 500);
     }
   }
 }

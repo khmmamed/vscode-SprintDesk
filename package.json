@@ -62,7 +62,8 @@
         },
         {
           "id": "sprintdesk-epics",
-          "name": "Epics"
+          "name": "Epics",
+          "type": "webview"
         },
         {
           "id": "sprintdesk-tasks",
