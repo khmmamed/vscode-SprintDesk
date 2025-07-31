@@ -39,6 +39,10 @@
       {
         "command": "sprintdesk.addMultipleTasks",
         "title": "SprintDesk: Add Multiple Tasks"
+      },
+      {
+        "command": "sprintdesk.addQuickly",
+        "title": "SprintDesk: Add Quickly"
       }
     ],
     "viewsContainers": {

@@ -4,6 +4,7 @@ import { registerViewTasksCommand } from "./commands/viewTasks";
 import { registerViewBacklogsCommand } from "./commands/viewBacklogs";
 import { addMultipleTasksCommand } from "./commands/addMultipleTasksCommand";
 import { registerViewEpicsCommand } from "./commands/viewEpics";
+import { registerAddQuicklyCommand } from "./commands/addQuicklyCommand";
 import { getWebviewContent } from "./webview/getWebviewContent";
 import { SprintsTreeDataProvider } from './sidebar/SprintsTreeDataProvider';
 import { TasksTreeDataProvider } from './sidebar/TasksTreeDataProvider';
@@ -41,6 +42,7 @@ export async function activate(context: vscode.ExtensionContext) {
   registerViewBacklogsCommand(context);
   addMultipleTasksCommand(context);
   registerViewEpicsCommand(context);
+  registerAddQuicklyCommand(context);
 
   // Register a WebviewViewProvider for each sidebar panel
   for (const viewId of SIDEBAR_VIEW_IDS) {
