@@ -1,23 +1,23 @@
 // BacklogsList.tsx
 import React from 'react';
 
-interface Backlog {
+interface Epic {
   title: string;
   tasks: string[];
 }
 
-interface BacklogsListProps {
-  backlogs: Backlog[];
+interface EpicsListProps {
+  epics: Epic[];
 }
 
-export const BacklogsList: React.FC<BacklogsListProps> = ({ backlogs }) => {
-  if (backlogs.length === 0) return null;
+export const EpicsList: React.FC<EpicsListProps> = ({ epics }) => {
+  if (epics.length === 0) return null;
 
   return (
     <div>
 
-        {backlogs.map(({ title, tasks }, backlogIndex) => (
-          <div className="branch-container" key={`${title}-${backlogIndex}`} style={{ marginBottom: '1rem' }}>
+        {epics.map(({ title, tasks }, epicIndex) => (
+          <div className="branch-container" key={`${title}-${epicIndex}`} style={{ marginBottom: '1rem' }}>
             <div className="branch-badge" style={{ alignSelf: "flex-start" }}>
               <img
                 src="https://github.com/favicon.ico"

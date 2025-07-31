@@ -4,22 +4,22 @@ import * as path from "path";
 import glob from "glob";
 import { getWebviewContent } from "../webview/getWebviewContent";
 
-export function registerViewBacklogsCommand(context: vscode.ExtensionContext) {
-    const disposable = vscode.commands.registerCommand("sprintdesk.viewBacklogs", async () => {
+export function registerViewEpicsCommand(context: vscode.ExtensionContext) {
+    const disposable = vscode.commands.registerCommand("sprintdesk.viewEpics", async () => {
         const panel = vscode.window.createWebviewPanel(
-            "sprintdesk-backlogs",
-            "SprintDesk Backlogs",
+            "sprintdesk-epics",
+            "SprintDesk Epics",
             vscode.ViewColumn.One,
             { enableScripts: true, retainContextWhenHidden: true }
         );
 
         const workspaceFolders = vscode.workspace.workspaceFolders;
-        let backlogData: { title: string; tasks: string[] }[] = [];
+        let epicData: { title: string; tasks: string[] }[] = [];
 
         if (workspaceFolders && workspaceFolders.length > 0) {
             const rootPath = workspaceFolders[0].uri.fsPath;
-            const backlogsFolder = path.join(rootPath, ".SprintDesk", "Backlogs");
-            const mdFiles = glob.sync("**/*.md", { cwd: backlogsFolder, absolute: true });
+            const epicsFolder = path.join(rootPath, ".SprintDesk", "Epics");
+            const mdFiles = glob.sync("**/*.md", { cwd: epicsFolder, absolute: true });
 
             for (const file of mdFiles) {
                 try {
@@ -62,7 +62,7 @@ export function registerViewBacklogsCommand(context: vscode.ExtensionContext) {
                         }
                     }
 
-                    backlogData.push({ title, tasks });
+                    epicData.push({ title, tasks });
                 } catch (e) {
                     // optionally log error here
                 }
@@ -72,8 +72,8 @@ export function registerViewBacklogsCommand(context: vscode.ExtensionContext) {
         panel.webview.html = getWebviewContent(context, panel.webview);
         setTimeout(() => {
             panel.webview.postMessage({
-                command: "SET_BACKLOGS",
-                payload: backlogData,
+                command: "SET_EPICS",
+                payload: epicData,
             });
         }, 500);
     });

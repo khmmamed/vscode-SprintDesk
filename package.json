@@ -3,7 +3,7 @@
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
   "description": "",
-  "version": "0.0.1",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -14,7 +14,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -29,8 +31,49 @@
       {
         "command": "sprintdesk.viewBacklogs",
         "title": "SprintDesk: View Backlogs"
+      },
+      {
+        "command": "sprintdesk.viewEpics",
+        "title": "SprintDesk: View Epics"
+      },
+      {
+        "command": "sprintdesk.addMultipleTasks",
+        "title": "SprintDesk: Add Multiple Tasks"
+      },
+      {
+        "command": "sprintdesk.addQuickly",
+        "title": "SprintDesk: Add Quickly"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sprintdesk",
+          "title": "SprintDesk",
+          "icon": "./assets/activitybar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sprintdesk": [
+        {
+          "id": "sprintdesk-sprints",
+          "name": "Sprints"
+        },
+        {
+          "id": "sprintdesk-backlogs",
+          "name": "Backlogs"
+        },
+        {
+          "id": "sprintdesk-epics",
+          "name": "Epics"
+        },
+        {
+          "id": "sprintdesk-tasks",
+          "name": "Tasks"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

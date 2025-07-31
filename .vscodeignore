@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+.SprintDesk/**
 out/**
 node_modules/**
 src/**
@@ -11,3 +12,4 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 webpack/**
+!template/**

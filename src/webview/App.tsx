@@ -1,89 +1,56 @@
+// src/webview/App.tsx
 import * as React from "react";
 import { messageHandler } from "@estruyf/vscode/dist/client";
 import "./styles.css";
 import { TasksTable } from "./TasksTable";
 import { BacklogsList } from "./BacklogsList";
+import { AddMultipleTasksForm } from "./AddMultipleTasksForm";
+import { EpicsList } from "./EpicsList";
 
-export interface IAppProps { }
 
-export const App: React.FunctionComponent<IAppProps> = ({ }: React.PropsWithChildren<IAppProps>) => {
+export interface IAppProps {}
+
+export const App: React.FunctionComponent<IAppProps> = ({}) => {
   const [message, setMessage] = React.useState<string>("");
   const [error, setError] = React.useState<string>("");
   const [tasks, setTasks] = React.useState<{ task: string; epic: string; file: string }[]>([]);
   const [backlogs, setBacklogs] = React.useState<{ title: string; tasks: string[] }[]>([]);
+  const [epics, setEpics] = React.useState<{ title: string; tasks: string[] }[]>([]);
+  const [view, setView] = React.useState<string | null>(null);
   React.useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      const { command, payload } = event.data;
-      if (command === "SET_TASKS") {
-        setTasks(payload);
-      } else if (command === "SET_BACKLOGS") {
-        setBacklogs(payload);
-        // By default collapse all
-        const defaultExpanded: Record<string, boolean> = {};
-        payload.forEach((b: { title: string }) => {
-          defaultExpanded[b.title] = false;
-        });
-      }
-    };
-
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
+    const params = new URLSearchParams(window.location.search);
+    setView(params.get("view"));
   }, []);
 
   React.useEffect(() => {
     const handler = (event: MessageEvent) => {
       const { command, payload } = event.data;
-      if (command === "SET_BACKLOGS") {
-        setBacklogs(event.data.payload);
-      }
+      if (command === "SET_TASKS") setTasks(payload);
+      else if (command === "SET_BACKLOGS") setBacklogs(payload);
+      else if (command === "SET_EPICS") setEpics(payload);
     };
-
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  const sendMessage = () => {
-    messageHandler.send("POST_DATA", { msg: "Hello from the webview" });
-  };
-
-  const requestData = () => {
-    messageHandler.request<string>("GET_DATA").then((msg) => {
-      setMessage(msg);
-    });
-  };
-
-  const requestWithErrorData = () => {
-    messageHandler
-      .request<string>("GET_DATA_ERROR")
-      .then((msg) => {
-        setMessage(msg);
-      })
-      .catch((err) => {
-        setError(err);
-      });
-  };
+  if (view === "addMultipleTasks") {
+    return <AddMultipleTasksForm />;
+  }
 
   return (
     <div className="app">
-      <h1>Hello from the React Webview Starter</h1>
-
+      <h1>Sprint Desk v0.0.4</h1>
       <div className="app__actions">
-        <button onClick={sendMessage}>Send message to extension</button>
-        <button onClick={requestData}>Get data from extension</button>
-        <button onClick={requestWithErrorData}>Get data with error</button>
+        <button onClick={() => messageHandler.send("SET_TASKS", { msg: "Hello" })}>
+          refresh tasks
+        </button>
+
       </div>
-
-      {message && (
-        <p>
-          <strong>Message from the extension</strong>: {message}
-        </p>
-      )}
-
-      {error && <p className='app__error'><strong>ERROR</strong>: {error}</p>}
-
-       {/* Use the new components */}
+      {message && <p><strong>Message:</strong> {message}</p>}
+      {error && <p className="app__error"><strong>ERROR:</strong> {error}</p>}
       <TasksTable tasks={tasks} />
       <BacklogsList backlogs={backlogs} />
+      <EpicsList epics={epics} />
     </div>
   );
 };
