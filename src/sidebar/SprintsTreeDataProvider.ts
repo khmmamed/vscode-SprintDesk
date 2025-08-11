@@ -56,49 +56,100 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     const entries = fs.readdirSync(sprintsDir, { withFileTypes: true });
     const files = entries.filter(e => e.isFile()).map(e => e.name);
 
-    const sprintItems = files.map(name => {
+    const items = await Promise.all(files.map(async (name) => {
       const filePath = path.join(sprintsDir, name);
-      const label = this.humanizeSprintName(name);
+      const range = this.parseSprintDateRangeFromFile(filePath) || this.parseDateRangeFromFilename(name);
+      let label: string;
+      if (range) {
+        const [start, end] = range;
+        label = `📅 ${this.formatDMY(start)} ➜ ${this.formatDMY(end)}`;
+      } else {
+        // Fallback to humanized filename if no dates found
+        label = this.humanizeSprintName(name);
+      }
       const item = new SprintsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
       item.contextValue = 'sprint';
       return item;
-    });
+    }));
 
-    // Sort by label for stable ordering
-    sprintItems.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
-    return sprintItems;
+    items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
+    return items;
   }
 
   private humanizeSprintName(filename: string): string {
-    // Strip extension
     const base = filename.replace(/\.[^.]+$/, '');
-    // Replace underscores/dashes with spaces and trim brackets-style prefixes
-    const cleaned = base
-      .replace(/^\[(?:Sprint|S)\]_?/i, '')
-      .replace(/[_-]+/g, ' ')
-      .trim();
+    const cleaned = base.replace(/^\[(?:Sprint|S)\]_?/i, '').replace(/[_-]+/g, ' ').trim();
     return cleaned || base;
+  }
+
+  private formatDMY(d: Date): string {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  private parseSprintDateRangeFromFile(filePath: string): [Date, Date] | null {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const isoRegex = /(\d{4})-(\d{2})-(\d{2})/g; // yyyy-mm-dd
+      const dmyRegex = /(\d{2})-(\d{2})-(\d{4})/g; // dd-mm-yyyy
+      const dates: Date[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = isoRegex.exec(content)) && dates.length < 2) {
+        const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+        dates.push(d);
+      }
+      if (dates.length < 2) {
+        while ((m = dmyRegex.exec(content)) && dates.length < 2) {
+          const d = new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+          dates.push(d);
+        }
+      }
+      if (dates.length >= 2) {
+        const [a, b] = dates;
+        return a <= b ? [a, b] as [Date, Date] : [b, a] as [Date, Date];
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseDateRangeFromFilename(name: string): [Date, Date] | null {
+    const base = name.replace(/\.[^.]+$/, '');
+    const isoRegex = /(\d{4})-(\d{2})-(\d{2})/g;
+    const dmyRegex = /(\d{2})-(\d{2})-(\d{4})/g;
+    const dates: Date[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = isoRegex.exec(base)) && dates.length < 2) {
+      dates.push(new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)));
+    }
+    if (dates.length < 2) {
+      while ((m = dmyRegex.exec(base)) && dates.length < 2) {
+        dates.push(new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10)));
+      }
+    }
+    if (dates.length >= 2) {
+      const [a, b] = dates;
+      return a <= b ? [a, b] as [Date, Date] : [b, a] as [Date, Date];
+    }
+    return null;
   }
 
   private async getTasksFromSprintFile(filePath: string): Promise<SprintsTreeItem[]> {
     try {
       const content = fs.readFileSync(filePath, 'utf8');
-
-      // Capture the section after a heading "# Tasks" up to the next heading of any level
       const sectionMatch = content.match(/(^|\r?\n)#{1,6}\s*Tasks\b[^\n]*\r?\n([\s\S]*?)(?=\r?\n#{1,6}\s+\S|\s*$)/i);
       if (!sectionMatch) return [];
       const section = sectionMatch[2] ?? '';
 
       const rawItems: string[] = [];
-
-      // Match unordered list items, with optional checkboxes
       const ulRegex = /^\s*[-*]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
       let m: RegExpExecArray | null;
       while ((m = ulRegex.exec(section)) !== null) {
         rawItems.push(m[1].trim());
       }
-
-      // Also match ordered list items like "1. Task" or "1) Task"
       const olRegex = /^\s*\d+[\.)]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
       while ((m = olRegex.exec(section)) !== null) {
         rawItems.push(m[1].trim());
