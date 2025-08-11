@@ -58,7 +58,8 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
 
     const items = await Promise.all(files.map(async (name) => {
       const filePath = path.join(sprintsDir, name);
-      const range = this.parseSprintDateRangeFromFile(filePath) || this.parseDateRangeFromFilename(name);
+      // Prefer parsing from filename based on the required pattern
+      const range = this.parseDateRangeFromFilename(name) || this.parseSprintDateRangeFromFile(filePath);
       let label: string;
       if (range) {
         const [start, end] = range;
@@ -117,24 +118,22 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
   }
 
   private parseDateRangeFromFilename(name: string): [Date, Date] | null {
+    // Expected filename pattern (without extension): [Sprint]_dd-mm_dd-mm_yyyy or [Sprint]_dd-mm_dd-mm_yy
     const base = name.replace(/\.[^.]+$/, '');
-    const isoRegex = /(\d{4})-(\d{2})-(\d{2})/g;
-    const dmyRegex = /(\d{2})-(\d{2})-(\d{4})/g;
-    const dates: Date[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = isoRegex.exec(base)) && dates.length < 2) {
-      dates.push(new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)));
+    const re = /^\[(?:Sprint|S)\]_(\d{2})-(\d{2})_(\d{2})-(\d{2})_(\d{2,4})$/i;
+    const m = base.match(re);
+    if (!m) return null;
+    const d1 = parseInt(m[1], 10);
+    const m1 = parseInt(m[2], 10) - 1;
+    const d2 = parseInt(m[3], 10);
+    const m2 = parseInt(m[4], 10) - 1;
+    let y = parseInt(m[5], 10);
+    if (m[5].length === 2) {
+      y = 2000 + y; // assume 20xx for two-digit years
     }
-    if (dates.length < 2) {
-      while ((m = dmyRegex.exec(base)) && dates.length < 2) {
-        dates.push(new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10)));
-      }
-    }
-    if (dates.length >= 2) {
-      const [a, b] = dates;
-      return a <= b ? [a, b] as [Date, Date] : [b, a] as [Date, Date];
-    }
-    return null;
+    const start = new Date(y, m1, d1);
+    const end = new Date(y, m2, d2);
+    return start <= end ? [start, end] : [end, start];
   }
 
   private getStatusEmojiFromText(text: string): string {
