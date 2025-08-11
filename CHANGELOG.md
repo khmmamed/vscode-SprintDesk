@@ -7,3 +7,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 - Initial release
+
+## [released]
+
+Add webview type to epics view and implement EpicsTree component
+sprints name patterns
+show task of backlogs sprints
+humanized tasks names and open them when clicked
+upcoming changes
+change status in sprint files
+open sprint file calendar should be fix it
+show task status in sprint sidebar
+fix: sprint name
