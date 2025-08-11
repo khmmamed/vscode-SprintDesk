@@ -137,6 +137,25 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     return null;
   }
 
+  private getStatusEmojiFromText(text: string): string {
+    const m = text.match(/\{[^}]*status\s*:\s*([a-z]+)[^}]*\}/i);
+    const status = m ? m[1].toLowerCase() : '';
+    switch (status) {
+      case 'waiting':
+        return '🟡';
+      case 'started':
+        return '🔵';
+      case 'finished':
+        return '🟢';
+      case 'reopened':
+        return '🟠';
+      case 'closed':
+        return '⚫';
+      default:
+        return '';
+    }
+  }
+
   private async getTasksFromSprintFile(filePath: string): Promise<SprintsTreeItem[]> {
     try {
       const content = fs.readFileSync(filePath, 'utf8');
@@ -161,10 +180,12 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
         const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
         let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
         const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
+        const emoji = this.getStatusEmojiFromText(itemText);
+        const displayLabel = (emoji ? `${emoji} ` : '') + prettyLabel;
         let key = prettyLabel;
         const rel = linkMatch ? linkMatch[2] : undefined;
         const abs = rel ? path.resolve(path.dirname(filePath), rel) : undefined;
-        const treeItem = new SprintsTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None, [], undefined, labelSlug, abs, filePath);
+        const treeItem = new SprintsTreeItem(displayLabel, vscode.TreeItemCollapsibleState.None, [], undefined, labelSlug, abs, filePath);
         treeItem.contextValue = 'sprintTask';
         if (abs) {
           Object.assign(treeItem, {
