@@ -7,7 +7,10 @@ export class SprintsTreeItem extends vscode.TreeItem {
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly children: SprintsTreeItem[] = [],
-    public readonly filePath?: string // for sprint items, keep a reference to the file on disk
+    public readonly filePath?: string, // for sprint items, reference to the sprint file on disk
+    public readonly taskSlug?: string, // for task child items, original slug (e.g., add-status-to-product)
+    public readonly taskFilePath?: string, // for task child items, resolved file path to the task file
+    public readonly sprintFilePath?: string // for task child items, sprint file path containing the task
   ) {
     super(label, collapsibleState);
   }
@@ -56,7 +59,9 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     const sprintItems = files.map(name => {
       const filePath = path.join(sprintsDir, name);
       const label = this.humanizeSprintName(name);
-      return new SprintsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
+      const item = new SprintsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
+      item.contextValue = 'sprint';
+      return item;
     });
 
     // Sort by label for stable ordering
@@ -106,11 +111,11 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
         let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
         const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
         let key = prettyLabel;
-        const treeItem = new SprintsTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None);
-        if (linkMatch) {
-          const rel = linkMatch[2];
-          const abs = path.resolve(path.dirname(filePath), rel);
-          key = `${prettyLabel}|${abs}`;
+        const rel = linkMatch ? linkMatch[2] : undefined;
+        const abs = rel ? path.resolve(path.dirname(filePath), rel) : undefined;
+        const treeItem = new SprintsTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None, [], undefined, labelSlug, abs, filePath);
+        treeItem.contextValue = 'sprintTask';
+        if (abs) {
           Object.assign(treeItem, {
             command: {
               command: 'vscode.open',
@@ -118,6 +123,7 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
               arguments: [vscode.Uri.file(abs)]
             }
           });
+          key = `${prettyLabel}|${abs}`;
         }
         if (!seen.has(key)) {
           seen.add(key);

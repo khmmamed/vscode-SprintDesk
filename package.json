@@ -43,6 +43,11 @@
       {
         "command": "sprintdesk.addQuickly",
         "title": "SprintDesk: Add Quickly"
+      },
+      {
+        "command": "sprintdesk.startFeatureFromTask",
+        "title": "SprintDesk: Start Feature from Task",
+        "icon": "$(git-branch)"
       }
     ],
     "viewsContainers": {
@@ -72,6 +77,15 @@
         {
           "id": "sprintdesk-tasks",
           "name": "Tasks"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "sprintdesk.startFeatureFromTask",
+          "when": "view == sprintdesk-sprints && viewItem == sprintTask",
+          "group": "inline"
         }
       ]
     }
