@@ -6,17 +6,19 @@ import { TasksTable } from "./TasksTable";
 import { BacklogsList } from "./BacklogsList";
 import { AddMultipleTasksForm } from "./AddMultipleTasksForm";
 import { EpicsList } from "./EpicsList";
+import { EpicsTree } from "../components/EpicsTree";
 
 
-export interface IAppProps {}
+export interface IAppProps { }
 
-export const App: React.FunctionComponent<IAppProps> = ({}) => {
+export const App: React.FunctionComponent<IAppProps> = ({ }) => {
   const [message, setMessage] = React.useState<string>("");
   const [error, setError] = React.useState<string>("");
   const [tasks, setTasks] = React.useState<{ task: string; epic: string; file: string }[]>([]);
   const [backlogs, setBacklogs] = React.useState<{ title: string; tasks: string[] }[]>([]);
   const [epics, setEpics] = React.useState<{ title: string; tasks: string[] }[]>([]);
   const [view, setView] = React.useState<string | null>(null);
+  const [showEpicsTree, setShowEpicsTree] = React.useState<boolean>(false);
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setView(params.get("view"));
@@ -32,14 +34,24 @@ export const App: React.FunctionComponent<IAppProps> = ({}) => {
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
-
+  React.useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'showEpicsTree') {
+        setShowEpicsTree(true);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
   if (view === "addMultipleTasks") {
     return <AddMultipleTasksForm />;
   }
-
+  if (showEpicsTree) {
+    return <EpicsTree />;
+  }
   return (
     <div className="app">
-      <h1>Sprint Desk v0.0.4</h1>
+      <h1>Sprint Desk v0.2.4</h1>
       <div className="app__actions">
         <button onClick={() => messageHandler.send("SET_TASKS", { msg: "Hello" })}>
           refresh tasks
@@ -51,6 +63,7 @@ export const App: React.FunctionComponent<IAppProps> = ({}) => {
       <TasksTable tasks={tasks} />
       <BacklogsList backlogs={backlogs} />
       <EpicsList epics={epics} />
+      
     </div>
   );
-};
+}

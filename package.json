@@ -3,7 +3,7 @@
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
   "description": "",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -43,6 +43,21 @@
       {
         "command": "sprintdesk.addQuickly",
         "title": "SprintDesk: Add Quickly"
+      },
+      {
+        "command": "sprintdesk.startFeatureFromTask",
+        "title": "SprintDesk: Start Feature from Task",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "sprintdesk.openSprintFile",
+        "title": "SprintDesk: Open Sprint File",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "sprintdesk.showSprintCalendar",
+        "title": "SprintDesk: Show Sprint Calendar",
+        "icon": "$(calendar)"
       }
     ],
     "viewsContainers": {
@@ -66,11 +81,31 @@
         },
         {
           "id": "sprintdesk-epics",
-          "name": "Epics"
+          "name": "Epics",
+          "type": "webview"
         },
         {
           "id": "sprintdesk-tasks",
           "name": "Tasks"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "sprintdesk.startFeatureFromTask",
+          "when": "view == sprintdesk-sprints && viewItem == sprintTask",
+          "group": "inline"
+        },
+        {
+          "command": "sprintdesk.openSprintFile",
+          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "group": "inline@1"
+        },
+        {
+          "command": "sprintdesk.showSprintCalendar",
+          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "group": "inline@2"
         }
       ]
     }
