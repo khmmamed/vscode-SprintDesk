@@ -76,20 +76,44 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
       if (!sectionMatch) return [];
       const section = sectionMatch[2] ?? '';
 
-      const tasks: string[] = [];
+      const rawItems: string[] = [];
       const ulRegex = /^\s*[-*]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
       let m: RegExpExecArray | null;
       while ((m = ulRegex.exec(section)) !== null) {
-        tasks.push(m[1].trim());
+        rawItems.push(m[1].trim());
       }
 
       const olRegex = /^\s*\d+[\.)]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
       while ((m = olRegex.exec(section)) !== null) {
-        tasks.push(m[1].trim());
+        rawItems.push(m[1].trim());
       }
 
-      const unique = Array.from(new Set(tasks));
-      return unique.map(t => new BacklogsTreeItem(t, vscode.TreeItemCollapsibleState.None));
+      const seen = new Set<string>();
+      const result: BacklogsTreeItem[] = [];
+      for (const itemText of rawItems) {
+        const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
+        const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
+        let key = prettyLabel;
+        const treeItem = new BacklogsTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None);
+        if (linkMatch) {
+          const rel = linkMatch[2];
+          const abs = path.resolve(path.dirname(filePath), rel);
+          key = `${prettyLabel}|${abs}`;
+          Object.assign(treeItem, {
+            command: {
+              command: 'vscode.open',
+              title: 'Open Task',
+              arguments: [vscode.Uri.file(abs)]
+            }
+          });
+        }
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push(treeItem);
+        }
+      }
+      return result;
     } catch {
       return [];
     }

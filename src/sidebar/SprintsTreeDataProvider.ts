@@ -70,6 +70,7 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     // Replace underscores/dashes with spaces and trim brackets-style prefixes
     const cleaned = base
       .replace(/^\[(?:Sprint|S)\]_?/i, '')
+      .replace(/[_-]+/g, ' ')
       .trim();
     return cleaned || base;
   }
@@ -83,25 +84,48 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
       if (!sectionMatch) return [];
       const section = sectionMatch[2] ?? '';
 
-      const tasks: string[] = [];
+      const rawItems: string[] = [];
 
       // Match unordered list items, with optional checkboxes
       const ulRegex = /^\s*[-*]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
       let m: RegExpExecArray | null;
       while ((m = ulRegex.exec(section)) !== null) {
-        tasks.push(m[1].trim());
+        rawItems.push(m[1].trim());
       }
 
       // Also match ordered list items like "1. Task" or "1) Task"
       const olRegex = /^\s*\d+[\.)]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
       while ((m = olRegex.exec(section)) !== null) {
-        tasks.push(m[1].trim());
+        rawItems.push(m[1].trim());
       }
 
-      // Deduplicate while preserving order
-      const uniqueTasks = Array.from(new Set(tasks));
+      const seen = new Set<string>();
+      const result: SprintsTreeItem[] = [];
+      for (const itemText of rawItems) {
+        const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
+        const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
+        let key = prettyLabel;
+        const treeItem = new SprintsTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None);
+        if (linkMatch) {
+          const rel = linkMatch[2];
+          const abs = path.resolve(path.dirname(filePath), rel);
+          key = `${prettyLabel}|${abs}`;
+          Object.assign(treeItem, {
+            command: {
+              command: 'vscode.open',
+              title: 'Open Task',
+              arguments: [vscode.Uri.file(abs)]
+            }
+          });
+        }
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push(treeItem);
+        }
+      }
 
-      return uniqueTasks.map(t => new SprintsTreeItem(t, vscode.TreeItemCollapsibleState.None));
+      return result;
     } catch (e) {
       return [];
     }

@@ -47,10 +47,16 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TasksTreeI
         const filePath = path.join(tasksDir, file);
         return this.getLastCommitDate(filePath).then(date => {
           const desc = `🚩${epicTitle} | 🕒 ${date}`;
-          return Object.assign(
-            new TasksTreeItem(`📌${taskTitle}`, vscode.TreeItemCollapsibleState.None),
-            { description: desc }
-          );
+          const prettyLabel = taskTitle.replace(/[_-]+/g, ' ').trim();
+          const item = new TasksTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None);
+          return Object.assign(item, {
+            description: desc,
+            command: {
+              command: 'vscode.open',
+              title: 'Open Task',
+              arguments: [vscode.Uri.file(filePath)]
+            }
+          });
         });
       }
       return null;
