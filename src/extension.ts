@@ -7,6 +7,7 @@ import { registerViewEpicsCommand } from "./commands/viewEpics";
 import { getWebviewContent } from "./webview/getWebviewContent";
 import { SprintsTreeDataProvider } from './sidebar/SprintsTreeDataProvider';
 import { TasksTreeDataProvider } from './sidebar/TasksTreeDataProvider';
+import { BacklogsTreeDataProvider } from './sidebar/BacklogsTreeDataProvider';
 
 const SIDEBAR_VIEW_IDS = [
   "sprintdesk-sprints",
@@ -63,6 +64,14 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerTreeDataProvider(
       'sprintdesk-sprints',
       new SprintsTreeDataProvider()
+    )
+  );
+
+  // Register the Backlogs tree data provider for the Backlogs view
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider(
+      'sprintdesk-backlogs',
+      new BacklogsTreeDataProvider()
     )
   );
 
