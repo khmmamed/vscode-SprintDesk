@@ -7,4 +7,6 @@
 
 ## tasks
 
+- 📌 [update-automatically-sidebar](../tasks/[Task]_update-automatically-sidebar.md)
+
 - [Fixed] 📌 the links in epic tasks not yet renamed the folder they just link older names
