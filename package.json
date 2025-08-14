@@ -58,6 +58,26 @@
         "command": "sprintdesk.showSprintCalendar",
         "title": "SprintDesk: Show Sprint Calendar",
         "icon": "$(calendar)"
+      },
+      {
+        "command": "sprintdesk.addSprint",
+        "title": "SprintDesk: Add Sprint",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.addTask",
+        "title": "SprintDesk: Add Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.addEpic",
+        "title": "SprintDesk: Add Epic",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.addTaskToBacklog",
+        "title": "SprintDesk: Add Task to Backlog",
+        "icon": "$(add)"
       }
     ],
     "viewsContainers": {
@@ -91,6 +111,23 @@
       ]
     },
     "menus": {
+      "view/title": [
+        {
+          "command": "sprintdesk.addSprint",
+          "when": "view == sprintdesk-sprints",
+          "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.addTask",
+          "when": "view == sprintdesk-tasks",
+          "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.addEpic",
+          "when": "view == sprintdesk-epics",
+          "group": "navigation"
+        }
+      ],
       "view/item/context": [
         {
           "command": "sprintdesk.startFeatureFromTask",
@@ -106,6 +143,11 @@
           "command": "sprintdesk.showSprintCalendar",
           "when": "view == sprintdesk-sprints && viewItem == sprint",
           "group": "inline@2"
+        },
+        {
+          "command": "sprintdesk.addTaskToBacklog",
+          "when": "view == sprintdesk-backlogs && viewItem == backlog",
+          "group": "inline"
         }
       ]
     }

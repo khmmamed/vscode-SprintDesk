@@ -52,7 +52,9 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     const items = files.map(name => {
       const filePath = path.join(backlogsDir, name);
       const label = this.humanizeBacklogName(name);
-      return new BacklogsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
+      const item = new BacklogsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
+      (item as any).contextValue = 'backlog';
+      return item;
     });
 
     items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
