@@ -148,6 +148,42 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage('Epic created.');
   }));
 
+  // Add existing tasks to Sprint: inline on sprint item
+  context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addExistingTasksToSprint', async (item: any) => {
+    const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
+    const sprintFile: string | undefined = item?.filePath;
+    if (!sprintFile) { vscode.window.showErrorMessage('Sprint file not found.'); return; }
+
+    // Collect existing tasks from .SprintDesk/tasks
+    const tasksDir = path.join(ws, '.SprintDesk', 'tasks');
+    if (!fs.existsSync(tasksDir)) { vscode.window.showErrorMessage('No tasks directory found.'); return; }
+    const files = fs.readdirSync(tasksDir).filter(f => f.toLowerCase().endsWith('.md'));
+    if (!files.length) { vscode.window.showInformationMessage('No tasks found.'); return; }
+
+    const itemsQP = files.map(f => {
+      const titleMatch = f.match(/^\[Task\]_(.+?)(?:_\[Epic\]_.+)?\.md$/);
+      const title = titleMatch ? titleMatch[1].replace(/[_-]+/g, ' ') : f.replace(/\.md$/, '');
+      return { label: title, file: f } as { label: string, file: string };
+    });
+
+    const picked = await vscode.window.showQuickPick(itemsQP, { canPickMany: true, title: 'Select tasks to add to Sprint' });
+    if (!picked || picked.length === 0) return;
+
+    try {
+      let sprintContent = fs.readFileSync(sprintFile, 'utf8');
+      for (const p of picked) {
+        const linkTitle = p.label.trim().replace(/\s+/g, '-').toLowerCase();
+        const link = `- 📌 [${linkTitle}](../tasks/${p.file}) ✅ [waiting]`;
+        sprintContent = insertTaskLinkUnderSection(sprintContent, 'Tasks', link);
+      }
+      fs.writeFileSync(sprintFile, sprintContent, 'utf8');
+      vscode.window.showInformationMessage('Tasks added to sprint.');
+    } catch {
+      vscode.window.showErrorMessage('Failed to update sprint file.');
+    }
+  }));
+
   // Add Task to Backlog: inline button on backlog item
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addTaskToBacklog', async (item: any) => {
     const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -189,10 +225,45 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
       let backlogContent = fs.readFileSync(backlogFile, 'utf8');
       const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
-      backlogContent = insertTaskLinkUnderSection(backlogContent, 'tasks', taskLink);
+      backlogContent = insertTaskLinkUnderSection(backlogContent, 'Tasks', taskLink);
       fs.writeFileSync(backlogFile, backlogContent, 'utf8');
       vscode.window.showInformationMessage('Task added to backlog.');
     } catch (e) {
+      vscode.window.showErrorMessage('Failed to update backlog file.');
+    }
+  }));
+
+  // Add existing tasks to Backlog: inline on backlog item
+  context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addExistingTasksToBacklog', async (item: any) => {
+    const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
+    const backlogFile: string | undefined = item?.filePath;
+    if (!backlogFile) { vscode.window.showErrorMessage('Backlog file not found.'); return; }
+
+    const tasksDir = path.join(ws, '.SprintDesk', 'tasks');
+    if (!fs.existsSync(tasksDir)) { vscode.window.showErrorMessage('No tasks directory found.'); return; }
+    const files = fs.readdirSync(tasksDir).filter(f => f.toLowerCase().endsWith('.md'));
+    if (!files.length) { vscode.window.showInformationMessage('No tasks found.'); return; }
+
+    const itemsQP = files.map(f => {
+      const titleMatch = f.match(/^\[Task\]_(.+?)(?:_\[Epic\]_.+)?\.md$/);
+      const title = titleMatch ? titleMatch[1].replace(/[_-]+/g, ' ') : f.replace(/\.md$/, '');
+      return { label: title, file: f } as { label: string, file: string };
+    });
+
+    const picked = await vscode.window.showQuickPick(itemsQP, { canPickMany: true, title: 'Select tasks to add to Backlog' });
+    if (!picked || picked.length === 0) return;
+
+    try {
+      let content = fs.readFileSync(backlogFile, 'utf8');
+      for (const p of picked) {
+        const linkTitle = p.label.trim().replace(/\s+/g, '-').toLowerCase();
+        const link = `- 📌 [${linkTitle}](../tasks/${p.file}) ✅ [waiting]`;
+        content = insertTaskLinkUnderSection(content, 'Tasks', link);
+      }
+      fs.writeFileSync(backlogFile, content, 'utf8');
+      vscode.window.showInformationMessage('Tasks added to backlog.');
+    } catch {
       vscode.window.showErrorMessage('Failed to update backlog file.');
     }
   }));
@@ -208,29 +279,31 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   // Tree providers
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider(
-      'sprintdesk-sprints',
-      new SprintsTreeDataProvider()
-    )
-  );
+  const sprintsProvider = new SprintsTreeDataProvider();
+  const backlogsProvider = new BacklogsTreeDataProvider();
+  const tasksProvider = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0)
+    ? new TasksTreeDataProvider(vscode.workspace.workspaceFolders[0].uri.fsPath)
+    : undefined;
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider(
-      'sprintdesk-backlogs',
-      new BacklogsTreeDataProvider()
-    )
+    vscode.window.registerTreeDataProvider('sprintdesk-sprints', sprintsProvider)
   );
-
-  if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-    const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('sprintdesk-backlogs', backlogsProvider)
+  );
+  if (tasksProvider) {
     context.subscriptions.push(
-      vscode.window.registerTreeDataProvider(
-        'sprintdesk-tasks',
-        new TasksTreeDataProvider(workspaceRoot)
-      )
+      vscode.window.registerTreeDataProvider('sprintdesk-tasks', tasksProvider)
     );
   }
+
+  // Refresh command for sidebar trees
+  context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.refresh', async () => {
+    sprintsProvider.refresh();
+    backlogsProvider.refresh();
+    tasksProvider?.refresh();
+    vscode.window.showInformationMessage('SprintDesk refreshed.');
+  }));
 
   // Start feature from sprint task item
   context.subscriptions.push(

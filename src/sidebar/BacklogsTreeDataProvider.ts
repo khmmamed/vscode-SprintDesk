@@ -17,6 +17,10 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   private _onDidChangeTreeData: vscode.EventEmitter<BacklogsTreeItem | undefined | void> = new vscode.EventEmitter<BacklogsTreeItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<BacklogsTreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
+  public refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
   getTreeItem(element: BacklogsTreeItem): vscode.TreeItem {
     return element;
   }

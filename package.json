@@ -78,6 +78,21 @@
         "command": "sprintdesk.addTaskToBacklog",
         "title": "SprintDesk: Add Task to Backlog",
         "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.refresh",
+        "title": "SprintDesk: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sprintdesk.addExistingTasksToSprint",
+        "title": "SprintDesk: Add Tasks to Sprint",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.addExistingTasksToBacklog",
+        "title": "SprintDesk: Add Tasks to Backlog",
+        "icon": "$(add)"
       }
     ],
     "viewsContainers": {
@@ -126,6 +141,11 @@
           "command": "sprintdesk.addEpic",
           "when": "view == sprintdesk-epics",
           "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.refresh",
+          "when": "view =~ /^sprintdesk-/",
+          "group": "navigation@9"
         }
       ],
       "view/item/context": [
@@ -145,7 +165,12 @@
           "group": "inline@2"
         },
         {
-          "command": "sprintdesk.addTaskToBacklog",
+          "command": "sprintdesk.addExistingTasksToSprint",
+          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "group": "inline@3"
+        },
+        {
+          "command": "sprintdesk.addExistingTasksToBacklog",
           "when": "view == sprintdesk-backlogs && viewItem == backlog",
           "group": "inline"
         }
