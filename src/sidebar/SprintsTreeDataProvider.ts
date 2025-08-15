@@ -20,6 +20,10 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
   private _onDidChangeTreeData: vscode.EventEmitter<SprintsTreeItem | undefined | void> = new vscode.EventEmitter<SprintsTreeItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<SprintsTreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
+  public refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
   getTreeItem(element: SprintsTreeItem): vscode.TreeItem {
     return element;
   }

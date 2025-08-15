@@ -17,6 +17,10 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TasksTreeI
   private _onDidChangeTreeData: vscode.EventEmitter<TasksTreeItem | undefined | void> = new vscode.EventEmitter<TasksTreeItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<TasksTreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
+  public refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
   constructor(private workspaceRoot: string) {}
 
   getTreeItem(element: TasksTreeItem): vscode.TreeItem {
