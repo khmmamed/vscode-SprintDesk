@@ -16,7 +16,7 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
   const [error, setError] = React.useState<string>("");
   const [tasks, setTasks] = React.useState<{ task: string; epic: string; file: string }[]>([]);
   const [backlogs, setBacklogs] = React.useState<{ title: string; tasks: string[] }[]>([]);
-  const [epics, setEpics] = React.useState<{ title: string; tasks: string[] }[]>([]);
+  const [epics, setEpics] = React.useState<{ title: string; tasks: string[]; rawContent?: string; color?: string; meta?: Record<string, string> }[]>([]);
   const [view, setView] = React.useState<string | null>(null);
   const [showEpicsTree, setShowEpicsTree] = React.useState<boolean>(false);
   React.useEffect(() => {
