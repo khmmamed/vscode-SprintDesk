@@ -1,3 +1,4 @@
+# _id: 
 # Task: task name
 
 - **🗂 Type:** Feature Task  
@@ -28,9 +29,9 @@ Add objective of the task description
 ## Related
 
 ### Epics
-
-### Backlogs 
+epic_id: 
+### Backlogs
+backlog_id: 
 
 ### Sprints
-
-### Tasks
+sprint_id: 

@@ -7,6 +7,7 @@ import { BacklogsList } from "./BacklogsList";
 import { AddMultipleTasksForm } from "./AddMultipleTasksForm";
 import { EpicsList } from "./EpicsList";
 import { EpicsTree } from "../components/EpicsTree";
+import TableBlock from "./TableBlock";
 
 
 export interface IAppProps { }
@@ -19,6 +20,13 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
   const [epics, setEpics] = React.useState<{ title: string; tasks: string[]; rawContent?: string; color?: string; meta?: Record<string, string> }[]>([]);
   const [view, setView] = React.useState<string | null>(null);
   const [showEpicsTree, setShowEpicsTree] = React.useState<boolean>(false);
+  const [projects, setProjects] = React.useState<{
+    projectName: string;
+    backlogs: { name: string; lastCommit: string; lastUpdate: string }[];
+    epics: { name: string; lastCommit: string; lastUpdate: string }[];
+    sprints: { name: string; lastCommit: string; lastUpdate: string }[];
+    tasks: { name: string; lastCommit: string; lastUpdate: string }[];
+  } | null>(null);
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setView(params.get("view"));
@@ -30,6 +38,7 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
       if (command === "SET_TASKS") setTasks(payload);
       else if (command === "SET_BACKLOGS") setBacklogs(payload);
       else if (command === "SET_EPICS") setEpics(payload);
+      else if (command === "SET_PROJECTS") setProjects(payload);
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
@@ -48,6 +57,18 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
   }
   if (showEpicsTree) {
     return <EpicsTree />;
+  }
+  if (view === "projects") {
+    return <div className="app">
+      <h1>Project: {projects?.projectName || '...'}</h1>
+      <TableBlock
+        projectName={projects?.projectName}
+        backlogs={projects?.backlogs}
+        epics={projects?.epics}
+        sprints={projects?.sprints}
+        tasks={projects?.tasks}
+      />
+    </div>;
   }
   return (
     <div className="app">

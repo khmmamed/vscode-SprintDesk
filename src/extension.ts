@@ -4,6 +4,7 @@ import { registerViewTasksCommand } from "./commands/viewTasks";
 import { registerViewBacklogsCommand } from "./commands/viewBacklogs";
 import { addMultipleTasksCommand } from "./commands/addMultipleTasksCommand";
 import { registerViewEpicsCommand } from "./commands/viewEpics";
+import { registerViewProjectsCommand } from "./commands/viewProjects";
 import { registerAddQuicklyCommand } from "./commands/addQuicklyCommand";
 import { getWebviewContent } from "./webview/getWebviewContent";
 import { SprintsTreeDataProvider } from './sidebar/SprintsTreeDataProvider';
@@ -51,6 +52,7 @@ export async function activate(context: vscode.ExtensionContext) {
   addMultipleTasksCommand(context);
   registerViewEpicsCommand(context);
   registerAddQuicklyCommand(context);
+  registerViewProjectsCommand(context);
 
   // Add Sprint: view title button on Sprints
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addSprint', async () => {

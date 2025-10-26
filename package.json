@@ -15,7 +15,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:sprintdesk.viewProjects"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -93,6 +94,11 @@
         "command": "sprintdesk.addExistingTasksToBacklog",
         "title": "SprintDesk: Add Tasks to Backlog",
         "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.viewProjects",
+        "title": "SprintDesk: Projects",
+        "icon": "$(folder)"
       }
     ],
     "viewsContainers": {
