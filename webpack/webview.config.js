@@ -1,6 +1,5 @@
-//@ts-check
-
 'use strict';
+"use strict";
 
 const path = require('path');
 const WebpackManifestPlugin = require('webpack-manifest-plugin').WebpackManifestPlugin;
@@ -11,8 +10,10 @@ const config = [
     target: 'web',
     entry: './src/webview/index.tsx',
     output: {
-      filename: '[name].bundle.js',
-      path: path.resolve(__dirname, '../dist/webview')
+      // filename will be overridden in module.exports depending on mode
+      filename: '[name].[contenthash].js',
+      path: path.resolve(__dirname, '../dist/webview'),
+      clean: true
     },
     devtool: 'source-map',
     resolve: {
@@ -39,7 +40,7 @@ const config = [
     plugins: [new WebpackManifestPlugin({ publicPath: "" })],
     devServer: {
       compress: true,
-      port: 9000,
+  port: 9001,
       hot: true,
       allowedHosts: "all",
       headers: {
@@ -52,6 +53,12 @@ const config = [
 module.exports = (env, argv) => {
   for (const configItem of config) {
     configItem.mode = argv.mode;
+
+    // Use a stable filename in development so the webview can load the script from a fixed URL
+    if (argv.mode === 'development') {
+      configItem.output = configItem.output || {};
+      configItem.output.filename = 'main.js';
+    }
 
     if (argv.mode === 'production') {
       configItem.devtool = "hidden-source-map";

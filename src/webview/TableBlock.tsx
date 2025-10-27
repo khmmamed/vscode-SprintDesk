@@ -10,12 +10,15 @@
  */
 
 import React, { ReactElement, useMemo, useState, useEffect } from 'react';
+import { acquireVsCodeApiOnce } from './vscodeApi';
 
 // Define TypeScript interfaces
 interface SprintDeskItem {
   name: string;
+  path?: string;
   lastCommit: string;
   lastUpdate: string;
+  meta?: any;
 }
 
 interface SprintDeskProject {
@@ -35,6 +38,8 @@ interface TableProps {
 
 const TableBlock: React.FC<TableProps> = ({ projects }) => {
   const [expandedItems, setExpandedItems] = useState<{ [key: string]: boolean }>({});
+  const [editingItems, setEditingItems] = useState<{ [key: string]: boolean }>({});
+  const [editedTables, setEditedTables] = useState<{ [key: string]: { headers: string[]; rows: string[][] } }>({});
 
   const toggleExpand = (itemKey: string) => {
     setExpandedItems(prev => ({ ...prev, [itemKey]: !prev[itemKey] }));
@@ -66,23 +71,205 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     }
   };
 
+  const getStatusColor = (status: any) => {
+    if (!status) return '#94a3b8';
+    const s = String(status).toLowerCase();
+    if (['done', 'complete', 'closed', 'true', 'yes'].includes(s)) return '#86efac'; // green
+    if (['in progress', 'progress', 'doing'].includes(s)) return '#facc15'; // yellow
+    if (['blocked', 'stalled', 'failed', 'no'].includes(s)) return '#f87171'; // red
+    return '#94a3b8'; // gray
+  };
+
   const renderItems = (items: SprintDeskItem[], projectName: string, category: string): ReactElement[] => {
-    return items.map((item, index) => (
-      <tr key={`${projectName}-${category}-${index}`} style={styles.itemStyle}>
-        <td style={{ ...styles.cellStyle, paddingLeft: '60px' }}>
-          <div style={styles.itemContentStyle}>
-            <span style={{ fontSize: '16px' }}>{getIcon('file')}</span>
-            <span>{item.name}</span>
-          </div>
-        </td>
-        <td style={styles.cellStyle}>
-          <div style={styles.commitStyle}>{item.lastCommit}</div>
-        </td>
-        <td style={styles.cellStyle}>
-          <div style={styles.updateStyle}>{item.lastUpdate}</div>
-        </td>
-      </tr>
-    ));
+    const vscode = acquireVsCodeApiOnce();
+    return items.flatMap((item, index) => {
+      const itemKey = `${projectName}-${category}-${index}-details`;
+      const isDetailsExpanded = !!expandedItems[itemKey];
+      const isEditing = !!editingItems[itemKey];
+
+      const startEditing = () => {
+        if (item.meta && item.meta.sprintTable) {
+          const rowsCopy = (item.meta.sprintTable.rows as string[][]).map((r: string[]) => r.slice());
+          setEditedTables(prev => ({ ...prev, [itemKey]: { headers: (item.meta.sprintTable.headers as string[]).slice(), rows: rowsCopy } }));
+          setEditingItems(prev => ({ ...prev, [itemKey]: true }));
+        }
+      };
+
+      const cancelEditing = () => {
+        setEditingItems(prev => ({ ...prev, [itemKey]: false }));
+        setEditedTables(prev => {
+          const copy = { ...prev };
+          delete copy[itemKey];
+          return copy;
+        });
+      };
+
+      const saveEditing = () => {
+        const table = editedTables[itemKey];
+        if (!table) return;
+        // build markdown table
+        const headerLine = '| ' + table.headers.join(' | ') + ' |';
+        const sepLine = '|' + table.headers.map(() => ' --- ').join('|') + '|';
+        const rows = table.rows.map(r => '| ' + table.headers.map((_, ci) => (r[ci] || '')).join(' | ') + ' |');
+        const md = [headerLine, sepLine, ...rows].join('\n');
+        try {
+          vscode.postMessage({ command: 'SAVE_SPRINT_TABLE', payload: { path: item.path, content: md } });
+        } catch (e) {
+          console.error('Failed to post save message', e);
+        }
+        // optimistic UI: stop editing
+        setEditingItems(prev => ({ ...prev, [itemKey]: false }));
+      };
+
+      const row = (
+        <tr
+          key={`${projectName}-${category}-${index}`}
+          style={styles.itemStyle}
+          onClick={() => {
+            // open file when clicking the row (dev/mock-safe)
+            try {
+              if (item.path) {
+                vscode.postMessage({ command: 'REQUEST_OPEN_FILE', payload: { path: item.path } });
+              }
+            } catch (e) {
+              // ignore in dev
+            }
+          }}
+        >
+          <td style={{ ...styles.cellStyle, paddingLeft: '60px' }}>
+            <div style={styles.itemContentStyle}>
+              {category === 'sprints' && item.meta && item.meta.sprintTable ? (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpand(itemKey);
+                  }}
+                  style={{ fontSize: '14px', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  {isDetailsExpanded ? '▼' : '▶'}
+                </span>
+              ) : (
+                <span style={{ fontSize: '16px' }}>{getIcon('file')}</span>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span>{item.name}</span>
+                {item.path && (
+                  <span style={{
+                    fontSize: '12px',
+                    color: '#9ca3af',
+                    opacity: 0.8
+                  }}>
+                    {item.path}
+                  </span>
+                )}
+              </div>
+            </div>
+          </td>
+          <td style={styles.cellStyle}>
+            <div style={styles.commitStyle}>{item.lastCommit}</div>
+          </td>
+          <td style={styles.cellStyle}>
+            {category === 'sprints' && item.meta && typeof item.meta.sprintProgress === 'number' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ height: 8, background: '#374151', borderRadius: 4, overflow: 'hidden', width: '120px' }}>
+                  <div style={{ height: '100%', background: '#10b981', width: `${item.meta.sprintProgress}%` }} />
+                </div>
+                <div style={{ color: '#9ca3af', fontSize: 12 }}>{item.meta.sprintProgress}% complete</div>
+              </div>
+            ) : (
+              <div style={styles.updateStyle}>{item.lastUpdate}</div>
+            )}
+          </td>
+        </tr>
+      );
+
+      const details: ReactElement[] = [];
+        if (isDetailsExpanded && category === 'sprints' && item.meta && item.meta.sprintTable) {
+        const table = (isEditing && editedTables[itemKey]) ? editedTables[itemKey] : (item.meta.sprintTable as { headers: string[]; rows: string[][] });
+        // header row for table
+        details.push(
+          <tr key={`${projectName}-${category}-${index}-hdr`} style={{ background: '#0f172a' }}>
+            <td colSpan={3} style={{ padding: '8px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ color: '#9ca3af', fontSize: 13, fontWeight: 600 }}>{item.name} — Tasks</div>
+                <div>
+                  {!isEditing && <button onClick={(e) => { e.stopPropagation(); startEditing(); }} style={{ marginRight: 8, padding: '6px 8px', background: '#111827', color: '#f3f4f6', border: '1px solid #374151', borderRadius: 4 }}>Edit</button>}
+                  {isEditing && (
+                    <>
+                      <button onClick={(e) => { e.stopPropagation(); saveEditing(); }} style={{ marginRight: 8, padding: '6px 8px', background: '#065f46', color: '#fff', border: 'none', borderRadius: 4 }}>Save</button>
+                      <button onClick={(e) => { e.stopPropagation(); cancelEditing(); }} style={{ padding: '6px 8px', background: '#111827', color: '#f3f4f6', border: '1px solid #374151', borderRadius: 4 }}>Cancel</button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      {table.headers.map((h, hi) => (
+                        <th key={`h-${hi}`} style={{ textAlign: 'left', padding: '6px 8px', color: '#9ca3af', fontSize: 12 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table.rows.map((r, ri) => (
+                      <tr key={`r-${ri}`} style={{ borderTop: '1px solid #111827' }}>
+                        {table.headers.map((_, ci) => {
+                          const cell = r[ci] || '';
+                          // If editing, render inputs
+                          if (isEditing) {
+                            return (
+                              <td key={`c-${ci}`} style={{ padding: '6px 8px' }}>
+                                <input
+                                  value={cell}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEditedTables(prev => {
+                                      const copy = { ...prev };
+                                      const tbl = copy[itemKey];
+                                      if (!tbl) return prev;
+                                      // ensure row exists
+                                      tbl.rows[ri] = tbl.rows[ri] || [];
+                                      tbl.rows[ri][ci] = val;
+                                      return copy;
+                                    });
+                                  }}
+                                  style={{ width: '100%', padding: '6px 8px', background: '#0b1220', color: '#d1d5db', border: '1px solid #111827', borderRadius: 4 }}
+                                />
+                              </td>
+                            );
+                          }
+
+                          // Not editing: render cell, make clickable if looks like path or header is "path"
+                          const headerLower = (table.headers[ci] || '').toLowerCase();
+                          const looksLikePath = typeof cell === 'string' && (cell.includes('/') || cell.endsWith('.md'));
+                          return (
+                            <td key={`c-${ci}`} style={{ padding: '6px 8px', color: '#d1d5db', fontSize: 13 }}>
+                              {(headerLower === 'path' || looksLikePath) ? (
+                                <button onClick={(e) => { e.stopPropagation(); try { if (cell) { const vscode = acquireVsCodeApiOnce(); vscode.postMessage({ command: 'REQUEST_OPEN_FILE', payload: { path: cell } }); } } catch (_) {} }} style={{ background: 'transparent', color: '#60a5fa', border: 'none', padding: 0, cursor: 'pointer' }}>{cell}</button>
+                              ) : (
+                                // color-coded status chip
+                                headerLower === 'status' || headerLower === 'state' ? (
+                                  <span style={{ padding: '4px 8px', borderRadius: 999, background: getStatusColor(cell), color: '#000', fontWeight: 600, fontSize: 12 }}>{cell}</span>
+                                ) : (
+                                  <span>{cell}</span>
+                                )
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+        );
+      }
+
+      return [row, ...details];
+    });
   };
 
   const renderCategory = (
@@ -92,6 +279,7 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     const items = project[category];
     const categoryKey = `${project.name}-${category}`;
     const isExpanded = expandedItems[categoryKey];
+    const categoryPath = `${project.path}/.SprintDesk/${category}`;
 
     return (
       <React.Fragment key={categoryKey}>
@@ -101,7 +289,16 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
               <span style={{ fontSize: '16px', cursor: 'pointer' }}>
                 {isExpanded ? '▼' : '▶'} {getIcon(category)}
               </span>
-              <span style={{ textTransform: 'capitalize' }}>{category}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ textTransform: 'capitalize' }}>{category}</span>
+                <span style={{ 
+                  fontSize: '12px', 
+                  color: '#9ca3af',
+                  opacity: 0.8 
+                }}>
+                  {categoryPath}
+                </span>
+              </div>
             </div>
           </td>
           <td style={styles.cellStyle}>
@@ -195,7 +392,18 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
                       <span style={{ fontSize: '16px', cursor: 'pointer' }}>
                         {expandedItems[`${project.name}-root`] ? '▼' : '▶'} {getIcon('project')}
                       </span>
-                      <span>{project.name}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span>{project.name}</span>
+                        {project.path && (
+                          <span style={{ 
+                            fontSize: '12px', 
+                            color: '#9ca3af',
+                            opacity: 0.8 
+                          }}>
+                            {project.path}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td style={styles.cellStyle}>

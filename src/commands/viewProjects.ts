@@ -1,172 +1,312 @@
 import * as vscode from "vscode";
+import * as matter from "gray-matter";
 import { getWebviewContent } from "../webview/getWebviewContent";
-import matter from "gray-matter";
 
-export const registerViewProjectsCommand = (context: vscode.ExtensionContext) => {
-  const disposable = vscode.commands.registerCommand("sprintdesk.viewProjects", async () => {
-    const panel = vscode.window.createWebviewPanel(
-      "sprintdesk-projects",
-      "SprintDesk: Projects",
-      vscode.ViewColumn.One,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-      }
-    );
+interface FileInfo {
+    name: string;
+    displayName: string;
+    mtime: number;
+    meta?: any;
+    path: string;
+    lastCommit: string;
+    lastUpdate: string;
+}
 
-    // Append ?view=projects so the webview App can decide what to render
-    const html = getWebviewContent(context, panel.webview);
-    const projectsHtml = html.replace(
-      /(<body[^>]*>)/i,
-      `$1<script>history.replaceState(null, '', window.location.pathname + '?view=projects');</script>`
-    );
-    panel.webview.html = projectsHtml;
+interface Project {
+    name: string;
+    path: string;
+    lastCommit: string;
+    lastUpdate: string;
+    backlogs: FileInfo[];
+    epics: FileInfo[];
+    sprints: FileInfo[];
+    tasks: FileInfo[];
+}
 
-  // Allow the webview to request the projects payload if it didn't receive
-  // the initial postMessage (handshake). We'll buffer requests until the
-  // payload is ready.
-  let projectsPayload: any = null;
-  const pendingRequests: any[] = [];
-  let ws: vscode.WorkspaceFolder | undefined;
-    panel.webview.onDidReceiveMessage((msg) => {
-      try {
-        const { command, payload } = msg || {};
-        if (command === 'REQUEST_PROJECTS') {
-          if (projectsPayload) {
-            panel.webview.postMessage({ command: 'SET_PROJECTS', payload: projectsPayload });
-          } else {
-            pendingRequests.push(true);
-          }
-        } else if (command === 'REQUEST_OPEN_FILE') {
-          // payload should be { path: '.SprintDesk/tasks/filename.md' }
-          const relPath = payload?.path;
-          if (relPath && ws) {
-            (async () => {
-              try {
-                const parts = relPath.split('/').filter(Boolean);
-                const furi = vscode.Uri.joinPath(ws!.uri, ...parts);
-                const doc = await vscode.workspace.openTextDocument(furi);
-                await vscode.window.showTextDocument(doc, { preview: true });
-                panel.webview.postMessage({ command: 'OPEN_FILE_RESULT', payload: { path: relPath, success: true } });
-              } catch (e) {
-                panel.webview.postMessage({ command: 'OPEN_FILE_RESULT', payload: { path: relPath, success: false, error: String(e) } });
-              }
-            })();
-          } else {
-            panel.webview.postMessage({ command: 'OPEN_FILE_RESULT', payload: { path: relPath, success: false, error: 'Invalid path' } });
-          }
+export async function scanSprintDeskFolders(baseUri: vscode.Uri): Promise<Project[]> {
+    const projects: Project[] = [];
+    const queue: [vscode.Uri, string[]][] = [[baseUri, []]];
+
+    while (queue.length > 0) {
+        const [currentUri, pathSegments] = queue.shift()!;
+        try {
+            const entries = await vscode.workspace.fs.readDirectory(currentUri);
+            
+            // Check if current directory has a .SprintDesk folder
+            const sprintDeskEntry = entries.find(([name]) => name === '.SprintDesk');
+            if (sprintDeskEntry) {
+                // Found a .SprintDesk folder - this is a project
+                const sprintDeskUri = vscode.Uri.joinPath(currentUri, '.SprintDesk');
+                const projectPath = vscode.workspace.asRelativePath(currentUri);
+                const projectName = currentUri.path.split('/').pop() || 'Unknown Project';
+                
+                const categories = {
+                    backlogs: [] as FileInfo[],
+                    epics: [] as FileInfo[],
+                    sprints: [] as FileInfo[],
+                    tasks: [] as FileInfo[]
+                };
+
+                // Read each category folder
+                const sprintDeskEntries = await vscode.workspace.fs.readDirectory(sprintDeskUri);
+                for (const [name, type] of sprintDeskEntries) {
+                    if (type === vscode.FileType.Directory) {
+                        const lowerName = name.toLowerCase();
+                        const categoryKey = lowerName.replace(/s$/, '') + 's';
+
+                        if (categoryKey in categories) {
+                            const categoryUri = vscode.Uri.joinPath(sprintDeskUri, name);
+                            const files = await vscode.workspace.fs.readDirectory(categoryUri);
+                            
+                            const fileInfos = await Promise.all(
+                                files
+                                .filter(([_, type]) => type === vscode.FileType.File)
+                                .map(async ([fileName]) => {
+                                    const fileUri = vscode.Uri.joinPath(categoryUri, fileName);
+                                    const stat = await vscode.workspace.fs.stat(fileUri);
+                                    let displayName = fileName;
+                                    let meta: any = {};
+
+                                    if (fileName.toLowerCase().endsWith('.md')) {
+                                        try {
+                                            const bytes = await vscode.workspace.fs.readFile(fileUri);
+                                            const text = Buffer.from(bytes).toString('utf8');
+                                            const parsed = matter.default(text);
+                                            meta = parsed.data || {};
+                                            if (parsed.data && parsed.data.title) {
+                                                displayName = parsed.data.title;
+                                            }
+
+                                            // If this is a sprint file, try to parse a markdown table in the body
+                                            // and compute basic progress metrics.
+                                            try {
+                                                const body = parsed.content || text;
+                                                const table = parseMarkdownTable(body);
+                                                if (table && table.rows && table.rows.length) {
+                                                    meta.sprintTable = {
+                                                        headers: table.headers,
+                                                        rows: table.rows
+                                                    };
+
+                                                    // Compute percent complete by looking for a column named 'status' or 'done'
+                                                    const statusColIndex = table.headers
+                                                        .map(h => h.toLowerCase())
+                                                        .findIndex(h => ['status', 'state', 'done'].includes(h));
+
+                                                    if (statusColIndex !== -1) {
+                                                        const total = table.rows.length;
+                                                        const doneCount = table.rows.filter(r => {
+                                                            const v = (r[statusColIndex] || '').toString().toLowerCase();
+                                                            return v === 'done' || v === 'complete' || v === 'closed' || v === 'true' || v === 'yes';
+                                                        }).length;
+                                                        const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+                                                        meta.sprintProgress = percent;
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                // ignore table parse errors
+                                            }
+                                        } catch (e) {
+                                            console.error('Error parsing markdown:', e);
+                                        }
+                                    }
+
+                                    return {
+                                        name: fileName,
+                                        displayName,
+                                        path: `${projectPath}/.SprintDesk/${name}/${fileName}`,
+                                        mtime: stat.mtime,
+                                        meta,
+                                        lastCommit: '',
+                                        lastUpdate: new Date(stat.mtime).toLocaleString()
+                                    };
+                                })
+                            );
+
+                            categories[categoryKey as keyof typeof categories] = fileInfos;
+                        }
+                    }
+                }
+
+                projects.push({
+                    name: projectName,
+                    path: projectPath,
+                    lastCommit: '',
+                    lastUpdate: new Date().toLocaleString(),
+                    ...categories
+                });
+            }
+
+            // Add subdirectories to queue (skip node_modules and .git)
+            for (const [name, type] of entries) {
+                if (type === vscode.FileType.Directory && 
+                    name !== 'node_modules' && 
+                    name !== '.git' && 
+                    name !== '.SprintDesk') {
+                    queue.push([
+                        vscode.Uri.joinPath(currentUri, name),
+                        [...pathSegments, name]
+                    ]);
+                }
+            }
+        } catch (error) {
+            console.error(`Error scanning directory ${currentUri.path}:`, error);
         }
-      } catch (e) {
-        // ignore
-      }
+    }
+
+    return projects;
+}
+
+// Very small markdown table parser: returns headers array and rows as array of arrays
+function parseMarkdownTable(text: string): { headers: string[]; rows: string[][] } | null {
+    if (!text) return null;
+    // find table start: a header line with '|' followed by a separator line with dashes
+    const lines = text.split(/\r?\n/).map(l => l.trim());
+    for (let i = 0; i < lines.length - 1; i++) {
+        const headerLine = lines[i];
+        const sepLine = lines[i + 1];
+        if (headerLine.startsWith('|') && /\|?\s*-+\s*\|/.test(sepLine)) {
+            const headers = headerLine.split('|').map(h => h.trim()).filter(Boolean);
+            const rows: string[][] = [];
+            for (let j = i + 2; j < lines.length; j++) {
+                const line = lines[j];
+                if (!line || !line.startsWith('|')) break;
+                const cols = line.split('|').map(c => c.trim()).filter(() => true);
+                // include possible empty first/last due to leading/trailing |
+                // normalize to headers length
+                const normalized: string[] = [];
+                let colIndex = 0;
+                for (let k = 0; k < cols.length; k++) {
+                    const val = cols[k];
+                    // allow empty values
+                    if (k === 0 && val === '') continue; // leading empty
+                    normalized.push(val);
+                    colIndex++;
+                    if (colIndex >= headers.length) break;
+                }
+                rows.push(normalized);
+            }
+            return { headers, rows };
+        }
+    }
+    return null;
+}
+
+export function registerViewProjectsCommand(context: vscode.ExtensionContext) {
+    const disposable = vscode.commands.registerCommand("sprintdesk.viewProjects", async () => {
+        const panel = vscode.window.createWebviewPanel(
+            "sprintdesk-projects",
+            "SprintDesk: Projects",
+            vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                localResourceRoots: [
+                    vscode.Uri.joinPath(context.extensionUri, 'dist'),
+                    vscode.Uri.joinPath(context.extensionUri, 'assets'),
+                ]
+            }
+        );
+
+    // Set up webview content (pass view name so the webview app can render the correct view)
+    panel.webview.html = getWebviewContent(context, panel.webview, 'projects');
+
+        // Handle messages from webview
+        panel.webview.onDidReceiveMessage(async (msg) => {
+            try {
+                const { command, payload } = msg;
+
+                if (command === 'REQUEST_PROJECTS') {
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (!workspaceFolders) {
+                        panel.webview.postMessage({ 
+                            command: 'SET_PROJECTS', 
+                            payload: { projects: [] }
+                        });
+                        return;
+                    }
+
+                    // Scan for all projects
+                    const projects = await scanSprintDeskFolders(workspaceFolders[0].uri);
+                    
+                    // Send projects to webview
+                    panel.webview.postMessage({ 
+                        command: 'SET_PROJECTS', 
+                        payload: { projects }
+                    });
+                } else if (command === 'REQUEST_OPEN_FILE') {
+                    const { path } = payload || {};
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    
+                    if (!path || !workspaceFolders) {
+                        panel.webview.postMessage({ 
+                            command: 'OPEN_FILE_RESULT', 
+                            payload: { 
+                                path, 
+                                success: false, 
+                                error: 'Invalid path or no workspace' 
+                            }
+                        });
+                        return;
+                    }
+
+                    try {
+                        const fullPath = vscode.Uri.joinPath(
+                            workspaceFolders[0].uri,
+                            ...path.split('/').filter(Boolean)
+                        );
+                        const doc = await vscode.workspace.openTextDocument(fullPath);
+                        await vscode.window.showTextDocument(doc, { preview: true });
+                        
+                        panel.webview.postMessage({ 
+                            command: 'OPEN_FILE_RESULT', 
+                            payload: { 
+                                path, 
+                                success: true 
+                            }
+                        });
+                    } catch (e) {
+                        panel.webview.postMessage({ 
+                            command: 'OPEN_FILE_RESULT', 
+                            payload: { 
+                                path, 
+                                success: false, 
+                                error: String(e)
+                            }
+                        });
+                    }
+                } else if (command === 'SAVE_SPRINT_TABLE') {
+                    const { path, content } = payload || {};
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (!path || !workspaceFolders) {
+                        panel.webview.postMessage({ command: 'SAVE_SPRINT_TABLE_RESULT', payload: { path, success: false, error: 'Invalid path or no workspace' } });
+                        return;
+                    }
+
+                    try {
+                        const fullPath = vscode.Uri.joinPath(
+                            workspaceFolders[0].uri,
+                            ...path.split('/').filter(Boolean)
+                        );
+                        await vscode.workspace.fs.writeFile(fullPath, Buffer.from(content, 'utf8'));
+
+                        // After saving, re-scan projects and update webview so UI reflects changes
+                        const projects = await scanSprintDeskFolders(workspaceFolders[0].uri);
+                        panel.webview.postMessage({ command: 'SET_PROJECTS', payload: { projects } });
+
+                        panel.webview.postMessage({ command: 'SAVE_SPRINT_TABLE_RESULT', payload: { path, success: true } });
+                    } catch (e) {
+                        panel.webview.postMessage({ command: 'SAVE_SPRINT_TABLE_RESULT', payload: { path, success: false, error: String(e) } });
+                    }
+                }
+            } catch (e) {
+                console.error('Error handling message:', e);
+                panel.webview.postMessage({ 
+                    command: 'ERROR', 
+                    payload: { error: String(e) }
+                });
+            }
+        });
     });
 
-    // Collect project data from the workspace
-    try {
-      const folders = vscode.workspace.workspaceFolders;
-      if (!folders || folders.length === 0) {
-        panel.webview.postMessage({ command: 'SET_PROJECTS', payload: { projectName: 'No workspace', backlogs: [], epics: [], sprints: [], tasks: [] }});
-        return;
-      }
-      ws = folders[0];
-      const projectName = ws.name;
-
-      const readDirSafe = async (rel: string, opts?: { parseTaskTitle?: boolean }) => {
-        try {
-          const uri = vscode.Uri.joinPath(ws!.uri, rel);
-          const entries = await vscode.workspace.fs.readDirectory(uri);
-          const files = entries.filter(([_, type]) => type === vscode.FileType.File);
-          const stats = await Promise.all(files.map(async ([fname]) => {
-            const furi = vscode.Uri.joinPath(ws!.uri, rel, fname);
-            const stat = await vscode.workspace.fs.stat(furi);
-
-            let displayName = fname;
-            let meta: Record<string, any> | undefined;
-
-            if (opts?.parseTaskTitle && /\.md$/i.test(fname)) {
-              try {
-                const bytes = await vscode.workspace.fs.readFile(furi);
-                const text = Buffer.from(bytes).toString('utf8');
-
-                // Parse front matter using gray-matter
-                const parsed = matter(text);
-                meta = parsed.data as Record<string, any>;
-
-                // Determine displayName with fallbacks: front matter title -> first heading -> filename
-                const fmTitle = typeof meta?.title === 'string' ? meta.title.trim() : undefined;
-                if (fmTitle) {
-                  displayName = fmTitle;
-                } else {
-                  const m = parsed.content.match(/^#\s*(.+)$/m) || text.match(/^#\s*(?:Task:)?\s*(.+)$/mi);
-                  if (m && m[1]) {
-                    displayName = m[1].trim();
-                  }
-                }
-              } catch {
-                // ignore parsing errors; fallback will be filename
-              }
-            }
-
-            return { name: fname, displayName, mtime: stat.mtime, meta };
-          }));
-
-          // Sort by mtime desc
-          stats.sort((a, b) => b.mtime - a.mtime);
-
-          // Map to UI shape. For tasks, include known metadata when available.
-          return stats.map(s => {
-            const base = { lastCommit: '', lastUpdate: new Date(s.mtime).toLocaleString() };
-            const relPath = `${rel}/${s.name}`;
-            if (opts?.parseTaskTitle) {
-              const m = s.meta || {};
-              return {
-                name: s.displayName,
-                path: relPath,
-                ...base,
-                status: m.status ?? '',
-                assignee: m.assignee ?? '',
-                priority: m.priority ?? '',
-                dueDate: m.dueDate ?? m.due ?? '',
-                id: m.id ?? '',
-              } as any;
-            }
-            return { name: s.displayName, path: relPath, ...base };
-          });
-        } catch {
-          return [] as { name: string; lastCommit: string; lastUpdate: string }[];
-        }
-      };
-
-      // Read tasks from both lowercase and capitalized directories and merge
-      const [backlogs, epics, sprints, tasksLower, tasksUpper] = await Promise.all([
-        readDirSafe('.SprintDesk/Backlogs'),
-        readDirSafe('.SprintDesk/Epics'),
-        readDirSafe('.SprintDesk/Sprints'),
-        readDirSafe('.SprintDesk/tasks', { parseTaskTitle: true }),
-        readDirSafe('.SprintDesk/Tasks', { parseTaskTitle: true }),
-      ]);
-      // Combine and de-duplicate by name, preserving order (mtime sort already applied per list)
-      const seen = new Set<string>();
-      const tasks = [...tasksLower, ...tasksUpper].filter(t => {
-        const key = t.name?.toLowerCase?.() || t.name;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      // Wrap task file entries as children of a single "Tasks" parent row in projects table
-      const payload = { projectName, backlogs, epics, sprints, tasks };
-      projectsPayload = payload;
-      panel.webview.postMessage({ command: 'SET_PROJECTS', payload });
-      // If the webview requested the payload before we were ready, respond now
-      if (pendingRequests.length) {
-        panel.webview.postMessage({ command: 'SET_PROJECTS', payload });
-        pendingRequests.length = 0;
-      }
-    } catch (e) {
-      panel.webview.postMessage({ command: 'SET_PROJECTS', payload: { projectName: 'Error', backlogs: [], epics: [], sprints: [], tasks: [] }});
-    }
-  });
-
-  context.subscriptions.push(disposable);
-};
+    context.subscriptions.push(disposable);
+}

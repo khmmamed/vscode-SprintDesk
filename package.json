@@ -19,6 +19,10 @@
     "onCommand:sprintdesk.viewProjects"
   ],
   "main": "./dist/extension.js",
+    "scripts": {
+      "watch": "webpack --mode development --watch --config ./webpack/extension.config.js",
+      "watch:wv": "webpack serve --mode development --config ./webpack/webview.config.js"
+    },
   "contributes": {
     "commands": [
       {
@@ -201,7 +205,9 @@
   },
   "devDependencies": {
     "@estruyf/vscode": "^1.1.0",
+    "@types/d3-dispatch": "^2.0.0",
     "@types/glob": "^7.2.0",
+    "@types/minimatch": "^5.1.2",
     "@types/mocha": "^9.1.1",
     "@types/node": "16.x",
     "@types/react": "^19.0.1",
