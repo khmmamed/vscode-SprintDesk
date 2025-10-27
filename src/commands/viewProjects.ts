@@ -73,6 +73,7 @@ export async function scanSprintDeskFolders(baseUri: vscode.Uri): Promise<Projec
                                             const text = Buffer.from(bytes).toString('utf8');
                                             const parsed = matter.default(text);
                                             meta = parsed.data || {};
+                                            console.log('Parsed Metadata:', fileName, meta);
                                             if (parsed.data && parsed.data.title) {
                                                 displayName = parsed.data.title;
                                             }
@@ -101,8 +102,16 @@ export async function scanSprintDeskFolders(baseUri: vscode.Uri): Promise<Projec
 
                                                 const lowerKeys: Record<string, any> = {};
                                                 Object.keys(meta || {}).forEach(k => lowerKeys[k.toLowerCase()] = (meta as any)[k]);
-                                                const startRaw = lowerKeys['start'] ?? lowerKeys['startdate'] ?? lowerKeys['start_date'];
-                                                const endRaw = lowerKeys['end'] ?? lowerKeys['enddate'] ?? lowerKeys['end_date'];
+
+                                                // also consider nested sprint: {..., sprint: { start, end }}
+                                                const sprintObj: any = lowerKeys['sprint'];
+                                                const nestedLower: Record<string, any> = {};
+                                                if (sprintObj && typeof sprintObj === 'object') {
+                                                    Object.keys(sprintObj).forEach(k => nestedLower[k.toLowerCase()] = sprintObj[k]);
+                                                }
+
+                                                const startRaw = lowerKeys['start'] ?? lowerKeys['startdate'] ?? lowerKeys['start_date'] ?? nestedLower['start'] ?? nestedLower['startdate'] ?? nestedLower['start_date'];
+                                                const endRaw = lowerKeys['end'] ?? lowerKeys['enddate'] ?? lowerKeys['end_date'] ?? nestedLower['end'] ?? nestedLower['enddate'] ?? nestedLower['end_date'];
                                                 const startDate = toDate(startRaw);
                                                 const endDate = toDate(endRaw);
                                                 if (startDate && endDate && endDate.getTime() >= startDate.getTime()) {
