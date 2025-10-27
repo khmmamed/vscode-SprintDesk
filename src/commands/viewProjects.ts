@@ -77,6 +77,54 @@ export async function scanSprintDeskFolders(baseUri: vscode.Uri): Promise<Projec
                                                 displayName = parsed.data.title;
                                             }
 
+                                            // Derive sprint time progress from YAML metadata if available
+                                            // Supported keys (case-insensitive): start, startDate, start_date and end, endDate, end_date
+                                            try {
+                                                const toDate = (v: any): Date | null => {
+                                                    if (!v) return null;
+                                                    if (v instanceof Date) return v;
+                                                    const s = String(v).trim();
+                                                    // Accept ISO, yyyy-mm-dd, dd-mm-yyyy, dd/mm/yyyy, mm/dd/yyyy, yyyy/mm/dd
+                                                    const iso = Date.parse(s);
+                                                    if (!Number.isNaN(iso)) return new Date(iso);
+                                                    // Try dd-mm-yyyy
+                                                    const dmy = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})$/);
+                                                    if (dmy) {
+                                                        const d = parseInt(dmy[1], 10);
+                                                        const m = parseInt(dmy[2], 10) - 1;
+                                                        const y = parseInt(dmy[3].length === 2 ? ('20' + dmy[3]) : dmy[3], 10);
+                                                        const dt = new Date(y, m, d);
+                                                        return Number.isNaN(dt.getTime()) ? null : dt;
+                                                    }
+                                                    return null;
+                                                };
+
+                                                const lowerKeys: Record<string, any> = {};
+                                                Object.keys(meta || {}).forEach(k => lowerKeys[k.toLowerCase()] = (meta as any)[k]);
+                                                const startRaw = lowerKeys['start'] ?? lowerKeys['startdate'] ?? lowerKeys['start_date'];
+                                                const endRaw = lowerKeys['end'] ?? lowerKeys['enddate'] ?? lowerKeys['end_date'];
+                                                const startDate = toDate(startRaw);
+                                                const endDate = toDate(endRaw);
+                                                if (startDate && endDate && endDate.getTime() >= startDate.getTime()) {
+                                                    const now = new Date();
+                                                    const startMs = startDate.getTime();
+                                                    const endMs = endDate.getTime();
+                                                    const nowMs = now.getTime();
+                                                    const total = endMs - startMs;
+                                                    const elapsed = Math.min(Math.max(nowMs - startMs, 0), total);
+                                                    const timePercent = Math.round((elapsed / total) * 100);
+                                                    meta.sprintTime = {
+                                                        start: startDate.toISOString(),
+                                                        end: endDate.toISOString(),
+                                                        progress: timePercent,
+                                                        finished: nowMs >= endMs,
+                                                        upcoming: nowMs < startMs
+                                                    };
+                                                }
+                                            } catch {
+                                                // ignore date parsing issues
+                                            }
+
                                             // If this is a sprint file, try to parse a markdown table in the body
                                             // and compute basic progress metrics.
                                             try {

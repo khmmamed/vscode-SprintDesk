@@ -169,13 +169,53 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
             <div style={styles.commitStyle}>{item.lastCommit}</div>
           </td>
           <td style={styles.cellStyle}>
-            {category === 'sprints' && item.meta && typeof item.meta.sprintProgress === 'number' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ height: 8, background: '#374151', borderRadius: 4, overflow: 'hidden', width: '120px' }}>
-                  <div style={{ height: '100%', background: '#10b981', width: `${item.meta.sprintProgress}%` }} />
+            {category === 'sprints' && item.meta ? (
+              // Prefer time-based progress if sprintTime exists, else fallback to task-based bar
+              item.meta.sprintTime ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ position: 'relative', width: 28, height: 28 }}>
+                    {/* Simple circular progress using two overlapping circles and stroke-dasharray via conic-gradient */}
+                    <div
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: `conic-gradient(${item.meta.sprintTime.finished ? '#10b981' : '#60a5fa'} ${Math.min(Math.max(item.meta.sprintTime.progress || 0, 0), 100)}%, #111827 0)`,
+                        display: 'inline-block',
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        background: '#0b1220',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                    <span style={{ color: '#d1d5db', fontSize: 12 }}>
+                      {item.meta.sprintTime.finished ? 'Finished' : item.meta.sprintTime.upcoming ? 'Upcoming' : 'In progress'}
+                    </span>
+                    <span style={{ color: '#9ca3af', fontSize: 12 }}>
+                      {Math.min(Math.max(item.meta.sprintTime.progress || 0, 0), 100)}% time
+                    </span>
+                  </div>
                 </div>
-                <div style={{ color: '#9ca3af', fontSize: 12 }}>{item.meta.sprintProgress}% complete</div>
-              </div>
+              ) : typeof item.meta.sprintProgress === 'number' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ height: 8, background: '#374151', borderRadius: 4, overflow: 'hidden', width: '120px' }}>
+                    <div style={{ height: '100%', background: '#10b981', width: `${item.meta.sprintProgress}%` }} />
+                  </div>
+                  <div style={{ color: '#9ca3af', fontSize: 12 }}>{item.meta.sprintProgress}% complete</div>
+                </div>
+              ) : (
+                <div style={styles.updateStyle}>{item.lastUpdate}</div>
+              )
             ) : (
               <div style={styles.updateStyle}>{item.lastUpdate}</div>
             )}
