@@ -231,6 +231,7 @@
     "webpack-manifest-plugin": "^5.0.0"
   },
   "dependencies": {
+    "gray-matter": "^4.0.3",
     "react-flow-renderer": "^10.3.17"
   }
 }
