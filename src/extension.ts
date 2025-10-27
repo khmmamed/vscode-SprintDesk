@@ -4,8 +4,13 @@ import { registerViewTasksCommand } from "./commands/viewTasks";
 import { registerViewBacklogsCommand } from "./commands/viewBacklogs";
 import { addMultipleTasksCommand } from "./commands/addMultipleTasksCommand";
 import { registerViewEpicsCommand } from "./commands/viewEpics";
+import { registerViewProjectsCommand } from "./commands/viewProjects";
 import { registerAddQuicklyCommand } from "./commands/addQuicklyCommand";
 import { getWebviewContent } from "./webview/getWebviewContent";
+import { scanGitProjects } from "./commands/scanGitProjects";
+import { registerViewGitProjectsCommand } from "./commands/viewGitProjects";
+import { scanProjectStructure } from "./commands/scanProjectStructure";
+import { registerViewProjectStructureCommand } from "./commands/viewProjectStructure";
 import { SprintsTreeDataProvider } from './sidebar/SprintsTreeDataProvider';
 import { TasksTreeDataProvider } from './sidebar/TasksTreeDataProvider';
 import { BacklogsTreeDataProvider } from './sidebar/BacklogsTreeDataProvider';
@@ -44,6 +49,22 @@ class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+  // Register project structure scanner command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sprintdesk.scanProjectStructure', async () => {
+      const structure = await scanProjectStructure();
+      return structure;
+    })
+  );
+
+  // Register git projects scanner command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sprintdesk.scanGitProjects', async () => {
+      const projects = await scanGitProjects();
+      return projects || [];
+    })
+  );
+
   // Register existing commands
   registerOpenWebviewCommand(context);
   registerViewTasksCommand(context);
@@ -51,6 +72,9 @@ export async function activate(context: vscode.ExtensionContext) {
   addMultipleTasksCommand(context);
   registerViewEpicsCommand(context);
   registerAddQuicklyCommand(context);
+  registerViewProjectsCommand(context);
+  registerViewGitProjectsCommand(context);
+  registerViewProjectStructureCommand(context);
 
   // Add Sprint: view title button on Sprints
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addSprint', async () => {

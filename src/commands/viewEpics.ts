@@ -14,7 +14,7 @@ export function registerViewEpicsCommand(context: vscode.ExtensionContext) {
         );
 
         const workspaceFolders = vscode.workspace.workspaceFolders;
-        let epicData: { title: string; tasks: string[] }[] = [];
+        let epicData: { title: string; tasks: string[]; rawContent: string }[] = [];
 
         if (workspaceFolders && workspaceFolders.length > 0) {
             const rootPath = workspaceFolders[0].uri.fsPath;
@@ -62,7 +62,7 @@ export function registerViewEpicsCommand(context: vscode.ExtensionContext) {
                         }
                     }
 
-                    epicData.push({ title, tasks });
+                    epicData.push({ title, tasks, rawContent: content });
                 } catch (e) {
                     // optionally log error here
                 }
