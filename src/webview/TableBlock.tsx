@@ -80,6 +80,44 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     return '#94a3b8'; // gray
   };
 
+  const parseSprintDates = (item: SprintDeskItem) => {
+    // First try to get dates from meta.sprint
+    if (item.meta?.sprint?.start && item.meta?.sprint?.end) {
+      return {
+        startDate: item.meta.sprint.start,
+        endDate: item.meta.sprint.end
+      };
+    }
+    
+    // If not found in meta, try to parse from filename or path
+    const datePattern = /\[Sprint\]_(\d{2})-(\d{2})_(\d{2})-(\d{2})_(\d{4})/;
+    const match = item.name.match(datePattern) || item.path?.match(datePattern);
+    
+    if (match) {
+      const [_, startDay, startMonth, endDay, endMonth, year] = match;
+      return {
+        startDate: `${year}-${startMonth}-${startDay}`,
+        endDate: `${year}-${endMonth}-${endDay}`
+      };
+    }
+    
+    return null;
+  };
+
+  const getSprintStatus = (startDate: string, endDate: string): { status: string; color: string } => {
+    const now = new Date();
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (now < start) {
+      return { status: 'Upcoming', color: '#1f2937' };
+    } else if (now > end) {
+      return { status: 'Closed', color: '#065f46' };
+    } else {
+      return { status: 'In Progress', color: '#1e3a8a' };
+    }
+  };
+
   const renderItems = (items: SprintDeskItem[], projectName: string, category: string): ReactElement[] => {
     const vscode = acquireVsCodeApiOnce();
     return items.flatMap((item, index) => {
@@ -151,30 +189,97 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
               ) : (
                 <span style={{ fontSize: '16px' }}>{getIcon('file')}</span>
               )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span>{item.name}</span>
-                {item.path && (
-                  <span style={{
-                    fontSize: '12px',
-                    color: '#9ca3af',
-                    opacity: 0.8
-                  }}>
-                    {item.path}
-                  </span>
-                )}
-              </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{item.name}</span>
+                    {category === 'sprints' && (
+                      (() => {
+                        const dates = parseSprintDates(item);
+                        if (!dates) return null;
+                        const { startDate, endDate } = dates;
+                        
+                        if (startDate && endDate) {
+                          const { status, color } = getSprintStatus(startDate, endDate);
+                          const styleMap: any = {
+                            Closed: { bg: '#065f46', fg: '#10b981', border: '#064e3b' },
+                            'In Progress': { bg: '#1e3a8a', fg: '#60a5fa', border: '#1e40af' },
+                            Upcoming: { bg: '#1f2937', fg: '#9ca3af', border: '#374151' }
+                          };
+                          const c = styleMap[status] || styleMap['In Progress'];
+                          return (
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: 999,
+                              background: c.bg,
+                              color: c.fg,
+                              border: `1px solid ${c.border}`,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap'
+                            }}>{status}</span>
+                          );
+                        }
+                        return null;
+                      })()
+                    )}
+                  </div>
+                  {item.path && (
+                    <span style={{
+                      fontSize: '12px',
+                      color: '#9ca3af',
+                      opacity: 0.8
+                    }}>
+                      {item.path}
+                    </span>
+                  )}
+                </div>
+            </div>
+          </td>
+                    <td style={styles.cellStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {category === 'sprints' && item.meta ? (() => {
+                const startDate = item.meta?.startDate || item.meta?.sprintTime?.startDate;
+                const endDate = item.meta?.endDate || item.meta?.sprintTime?.endDate;
+                
+                if (startDate && endDate) {
+                  const { status } = getSprintStatus(startDate, endDate);
+                  const styleMap: any = {
+                    Closed: { bg: '#065f46', fg: '#10b981', border: '#064e3b' },
+                    'In Progress': { bg: '#1e3a8a', fg: '#60a5fa', border: '#1e40af' },
+                    Upcoming: { bg: '#1f2937', fg: '#9ca3af', border: '#374151' }
+                  };
+                  const c = styleMap[status] || styleMap['In Progress'];
+                  return (
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: c.bg,
+                      color: c.fg,
+                      border: `1px solid ${c.border}`,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap'
+                    }}>{status}</span>
+                  );
+                }
+                return null;
+              })() : null}
+              <div style={styles.commitStyle}>{item.lastCommit}</div>
             </div>
           </td>
           <td style={styles.cellStyle}>
-            <div style={styles.commitStyle}>{item.lastCommit}</div>
-          </td>
-          <td style={styles.cellStyle}>
-            {category === 'sprints' && item.meta && typeof item.meta.sprintProgress === 'number' ? (
+            {category === 'sprints' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ height: 8, background: '#374151', borderRadius: 4, overflow: 'hidden', width: '120px' }}>
-                  <div style={{ height: '100%', background: '#10b981', width: `${item.meta.sprintProgress}%` }} />
+                  <div style={{ 
+                    height: '100%', 
+                    background: '#10b981', 
+                    width: '65%'
+                  }} />
                 </div>
-                <div style={{ color: '#9ca3af', fontSize: 12 }}>{item.meta.sprintProgress}% complete</div>
+                <div style={{ color: '#9ca3af', fontSize: 12 }}>
+                  65% complete
+                </div>
               </div>
             ) : (
               <div style={styles.updateStyle}>{item.lastUpdate}</div>
@@ -280,7 +385,7 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     const categoryKey = `${project.name}-${category}`;
     const isExpanded = expandedItems[categoryKey];
     const categoryPath = `${project.path}/.SprintDesk/${category}`;
-
+    console.log('items', items);
     return (
       <React.Fragment key={categoryKey}>
         <tr style={styles.itemStyle} onClick={() => toggleExpand(categoryKey)}>

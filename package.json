@@ -2,8 +2,8 @@
   "name": "vscode-sprintdesk",
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
-  "description": "",
-  "version": "0.3.2",
+  "description": "A Visual Studio Code extension for managing sprints and tasks in an agile development workflow",
+  "version": "0.3.3",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -19,10 +19,22 @@
     "onCommand:sprintdesk.viewProjects"
   ],
   "main": "./dist/extension.js",
-    "scripts": {
-      "watch": "webpack --mode development --watch --config ./webpack/extension.config.js",
-      "watch:wv": "webpack serve --mode development --config ./webpack/webview.config.js"
-    },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "npm-run-all --parallel watch:*",
+    "watch:ext": "webpack --mode development --watch --config ./webpack/extension.config.js",
+    "watch:wv": "webpack serve --mode development --config ./webpack/webview.config.js",
+    "package": "npm run clean && npm-run-all --parallel package:*",
+    "package:ext": "webpack --mode production --config ./webpack/extension.config.js",
+    "package:wv": "webpack --mode production --config ./webpack/webview.config.js",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "clean": "rimraf dist",
+    "test": "node ./out/test/runTest.js"
+  },
   "contributes": {
     "commands": [
       {
@@ -187,22 +199,6 @@
       ]
     }
   },
-  "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "webpack",
-    "watch": "npm-run-all --parallel watch:*",
-    "watch:ext": "webpack --mode development --watch --config ./webpack/extension.config.js",
-    "watch:wv": "webpack serve --mode development --config ./webpack/webview.config.js",
-    "package": "npm run clean && npm-run-all --parallel package:*",
-    "package:ext": "webpack --mode production --config ./webpack/extension.config.js",
-    "package:wv": "webpack --mode production --config ./webpack/webview.config.js",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
-    "clean": "rimraf dist",
-    "test": "node ./out/test/runTest.js"
-  },
   "devDependencies": {
     "@estruyf/vscode": "^1.1.0",
     "@types/d3-dispatch": "^2.0.0",
@@ -225,8 +221,8 @@
     "mocha": "^10.0.0",
     "npm-run-all": "^4.1.5",
     "postcss-loader": "^7.0.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "rimraf": "^3.0.2",
     "style-loader": "^3.3.1",
     "ts-loader": "^9.4.1",
