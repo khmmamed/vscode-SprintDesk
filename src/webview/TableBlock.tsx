@@ -384,7 +384,8 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     const items = project[category];
     const categoryKey = `${project.name}-${category}`;
     const isExpanded = expandedItems[categoryKey];
-    const categoryPath = `${project.path}/.SprintDesk/${category}`;
+  const folderName = category === 'backlogs' ? 'Backlogs' : category === 'epics' ? 'Epics' : category === 'sprints' ? 'Sprints' : 'tasks/🚀_tasks';
+  const categoryPath = `${project.path}/.SprintDesk/${folderName}`;
     console.log('items', items);
     return (
       <React.Fragment key={categoryKey}>

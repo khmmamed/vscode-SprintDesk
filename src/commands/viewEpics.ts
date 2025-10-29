@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
 import * as path from "path";
-import glob from "glob";
+import * as epicService from "../services/epicService";
 import { getWebviewContent } from "../webview/getWebviewContent";
 
 export function registerViewEpicsCommand(context: vscode.ExtensionContext) {
@@ -18,12 +17,11 @@ export function registerViewEpicsCommand(context: vscode.ExtensionContext) {
 
         if (workspaceFolders && workspaceFolders.length > 0) {
             const rootPath = workspaceFolders[0].uri.fsPath;
-            const epicsFolder = path.join(rootPath, ".SprintDesk", "Epics");
-            const mdFiles = glob.sync("**/*.md", { cwd: epicsFolder, absolute: true });
+            const mdFiles = epicService.listEpics(rootPath);
 
             for (const file of mdFiles) {
                 try {
-                    const content = fs.readFileSync(file, "utf8");
+                    const content = epicService.readEpic(file);
 
                     // Get title from first markdown heading or filename
                     let titleMatch = content.match(/^#\s+(.+)$/m);
@@ -45,13 +43,6 @@ export function registerViewEpicsCommand(context: vscode.ExtensionContext) {
                             }
 
                             if (trimmed.startsWith("- ")) {
-                                // Extract the text inside square brackets after emoji
-                                // Regex explanation:
-                                // - match a bullet '- '
-                                // - then possibly some emoji characters (like 📄)
-                                // - then space and '['
-                                // - capture anything non-greedy inside brackets '[ ... ]'
-                                // Example line: - 📄 [ Refactor GraphQL schema loading](...)
                                 const match = trimmed.match(/- .*?\[\s*([^\]]+)\s*\]/);
                                 if (match) {
                                     tasks.push(match[1].trim());

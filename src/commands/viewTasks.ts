@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { getWebviewContent } from "../webview/getWebviewContent";
-import path from "path";
-import glob from "glob";
+import { getAllTaskRows, TaskRow } from "../utils/taskUtils";
 
 export function registerViewTasksCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand("sprintdesk.viewTasks", async () => {
@@ -11,25 +10,10 @@ export function registerViewTasksCommand(context: vscode.ExtensionContext) {
     });
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
-    let taskRows: { task: string; epic: string; file: string }[] = [];
+    let taskRows: TaskRow[] = [];
     if (workspaceFolders && workspaceFolders.length > 0) {
       const rootPath = workspaceFolders[0].uri.fsPath;
-      const tasksFolder = path.join(rootPath, ".SprintDesk", "tasks");
-      const mdFiles = glob.sync("**/*.md", { cwd: tasksFolder, absolute: true });
-
-      for (const file of mdFiles) {
-        try {
-          const base = path.basename(file);
-          const match = base.match(/^\[Task\]_(.+)_\[Epic\]_(.+)\.md$/);
-          if (match) {
-            taskRows.push({
-              task: "🚀 " + match[1].replace(/-/g, " "),
-              epic: "🚩 " + match[2].replace(/-/g, " "),
-              file: base,
-            });
-          }
-        } catch (e) {}
-      }
+      taskRows = getAllTaskRows(rootPath);
     }
 
     panel.webview.html = getWebviewContent(context, panel.webview);

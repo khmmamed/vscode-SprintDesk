@@ -1,35 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
-
-function insertTaskLinkUnderSection(content: string, section: string, taskLink: string): string {
-  const sectionRegex = new RegExp(`(^|\n)## ${section}[^\n]*\n`, 'i');
-  const match = content.match(sectionRegex);
-  if (match) {
-    // Section exists, insert after section header
-    const insertPos = match.index! + match[0].length;
-    // Find where the next section starts or end of file
-    const nextSection = content.slice(insertPos).search(/^## /m);
-    if (nextSection === -1) {
-      // No next section, append at end
-      const before = content.slice(0, insertPos);
-      const after = content.slice(insertPos);
-      // Avoid duplicate
-      if (after.includes(taskLink)) return content;
-      return before + (after.endsWith('\n') ? '' : '\n') + taskLink + '\n' + after;
-    } else {
-      // Insert before next section
-      const before = content.slice(0, insertPos + nextSection);
-      const after = content.slice(insertPos + nextSection);
-      if (before.includes(taskLink)) return content;
-      return before + (before.endsWith('\n') ? '' : '\n') + taskLink + '\n' + after;
-    }
-  } else {
-    // Section does not exist, add it at the end
-    if (content.includes(taskLink)) return content;
-    return content.trimEnd() + `\n\n## ${section}\n${taskLink}\n`;
-  }
-}
+import * as taskService from '../services/taskService';
+import * as epicService from '../services/epicService';
+import * as backlogService from '../services/backlogService';
+import insertTaskLinkUnderSection from '../utils/mdUtils';
 
 export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand('sprintdesk.addQuickly', async () => {
@@ -61,58 +35,38 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
       return;
     }
     const root = workspaceFolders[0].uri.fsPath;
-    const sprintDeskPath = path.join(root, '.SprintDesk');
 
-    // Ensure folders exist
-    const tasksDir = path.join(sprintDeskPath, 'tasks');
-    const epicsDir = path.join(sprintDeskPath, 'epics');
-    const backlogDir = path.join(sprintDeskPath, 'backlogs');
-    [tasksDir, epicsDir, backlogDir].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
-
-    // Create task file name
-    let taskFileName = `[Task]_${taskName.replace(/\s+/g, '-')}`;
-    if (epicName) {
-      taskFileName += `_[Epic]_${epicName.replace(/\s+/g, '-')}`;
-    }
-    taskFileName += '.md';
-    const taskFilePath = path.join(tasksDir, taskFileName);
-    if (!fs.existsSync(taskFilePath)) {
-      fs.writeFileSync(taskFilePath, `# Task: ${taskName}\n${epicName ? `Epic: ${epicName}\n` : ''}`);
+    // Create task via TaskService (creates folders/files as needed)
+    let fileName: string;
+    try {
+      const res = taskService.createTask(taskName, epicName);
+      fileName = res.fileName;
+    } catch (e) {
+      vscode.window.showErrorMessage('Failed to create task.');
+      return;
     }
 
-    // Add to epic if specified
+    // Link to epic using EpicService
     if (epicName) {
-      const epicFileName = `[Epic]_${epicName.replace(/\s+/g, '-')}.md`;
-      const epicFilePath = path.join(epicsDir, epicFileName);
-      let epicContent = '';
-      if (fs.existsSync(epicFilePath)) {
-        epicContent = fs.readFileSync(epicFilePath, 'utf8');
-      } else {
-        epicContent = `# Epic: ${epicName}\n`;
+      try {
+        await epicService.addTaskToEpic(epicName, fileName as any);
+      } catch (e) {
+        // fallback: ensure epic file exists
+        epicService.createEpic(epicName);
       }
-      // Link to task (relative path)
-      const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${taskFileName})`;
-      epicContent = insertTaskLinkUnderSection(epicContent, 'tasks', taskLink);
-      fs.writeFileSync(epicFilePath, epicContent);
     }
 
     // Add to backlog if specified
     if (backlogName) {
-      // Find backlog file by partial match
-      const backlogFiles = fs.readdirSync(backlogDir).filter(f => f.toLowerCase().includes(backlogName.toLowerCase()));
-      if (backlogFiles.length === 0) {
+      const backlogs = backlogService.listBacklogs(root);
+      const match = backlogs.find(b => path.basename(b).toLowerCase().includes(backlogName.toLowerCase()));
+      if (!match) {
         vscode.window.showErrorMessage(`No backlog file found matching '${backlogName}'.`);
       } else {
-        const backlogFilePath = path.join(backlogDir, backlogFiles[0]);
-        let backlogContent = fs.readFileSync(backlogFilePath, 'utf8');
-        // Link to task (relative path)
-        const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${taskFileName})`;
-        backlogContent = insertTaskLinkUnderSection(backlogContent, 'tasks', taskLink);
-        fs.writeFileSync(backlogFilePath, backlogContent);
+        const backlogContent = backlogService.readBacklog(match);
+        const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+        const newContent = insertTaskLinkUnderSection(backlogContent, 'tasks', taskLink);
+        backlogService.updateBacklog(match, newContent);
       }
     }
 

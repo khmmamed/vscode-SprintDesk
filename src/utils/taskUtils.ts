@@ -1,0 +1,50 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as taskService from '../services/taskService';
+
+export interface TaskRow {
+    task: string;
+    epic: string;
+    file: string;
+}
+
+export function parseTaskFile(filePath: string): TaskRow | null {
+    try {
+        const base = path.basename(filePath);
+        const match = base.match(/^\[Task\]_(.+)_\[Epic\]_(.+)\.md$/i);
+        if (match) {
+            return {
+                task: "🚀 " + match[1].replace(/[-_]+/g, " "),
+                epic: "🚩 " + match[2].replace(/[-_]+/g, " "),
+                file: base,
+            };
+        } else {
+            // fallback: accept [Task]_title.md
+            const m2 = base.match(/^\[Task\]_(.+?)\.md$/i);
+            if (m2) {
+                return {
+                    task: "🚀 " + m2[1].replace(/[-_]+/g, " "),
+                    epic: "",
+                    file: base
+                };
+            }
+        }
+    } catch (e) {
+        console.error('Error parsing task file:', e);
+    }
+    return null;
+}
+
+export function getAllTaskRows(rootPath: string): TaskRow[] {
+    const taskRows: TaskRow[] = [];
+    const mdFiles = taskService.listTasks(rootPath);
+
+    for (const file of mdFiles) {
+        const taskRow = parseTaskFile(file);
+        if (taskRow) {
+            taskRows.push(taskRow);
+        }
+    }
+
+    return taskRows;
+}

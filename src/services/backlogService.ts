@@ -1,0 +1,240 @@
+import * as path from 'path';
+import * as fs from 'fs';
+import * as vscode from 'vscode';
+import * as fileService from './fileService';
+import insertTaskLinkUnderSection from '../utils/mdUtils';
+
+interface TreeItemLike {
+  label: string;
+  collapsibleState: vscode.TreeItemCollapsibleState;
+  command?: {
+    command: string;
+    title: string;
+    arguments: any[];
+  };
+}
+
+// Helper: remove git conflict blocks like <<<<<<< ... ======= ... >>>>>>>
+function stripMergeMarkers(content: string): string {
+  return content.replace(/<<<<<<<[\s\S]*?>>>>>>>\s*.*/g, '')
+                .replace(/={7,}[\s\S]*?={7,}\n?/g, '');
+}
+
+// Helper: extract YAML frontmatter block (between first pair of ---)
+function extractFrontmatter(content: string): string | null {
+  const m = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
+  return m ? m[1] : null;
+}
+
+export function parseBacklogFile(filePath: string): { title: string; tasks: { label: string; abs?: string }[] } {
+  let content = fileService.readFileSyncSafe(filePath);
+  content = stripMergeMarkers(content);
+
+  // Title
+  let titleMatch = content.match(/^#\s+(.+)$/m);
+  const title = titleMatch ? titleMatch[1].trim() : path.basename(filePath, '.md');
+
+  const tasks: { label: string; abs?: string }[] = [];
+  const seen = new Set<string>();
+
+  const fm = extractFrontmatter(content);
+  if (fm && /\btasks\s*:/i.test(fm)) {
+    const fileRegex = /file:\s*([^\n\r]+)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = fileRegex.exec(fm)) !== null) {
+      const rel = m[1].trim().replace(/['"]+/g, '');
+      const abs = path.resolve(path.dirname(filePath), rel);
+      const prettyLabel = path.basename(rel).replace(/\.[^.]+$/, '').replace(/^[^_]*_?/, '').replace(/[_-]+/g, ' ').trim();
+      const key = `${prettyLabel}|${abs}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        tasks.push({ label: prettyLabel, abs: fileService.fileExists(abs) ? abs : undefined });
+      }
+    }
+    if (tasks.length) return { title, tasks };
+  }
+
+  // Fallback to Markdown '## Tasks' parsing
+  const sectionMatch = content.match(/(^|\r?\n)##\s*Tasks\b[^\n]*\r?\n([\s\S]*?)(?=\r?\n#{1,6}\s+\S|\s*$)/i);
+  if (!sectionMatch) return { title, tasks };
+  const section = sectionMatch[2] ?? '';
+
+  const rawItems: string[] = [];
+  const ulRegex = /^\s*[-*]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
+  let mm: RegExpExecArray | null;
+  while ((mm = ulRegex.exec(section)) !== null) {
+    rawItems.push(mm[1].trim());
+  }
+  const olRegex = /^\s*\d+[\.)]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
+  while ((mm = olRegex.exec(section)) !== null) {
+    rawItems.push(mm[1].trim());
+  }
+
+  for (const itemText of rawItems) {
+    const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
+    const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
+    let key = prettyLabel;
+    if (linkMatch) {
+      const rel = linkMatch[2];
+      const abs = path.resolve(path.dirname(filePath), rel);
+      key = `${prettyLabel}|${abs}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        tasks.push({ label: prettyLabel, abs: fileService.fileExists(abs) ? abs : undefined });
+      }
+    } else {
+      if (!seen.has(key)) {
+        seen.add(key);
+        tasks.push({ label: prettyLabel });
+      }
+    }
+  }
+
+  return { title, tasks };
+}
+
+export function listBacklogsSummary(ws: string): { filePath: string; title: string; tasks: { label: string; abs?: string }[] }[] {
+  const files = listBacklogs(ws);
+  return files.map(f => {
+    const parsed = parseBacklogFile(f);
+    return { filePath: f, title: parsed.title, tasks: parsed.tasks };
+  });
+}
+
+export function listBacklogs(ws: string): string[] {
+  const backlogsDir = path.join(ws, '.SprintDesk', 'Backlogs');
+  return fileService.listMdFiles(backlogsDir).map(f => path.join(backlogsDir, f));
+}
+
+export function readBacklog(filePath: string): string {
+  return fileService.readFileSyncSafe(filePath);
+}
+
+export function createBacklog(name: string): string {
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!ws) throw new Error('No workspace');
+  const backlogsDir = path.join(ws, '.SprintDesk', 'Backlogs');
+  fs.mkdirSync(backlogsDir, { recursive: true });
+  const backlogFile = path.join(backlogsDir, `${name.replace(/\s+/g, '-')}.md`);
+  if (!fs.existsSync(backlogFile)) {
+    fs.writeFileSync(backlogFile, `# Backlog: ${name}\n\n## Tasks\n`, 'utf8');
+  }
+  return backlogFile;
+}
+
+export function updateBacklog(filePath: string, content: string) {
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
+export function deleteBacklog(filePath: string) {
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
+export async function addTaskToBacklogInteractive(item: any) {
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
+  const backlogFile: string | undefined = item?.filePath;
+  if (!backlogFile) { vscode.window.showErrorMessage('Backlog file not found for this item.'); return; }
+  const taskName = await vscode.window.showInputBox({ prompt: 'Task title' });
+  if (!taskName) return;
+  const epicName = await vscode.window.showInputBox({ prompt: 'Epic name (optional)' });
+
+  const tasksDir = path.join(ws, '.SprintDesk', 'tasks');
+  const epicsDir = path.join(ws, '.SprintDesk', 'Epics');
+  fs.mkdirSync(tasksDir, { recursive: true });
+  fs.mkdirSync(epicsDir, { recursive: true });
+
+  let fileName = `[Task]_${taskName.replace(/\s+/g, '-')}`;
+  if (epicName) fileName += `_[Epic]_${epicName.replace(/\s+/g, '-')}`;
+  fileName += '.md';
+
+  const taskPath = path.join(tasksDir, fileName);
+  if (!fs.existsSync(taskPath)) {
+    const template = `---\n_id: tsk_${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
+    fs.writeFileSync(taskPath, template, 'utf8');
+  }
+
+  if (epicName) {
+    const epicFile = path.join(epicsDir, `[Epic]_${epicName.replace(/\s+/g, '-')}.md`);
+    let epicContent = fileService.readFileSyncSafe(epicFile) || `# Epic: ${epicName}\n`;
+    const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+    epicContent = insertTaskLinkUnderSection(epicContent, 'tasks', taskLink);
+    fs.writeFileSync(epicFile, epicContent, 'utf8');
+  }
+
+  try {
+    let backlogContent = fs.readFileSync(backlogFile, 'utf8');
+    const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+    backlogContent = insertTaskLinkUnderSection(backlogContent, 'Tasks', taskLink);
+    fs.writeFileSync(backlogFile, backlogContent, 'utf8');
+    vscode.window.showInformationMessage('Task added to backlog.');
+  } catch (e) {
+    vscode.window.showErrorMessage('Failed to update backlog file.');
+  }
+}
+
+export function getTasksFromBacklog(filePath: string): TreeItemLike[] {
+  try {
+    const parsed = parseBacklogFile(filePath);
+    const result: TreeItemLike[] = [];
+    
+    for (const t of parsed.tasks) {
+      const item: TreeItemLike = {
+        label: t.label,
+        collapsibleState: vscode.TreeItemCollapsibleState.None
+      };
+      
+      if (t.abs) {
+        item.command = {
+          command: 'vscode.open',
+          title: 'Open Task',
+          arguments: [vscode.Uri.file(t.abs)]
+        };
+      }
+      result.push(item);
+    }
+    
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+export async function addExistingTasksToBacklog(item: any) {
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
+  const backlogFile: string | undefined = item?.filePath;
+  if (!backlogFile) { vscode.window.showErrorMessage('Backlog file not found.'); return; }
+
+  const taskDirs = fileService.getExistingTasksDirs(ws);
+  const fileEntries: { dir: string; file: string }[] = [];
+  for (const d of taskDirs) {
+    const entries = fileService.listMdFiles(d);
+    for (const f of entries) fileEntries.push({ dir: d, file: f });
+  }
+  if (!fileEntries.length) { vscode.window.showInformationMessage('No tasks found.'); return; }
+
+  const itemsQP = fileEntries.map(({dir, file}) => {
+    const titleMatch = file.match(/^\[Task\]_(.+?)(?:_\[Epic\]_.+)?\.md$/i);
+    const title = titleMatch ? titleMatch[1].replace(/[_-]+/g, ' ') : file.replace(/\.md$/i, '');
+    return { label: title, file, dir } as { label: string, file: string, dir: string };
+  });
+
+  const picked = await vscode.window.showQuickPick(itemsQP, { canPickMany: true, title: 'Select tasks to add to Backlog' });
+  if (!picked || picked.length === 0) return;
+
+  try {
+    let content = fs.readFileSync(backlogFile, 'utf8');
+    for (const p of picked) {
+      const linkTitle = p.label.trim().replace(/\s+/g, '-').toLowerCase();
+      const tasksFolder = path.basename((p as any).dir || path.join(ws, '.SprintDesk', 'tasks'));
+      const link = `- 📌 [${linkTitle}](../${tasksFolder}/${p.file}) ✅ [waiting]`;
+      content = insertTaskLinkUnderSection(content, 'Tasks', link);
+    }
+    fs.writeFileSync(backlogFile, content, 'utf8');
+    vscode.window.showInformationMessage('Tasks added to backlog.');
+  } catch {
+    vscode.window.showErrorMessage('Failed to update backlog file.');
+  }
+}

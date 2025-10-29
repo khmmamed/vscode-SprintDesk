@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+import * as fileService from '../services/fileService';
 import { exec } from 'child_process';
 
 export class TasksTreeItem extends vscode.TreeItem {
@@ -39,18 +39,24 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TasksTreeI
   }
 
   private async getAllTasksWithEpics(): Promise<TasksTreeItem[]> {
-    const tasksDir = path.join(this.workspaceRoot, '.SprintDesk', 'tasks');
-    if (!fs.existsSync(tasksDir)) return [];
-    const files = fs.readdirSync(tasksDir);
+    // Support both 'tasks' and emoji-prefixed '🚀_tasks' folders used in templates
+    const candidates = fileService.getExistingTasksDirs(this.workspaceRoot);
+    const files: string[] = [];
+    for (const d of candidates) {
+      const entries = fileService.listMdFiles(d).map(f => path.join(d, f));
+      files.push(...entries);
+    }
+    if (!files.length) return [];
     const tasks: TasksTreeItem[] = [];
-    const promises = files.map(file => {
-      const match = file.match(/^\[Task\]_(.+)_\[Epic\]_(.+)\.md$/);
+    const promises = files.map(filePath => {
+      const fileName = path.basename(filePath);
+      // Accept [Task]_title_[Epic]_epic.md or [Task]_title.md
+      const match = fileName.match(/^\[Task\]_(.+?)(?:_\[Epic\]_(.+))?\.md$/i);
       if (match) {
         const taskTitle = match[1];
         const epicTitle = match[2];
-        const filePath = path.join(tasksDir, file);
         return this.getLastCommitDate(filePath).then(date => {
-          const desc = `🚩${epicTitle} | 🕒 ${date}`;
+          const desc = epicTitle ? `🚩${epicTitle} | 🕒 ${date}` : `🕒 ${date}`;
           const prettyLabel = taskTitle.replace(/[_-]+/g, ' ').trim();
           const item = new TasksTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None);
           return Object.assign(item, {

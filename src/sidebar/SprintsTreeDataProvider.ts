@@ -16,6 +16,18 @@ export class SprintsTreeItem extends vscode.TreeItem {
   }
 }
 
+// Helper: remove git conflict blocks like <<<<<<< ... ======= ... >>>>>>>
+function stripMergeMarkers(content: string): string {
+  return content.replace(/<<<<<<<[\s\S]*?>>>>>>>\s*.*\n?/g, '')
+                .replace(/={7,}[\s\S]*?={7,}\n?/g, '');
+}
+
+// Helper: extract YAML frontmatter block (between first pair of ---)
+function extractFrontmatter(content: string): string | null {
+  const m = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
+  return m ? m[1] : null;
+}
+
 export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsTreeItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<SprintsTreeItem | undefined | void> = new vscode.EventEmitter<SprintsTreeItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<SprintsTreeItem | undefined | void> = this._onDidChangeTreeData.event;
@@ -96,7 +108,21 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
 
   private parseSprintDateRangeFromFile(filePath: string): [Date, Date] | null {
     try {
-      const content = fs.readFileSync(filePath, 'utf8');
+      let content = fs.readFileSync(filePath, 'utf8');
+      // Remove any git merge conflict markers which may break parsing
+      content = stripMergeMarkers(content);
+      // If there's a YAML frontmatter with start_date/end_date, prefer that
+      const fm = extractFrontmatter(content);
+      if (fm) {
+        const sd = fm.match(/start_date:\s*(\d{4}-\d{2}-\d{2})/i) || fm.match(/start:\s*(\d{4}-\d{2}-\d{2})/i);
+        const ed = fm.match(/end_date:\s*(\d{4}-\d{2}-\d{2})/i) || fm.match(/end:\s*(\d{4}-\d{2}-\d{2})/i);
+        if (sd && ed) {
+          const a = new Date(sd[1]);
+          const b = new Date(ed[1]);
+          return a <= b ? [a, b] : [b, a];
+        }
+      }
+      const contentToParse = content;
       const isoRegex = /(\d{4})-(\d{2})-(\d{2})/g; // yyyy-mm-dd
       const dmyRegex = /(\d{2})-(\d{2})-(\d{4})/g; // dd-mm-yyyy
       const dates: Date[] = [];
@@ -106,7 +132,7 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
         dates.push(d);
       }
       if (dates.length < 2) {
-        while ((m = dmyRegex.exec(content)) && dates.length < 2) {
+        while ((m = dmyRegex.exec(contentToParse)) && dates.length < 2) {
           const d = new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
           dates.push(d);
         }
@@ -161,24 +187,66 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
 
   private async getTasksFromSprintFile(filePath: string): Promise<SprintsTreeItem[]> {
     try {
-      const content = fs.readFileSync(filePath, 'utf8');
+      let content = fs.readFileSync(filePath, 'utf8');
+      content = stripMergeMarkers(content);
+
+      // First try YAML frontmatter 'tasks:' entries which may contain file: fields
+      const fm = extractFrontmatter(content);
+      const items: SprintsTreeItem[] = [];
+      const seen = new Set<string>();
+
+      if (fm && /\btasks\s*:/i.test(fm)) {
+        // grab file: ../path/to/file.md occurrences inside the frontmatter
+        const fileRegex = /file:\s*([^\n\r]+)/gi;
+        let m: RegExpExecArray | null;
+        while ((m = fileRegex.exec(fm)) !== null) {
+          const rel = m[1].trim().replace(/['"]+/g, '');
+          const abs = path.resolve(path.dirname(filePath), rel);
+          const prettyLabel = path.basename(rel).replace(/\.[^.]+$/, '').replace(/^[^_]*_?/, '').replace(/[_-]+/g, ' ').trim();
+          const displayLabel = prettyLabel;
+          const treeItem = new SprintsTreeItem(displayLabel, vscode.TreeItemCollapsibleState.None, [], undefined, prettyLabel, abs, filePath);
+          treeItem.contextValue = 'sprintTask';
+          if (fs.existsSync(abs)) {
+            Object.assign(treeItem, {
+              command: {
+                command: 'vscode.open',
+                title: 'Open Task',
+                arguments: [vscode.Uri.file(abs)]
+              }
+            });
+            const key = `${prettyLabel}|${abs}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              items.push(treeItem);
+            }
+          } else {
+            // still include item even if file missing (avoid data loss)
+            const key = prettyLabel;
+            if (!seen.has(key)) {
+              seen.add(key);
+              items.push(treeItem);
+            }
+          }
+        }
+        if (items.length) return items;
+      }
+
+      // Fallback to Markdown '## Tasks' parsing
       const sectionMatch = content.match(/(^|\r?\n)#{1,6}\s*Tasks\b[^\n]*\r?\n([\s\S]*?)(?=\r?\n#{1,6}\s+\S|\s*$)/i);
       if (!sectionMatch) return [];
       const section = sectionMatch[2] ?? '';
 
       const rawItems: string[] = [];
       const ulRegex = /^\s*[-*]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
-      let m: RegExpExecArray | null;
-      while ((m = ulRegex.exec(section)) !== null) {
-        rawItems.push(m[1].trim());
+      let mm: RegExpExecArray | null;
+      while ((mm = ulRegex.exec(section)) !== null) {
+        rawItems.push(mm[1].trim());
       }
       const olRegex = /^\s*\d+[\.)]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
-      while ((m = olRegex.exec(section)) !== null) {
-        rawItems.push(m[1].trim());
+      while ((mm = olRegex.exec(section)) !== null) {
+        rawItems.push(mm[1].trim());
       }
 
-      const seen = new Set<string>();
-      const result: SprintsTreeItem[] = [];
       for (const itemText of rawItems) {
         const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
         let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
@@ -202,11 +270,11 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
         }
         if (!seen.has(key)) {
           seen.add(key);
-          result.push(treeItem);
+          items.push(treeItem);
         }
       }
 
-      return result;
+      return items;
     } catch (e) {
       return [];
     }

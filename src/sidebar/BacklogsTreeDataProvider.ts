@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+import * as fileService from '../services/fileService';
+import * as backlogService from '../services/backlogService';
 
 export class BacklogsTreeItem extends vscode.TreeItem {
   constructor(
@@ -48,10 +49,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
 
   private async getBacklogs(workspaceRoot: string): Promise<BacklogsTreeItem[]> {
     const backlogsDir = path.join(workspaceRoot, '.SprintDesk', 'Backlogs');
-    if (!fs.existsSync(backlogsDir)) return [];
-
-    const entries = fs.readdirSync(backlogsDir, { withFileTypes: true });
-    const files = entries.filter(e => e.isFile()).map(e => e.name);
+    const files = fileService.listMdFiles(backlogsDir);
 
     const items = files.map(name => {
       const filePath = path.join(backlogsDir, name);
@@ -75,53 +73,13 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   }
 
   private async getTasksFromBacklogFile(filePath: string): Promise<BacklogsTreeItem[]> {
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      // Find the section starting with an H2 heading '## Tasks'
-      const sectionMatch = content.match(/(^|\r?\n)##\s*Tasks\b[^\n]*\r?\n([\s\S]*?)(?=\r?\n#{1,6}\s+\S|\s*$)/i);
-      if (!sectionMatch) return [];
-      const section = sectionMatch[2] ?? '';
-
-      const rawItems: string[] = [];
-      const ulRegex = /^\s*[-*]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
-      let m: RegExpExecArray | null;
-      while ((m = ulRegex.exec(section)) !== null) {
-        rawItems.push(m[1].trim());
+    const treeItems = backlogService.getTasksFromBacklog(filePath);
+    return treeItems.map(item => {
+      const treeItem = new BacklogsTreeItem(item.label, item.collapsibleState);
+      if (item.command) {
+        treeItem.command = item.command;
       }
-
-      const olRegex = /^\s*\d+[\.)]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
-      while ((m = olRegex.exec(section)) !== null) {
-        rawItems.push(m[1].trim());
-      }
-
-      const seen = new Set<string>();
-      const result: BacklogsTreeItem[] = [];
-      for (const itemText of rawItems) {
-        const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
-        let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
-        const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
-        let key = prettyLabel;
-        const treeItem = new BacklogsTreeItem(prettyLabel, vscode.TreeItemCollapsibleState.None);
-        if (linkMatch) {
-          const rel = linkMatch[2];
-          const abs = path.resolve(path.dirname(filePath), rel);
-          key = `${prettyLabel}|${abs}`;
-          Object.assign(treeItem, {
-            command: {
-              command: 'vscode.open',
-              title: 'Open Task',
-              arguments: [vscode.Uri.file(abs)]
-            }
-          });
-        }
-        if (!seen.has(key)) {
-          seen.add(key);
-          result.push(treeItem);
-        }
-      }
-      return result;
-    } catch {
-      return [];
-    }
+      return treeItem;
+    });
   }
 }

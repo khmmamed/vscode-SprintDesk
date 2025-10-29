@@ -1,6 +1,8 @@
 // src/commands/addMultipleTasksCommand.ts
 import * as vscode from "vscode";
 import { getWebviewContent } from "../webview/getWebviewContent";
+import * as epicService from '../services/epicService';
+import * as taskService from '../services/taskService';
 
 
 // Helper: Extract Epic name
@@ -97,8 +99,13 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
                 // Doesn't exist → create
               }
 
-              // Create empty file
-              await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(""));
+              // Create file using new data approach: generated _id and name (slug), others left empty
+              const title = getTaskTitle(fileName);
+              // Preserve provided filename but create file
+              const slug = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
+              const generatedId = `tsk_${slug}`;
+              const frontmatter = `---\n_id: ${generatedId}\nname: ${slug}\n---\n\n# 🧩 Task: ${title}\n`;
+              await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(frontmatter));
               createdTasks.push(fileName);
 
               // Group by Epic
@@ -135,8 +142,10 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
 ${taskLinks}
 `;
 
-              // Write file (overwrite if exists)
-              await vscode.workspace.fs.writeFile(epicFileUri, new TextEncoder().encode(content));
+              // Write file (overwrite if exists) via EpicService
+              const epicFsPath = epicFileUri.fsPath;
+              epicService.createEpic(epic);
+              epicService.updateEpic(epicFsPath, content);
               updatedEpics.push(epicFileName);
             }
 
