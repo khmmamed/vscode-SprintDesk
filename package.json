@@ -36,6 +36,20 @@
     "test": "node ./out/test/runTest.js"
   },
   "contributes": {
+    "keybindings": [
+      {
+        "command": "sprintdesk.addTask",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "workspaceHasSprintDesk"
+      },
+      {
+        "command": "sprintdesk.addQuickly",
+        "key": "ctrl+shift+q",
+        "mac": "cmd+shift+q",
+        "when": "workspaceHasSprintDesk"
+      }
+    ],
     "commands": [
       {
         "command": "vscode-react-webview-starter.openWebview",
@@ -138,8 +152,7 @@
         },
         {
           "id": "sprintdesk-epics",
-          "name": "Epics",
-          "type": "webview"
+          "name": "Epics"
         },
         {
           "id": "sprintdesk-tasks",
@@ -148,6 +161,13 @@
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "sprintdesk.addTask",
+          "title": "SprintDesk: Create New Task",
+          "when": "workspaceHasSprintDesk"
+        }
+      ],
       "view/title": [
         {
           "command": "sprintdesk.addSprint",
@@ -157,7 +177,7 @@
         {
           "command": "sprintdesk.addTask",
           "when": "view == sprintdesk-tasks",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
           "command": "sprintdesk.addEpic",
@@ -168,6 +188,18 @@
           "command": "sprintdesk.refresh",
           "when": "view =~ /^sprintdesk-/",
           "group": "navigation@9"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "sprintdesk.addQuickly",
+          "group": "sprintdesk@1",
+          "when": "workspaceHasSprintDesk"
+        },
+        {
+          "command": "sprintdesk.addTask",
+          "group": "sprintdesk@2",
+          "when": "workspaceHasSprintDesk"
         }
       ],
       "view/item/context": [

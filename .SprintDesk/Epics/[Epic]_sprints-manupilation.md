@@ -4,6 +4,7 @@ name: Extensions Management
 color: "#0b2cc2"
 description: Manages installation, permissions, and updates for extensions across the platform.
 status: complete
+created_at: 2025-07-22T09:00:00.000Z
 updated_at: 2025-07-23T12:47:34.549Z
 total_tasks: 6
 completed_tasks: 6
@@ -73,6 +74,17 @@ tasks:
     name: extension-update-listener
     status: done
     file: ../tasks/[Task]_extension-update-listener_[Epic]_extensions-management.md
+
+# Related Epics (many-to-many)
+related_epics:
+  epic_user_management:
+    _id: epic_user_management
+    name: User Management
+    file: ../epics/[Epic]_user-management.md
+  epic_notifications:
+    _id: epic_notifications
+    name: Notifications System
+    file: ../epics/[Epic]_notifications-system.md
 ---
 
 # 🧩 Epic: Extensions Management
@@ -81,20 +93,21 @@ tasks:
 Manages installation, permissions, and updates for extensions across the platform.
 
 ## 📊 Overview
-- **🗓️ Updated:** 2025-07-23T12:47:34.549Z  
-- **📌 Total Tasks:** 6  
-- **📈 Status:** ✅ [6/6 Complete]  
-- **🎨 Color:** #0b2cc2  
+- 🕓 **Created At:** 2025-07-22T09:00:00.000Z  
+- 🔄 **Updated At:** 2025-07-23T12:47:34.549Z  
+- 📌 **Total Tasks:** 6  
+- 📈 **Status:** ✅ [6/6 Complete]  
+- 🎨 **Color:** #0b2cc2  
 
-## 🔗 Related Backlogs
+## Backlogs
 - [Features](../backlogs/[backlog]_Features.md)  
 - [UX](../backlogs/[backlog]_UX.md)  
 
-## 🔗 Related Sprints
+## Sprints
 - [pdp-core-01](../sprints/[Sprint]_pdp-core-01_2025-08-17_to_2025-08-21_🔘70%.md) — 70%  
 - [pdp-core-02](../sprints/[Sprint]_pdp-core-02_2025-08-22_to_2025-08-28_⚪0%.md) — 0%  
 
-## 🧱 Related Tasks
+## 🧱 Tasks
 | # | Task | Status | File |
 |:--|:----|:------:|:----|
 | 1 | [web-extension-details](../tasks/[Task]_web-extension-details_[Epic]_extensions-management.md) | ✅ Done | Open |
@@ -103,3 +116,14 @@ Manages installation, permissions, and updates for extensions across the platfor
 | 4 | [extension-sidebar-display](../tasks/[Task]_extension-sidebar-display_[Epic]_extensions-management.md) | ✅ Done | Open |
 | 5 | [uninstall-extension-handler](../tasks/[Task]_uninstall-extension-handler_[Epic]_extensions-management.md) | ✅ Done | Open |
 | 6 | [extension-update-listener](../tasks/[Task]_extension-update-listener_[Epic]_extensions-management.md) | ✅ Done | Open |
+
+## Related Epics
+- [User Management](../epics/[Epic]_user-management.md)  
+- [Notifications System](../epics/[Epic]_notifications-system.md)  
+
+---
+
+## 🧠 Notes
+- All tasks in this epic are completed.  
+- Related epics should be coordinated for feature dependencies.  
+- Ensure UX and extension updates remain consistent across all VSCode views.  

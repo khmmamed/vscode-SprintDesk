@@ -7,7 +7,7 @@ import { TasksTable } from "./TasksTable";
 import { BacklogsList } from "./BacklogsList";
 import { AddMultipleTasksForm } from "./AddMultipleTasksForm";
 import { EpicsList } from "./EpicsList";
-import { EpicsTree } from "../components/EpicsTree";
+import { EpicsTree } from "./EpicsTree";
 import TableBlock from "./TableBlock";
 
 interface ProjectFile {

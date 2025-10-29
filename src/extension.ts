@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from 'fs';
+import matter from 'gray-matter';
 import { registerOpenWebviewCommand } from "./commands/openWebview";
 import { registerViewTasksCommand } from "./commands/viewTasks";
 import { registerViewBacklogsCommand } from "./commands/viewBacklogs";
@@ -7,14 +9,17 @@ import { registerViewEpicsCommand } from "./commands/viewEpics";
 import { registerViewProjectsCommand } from "./commands/viewProjects";
 import { registerAddQuicklyCommand } from "./commands/addQuicklyCommand";
 import { getWebviewContent } from "./webview/getWebviewContent";
-import { scanGitProjects } from "./commands/scanGitProjects";
-import { registerViewGitProjectsCommand } from "./commands/viewGitProjects";
 import { scanProjectStructure } from "./commands/scanProjectStructure";
 import { registerViewProjectStructureCommand } from "./commands/viewProjectStructure";
-import { SprintsTreeDataProvider } from './sidebar/SprintsTreeDataProvider';
-import { TasksTreeDataProvider } from './sidebar/TasksTreeDataProvider';
-import { BacklogsTreeDataProvider } from './sidebar/BacklogsTreeDataProvider';
-import * as tasksService from './services/tasksService';
+import { SprintsTreeDataProvider } from './providers/SprintsTreeDataProvider';
+import { TasksTreeDataProvider, TaskTreeItem } from './providers/TasksTreeDataProvider';
+import { BacklogsTreeDataProvider } from './providers/BacklogsTreeDataProvider';
+import { EpicsTreeDataProvider, EpicTreeItem } from './providers/EpicsTreeDataProvider';
+import { createSprintInteractive } from './services/sprintService';
+import { createTaskInteractive } from './services/taskService';
+import { createEpicInteractive } from './services/epicService';
+import { addTaskToBacklogInteractive, addExistingTasksToBacklog } from './services/backlogService';
+import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
 import * as path from 'path';
 
 // existing tasks dir helper moved to services/fileService
@@ -59,57 +64,176 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // Register git projects scanner command
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sprintdesk.scanGitProjects', async () => {
-      const projects = await scanGitProjects();
-      return projects || [];
-    })
-  );
-
   // Register existing commands
   registerOpenWebviewCommand(context);
   registerViewTasksCommand(context);
   registerViewBacklogsCommand(context);
   addMultipleTasksCommand(context);
-  registerViewEpicsCommand(context);
   registerAddQuicklyCommand(context);
   registerViewProjectsCommand(context);
-  registerViewGitProjectsCommand(context);
   registerViewProjectStructureCommand(context);
 
   // Add Sprint: view title button on Sprints
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addSprint', async () => {
-    await tasksService.addSprint();
+    await createSprintInteractive();
   }));
 
   // Add Task: view title button on Tasks
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addTask', async () => {
-    await tasksService.createTaskAndLink();
+    await createTaskInteractive();
+    tasksProvider?.refresh(); // Refresh task tree view
+    sprintsProvider.refresh(); // Refresh sprints if task was added to a sprint
   }));
 
   // Add Epic: view title button on Epics
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addEpic', async () => {
-    await tasksService.addEpic();
+    await createEpicInteractive();
   }));
 
   // Add existing tasks to Sprint: inline on sprint item
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addExistingTasksToSprint', async (item: any) => {
-    await tasksService.addExistingTasksToSprint(item);
+    await addExistingTasksToSprint(item);
   }));
 
   // Add Task to Backlog: inline button on backlog item
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addTaskToBacklog', async (item: any) => {
-    await tasksService.addTaskToBacklog(item);
+    await addTaskToBacklogInteractive(item);
   }));
 
   // Add existing tasks to Backlog: inline on backlog item
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addExistingTasksToBacklog', async (item: any) => {
-    await tasksService.addExistingTasksToBacklog(item);
+    await addExistingTasksToBacklog(item);
   }));
 
-  // Register WebviewViewProviders
-  for (const viewId of SIDEBAR_VIEW_IDS) {
+  // Register the addTaskToEpic command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sprintdesk.addTaskToEpic', async (params: { 
+      epicId: string, 
+      epicPath: string, 
+      taskId: string, 
+      taskPath: string 
+    }) => {
+      try {
+        if (!fs.existsSync(params.epicPath) || !fs.existsSync(params.taskPath)) {
+          throw new Error('Epic or task file not found');
+        }
+
+        // Read epic file
+        const epicContent = fs.readFileSync(params.epicPath, 'utf8');
+        const epicMatter = matter(epicContent);
+
+        // Read task file
+        const taskContent = fs.readFileSync(params.taskPath, 'utf8');
+        const taskMatter = matter(taskContent);
+
+        // Initialize tasks array if it doesn't exist
+        if (!Array.isArray(epicMatter.data.tasks)) {
+          epicMatter.data.tasks = [];
+        }
+
+        // Create task data object
+        const taskData = {
+          _id: params.taskId,
+          name: taskMatter.data.title || taskMatter.data.name,
+          status: taskMatter.data.status || 'not-started',
+          file: path.relative(path.dirname(params.epicPath), params.taskPath).replace(/\\/g, '/'),
+          description: taskMatter.data.description || '',
+          priority: taskMatter.data.priority || 'medium'
+        };
+
+        // Check if task already exists
+        const existingTaskIndex = epicMatter.data.tasks.findIndex((t: any) => t._id === params.taskId);
+        if (existingTaskIndex >= 0) {
+          epicMatter.data.tasks[existingTaskIndex] = taskData;
+        } else {
+          epicMatter.data.tasks.push(taskData);
+        }
+        
+        // Update epic's task counts
+        epicMatter.data.total_tasks = epicMatter.data.tasks.length;
+        epicMatter.data.completed_tasks = epicMatter.data.tasks
+          .filter((t: any) => t.status === 'done' || t.status === 'completed').length;
+        epicMatter.data.progress = Math.round((epicMatter.data.completed_tasks / epicMatter.data.total_tasks) * 100) + '%';
+
+        // Update task list in markdown content
+        const taskTableHeader = `| # | Task | Status | Priority | File |
+|:--|:-----|:------:|:--------:|:-----|`;
+        
+        const taskListSection = epicMatter.data.tasks
+          .map((task: any, index: number) => {
+            const statusEmoji = getTaskStatusEmoji(task.status);
+            const priorityEmoji = getPriorityEmoji(task.priority);
+            return `| ${index + 1} | [${task.name}](${task.file}) | ${statusEmoji} ${task.status} | ${priorityEmoji} ${task.priority} | \`${task._id}\` |`;
+          })
+          .join('\n');
+
+        // Create the complete table with the comment marker at the end
+        const taskTable = `${taskTableHeader}\n${taskListSection}\n<!-- Tasks will be added here automatically -->`;
+
+        // Replace task list in content
+        const tasksSectionMarker = '## 🧱 Tasks';
+        const tasksStart = epicMatter.content.indexOf(tasksSectionMarker);
+        if (tasksStart !== -1) {
+          // Find the table section
+          const tableStart = epicMatter.content.indexOf('| # | Task |', tasksStart);
+          const nextSectionMatch = epicMatter.content.slice(tasksStart).match(/\n##\s/);
+          const tasksEnd = nextSectionMatch && nextSectionMatch.index !== undefined
+            ? tasksStart + nextSectionMatch.index 
+            : epicMatter.content.length;
+
+          // Insert the new table right after the Tasks header
+          epicMatter.content = 
+            epicMatter.content.slice(0, tasksStart) +
+            `${tasksSectionMarker}\n\n${taskTable}\n\n` +
+            epicMatter.content.slice(tasksEnd);
+        }
+
+        // Helper functions
+        function getTaskStatusEmoji(status: string): string {
+          switch (status?.toLowerCase()) {
+            case 'not-started': return '⏳';
+            case 'in-progress': return '🔄';
+            case 'done': 
+            case 'completed': return '✅';
+            case 'blocked': return '⛔';
+            default: return '⏳';
+          }
+        }
+
+        function getPriorityEmoji(priority: string): string {
+          switch (priority?.toLowerCase()) {
+            case 'high': return '🔴';
+            case 'low': return '🟢';
+            default: return '🟡';
+          }
+        }
+
+        // Update task's epic reference
+        taskMatter.data.epic = {
+          _id: params.epicId,
+          name: epicMatter.data.title || epicMatter.data.name,
+          file: path.relative(path.dirname(params.taskPath), params.epicPath).replace(/\\/g, '/')
+        };
+
+        // Write back the files
+        fs.writeFileSync(params.epicPath, matter.stringify(epicMatter.content, epicMatter.data));
+        fs.writeFileSync(params.taskPath, matter.stringify(taskMatter.content, taskMatter.data));
+
+        // Refresh views
+        vscode.window.showInformationMessage(`Added task to epic "${epicMatter.data.title || epicMatter.data.name}"`);
+        epicsProvider?.refresh();
+        tasksProvider?.refresh();
+      } catch (error) {
+        vscode.window.showErrorMessage('Failed to add task to epic: ' + (error as Error).message);
+      }
+    })
+  );
+
+  // Register WebviewViewProviders for non-tree views
+  const treeViewIds = ['sprintdesk-epics', 'sprintdesk-tasks', 'sprintdesk-sprints', 'sprintdesk-backlogs'];
+  const webviewIds = SIDEBAR_VIEW_IDS.filter(id => !treeViewIds.includes(id));
+  
+  for (const viewId of webviewIds) {
     context.subscriptions.push(
       vscode.window.registerWebviewViewProvider(
         viewId,
@@ -124,18 +248,79 @@ export async function activate(context: vscode.ExtensionContext) {
   const tasksProvider = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0)
     ? new TasksTreeDataProvider(vscode.workspace.workspaceFolders[0].uri.fsPath)
     : undefined;
+  const epicsProvider = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0)
+    ? new EpicsTreeDataProvider(vscode.workspace.workspaceFolders[0].uri.fsPath)
+    : undefined;
 
+  // Register regular tree views
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('sprintdesk-sprints', sprintsProvider)
   );
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('sprintdesk-backlogs', backlogsProvider)
   );
-  if (tasksProvider) {
-    context.subscriptions.push(
-      vscode.window.registerTreeDataProvider('sprintdesk-tasks', tasksProvider)
-    );
+  
+  // Create and register epics tree view with drag and drop support
+  if (epicsProvider) {
+    // Create the tree view with the provider (drag/drop is now integrated in the provider)
+    const epicsTreeView = vscode.window.createTreeView('sprintdesk-epics', {
+      treeDataProvider: epicsProvider,
+      dragAndDropController: epicsProvider
+    });
+
+    // Register the tree view and do initial refresh
+    context.subscriptions.push(epicsTreeView);
+    epicsProvider.refresh();
   }
+
+  if (tasksProvider) {
+    const tasksTreeView = vscode.window.createTreeView('sprintdesk-tasks', {
+      treeDataProvider: tasksProvider,
+      dragAndDropController: new class implements vscode.TreeDragAndDropController<vscode.TreeItem> {
+        dropMimeTypes = [];
+        dragMimeTypes = ['application/vnd.code.tree.sprintdesk-tasks'];
+
+        handleDrop(): void {}
+
+        handleDrag(source: readonly vscode.TreeItem[], dataTransfer: vscode.DataTransfer): void {
+          try {
+            const taskItem = source[0];
+            if (!(taskItem instanceof TaskTreeItem)) {
+              return;
+            }
+
+            // Log for debugging
+            console.log('Task being dragged:', {
+              id: taskItem.taskId,
+              path: taskItem.filePath,
+            });
+
+            if (!taskItem.filePath) {
+              throw new Error('Task path is undefined');
+            }
+
+            if (!fs.existsSync(taskItem.filePath)) {
+              throw new Error(`Task file not found at ${taskItem.filePath}`);
+            }
+
+            const data = {
+              taskId: taskItem.taskId,
+              taskPath: taskItem.filePath
+            };
+            
+            dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks', 
+              new vscode.DataTransferItem(JSON.stringify(data))
+            );
+          } catch (error) {
+            vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
+          }
+        }
+      }
+    });
+    context.subscriptions.push(tasksTreeView);
+  }
+
+  // Epics tree view is already added to subscriptions in its creation block
 
   // Refresh command for sidebar trees
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.refresh', async () => {
@@ -148,7 +333,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Start feature from sprint task item
   context.subscriptions.push(
     vscode.commands.registerCommand('sprintdesk.startFeatureFromTask', async (item: any) => {
-      await tasksService.startFeatureFromTask(item);
+      await startFeatureFromTask(item);
     })
   );
 
@@ -233,29 +418,6 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage("📦 SprintDesk folder has been set up in your project!");
   } catch (err) {
     console.error("Failed to copy .SprintDesk:", err);
-  }
-}
-
-function insertTaskLinkUnderSection(content: string, section: string, taskLink: string): string {
-  const sectionRegex = new RegExp(`(^|\n)##\\s*${section}[^\n]*\n`, 'i');
-  const match = content.match(sectionRegex);
-  if (match) {
-    const insertPos = match.index! + match[0].length;
-    const nextSection = content.slice(insertPos).search(/^##\\s+/m);
-    if (nextSection === -1) {
-      const before = content.slice(0, insertPos);
-      const after = content.slice(insertPos);
-      if (after.includes(taskLink)) return content;
-      return before + (after.endsWith('\n') ? '' : '\n') + taskLink + '\n' + after;
-    } else {
-      const before = content.slice(0, insertPos + nextSection);
-      const after = content.slice(insertPos + nextSection);
-      if (before.includes(taskLink)) return content;
-      return before + (before.endsWith('\n') ? '' : '\n') + taskLink + '\n' + after;
-    }
-  } else {
-    if (content.includes(taskLink)) return content;
-    return content.trimEnd() + `\n\n## ${section}\n${taskLink}\n`;
   }
 }
 

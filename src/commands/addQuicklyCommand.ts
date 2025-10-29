@@ -39,7 +39,14 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
     // Create task via TaskService (creates folders/files as needed)
     let fileName: string;
     try {
-      const res = taskService.createTask(taskName, epicName);
+      const res = taskService.createTask({
+        title: taskName,
+        type: 'feature',
+        priority: 'medium',
+        status: 'not-started',
+        epicName: epicName,
+        epicId: epicName ? `epic_${epicName.replace(/\s+/g, '_').toLowerCase()}` : undefined
+      });
       fileName = res.fileName;
     } catch (e) {
       vscode.window.showErrorMessage('Failed to create task.');
