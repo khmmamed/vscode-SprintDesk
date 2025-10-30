@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { SPRINTDESK_DIR, BACKLOGS_DIR, EPICS_DIR, SPRINTS_DIR, TASKS_DIR, DEFAULT_LAST_COMMIT } from './constant';
 
 export interface ProjectItem {
     name: string;
@@ -27,7 +28,7 @@ export async function findSubProjects(rootPath: string): Promise<ProjectStructur
         for (const entry of entries) {
             if (entry.isDirectory()) {
                 const projectPath = path.join(rootPath, entry.name);
-                const sprintDeskPath = path.join(projectPath, '.SprintDesk');
+                const sprintDeskPath = path.join(projectPath, SPRINTDESK_DIR);
                 
                 if (fs.existsSync(sprintDeskPath)) {
                     const structure = await analyzeProjectStructure(projectPath);
@@ -49,11 +50,11 @@ export async function findSubProjects(rootPath: string): Promise<ProjectStructur
 }
 
 export async function analyzeProjectStructure(projectPath: string): Promise<ProjectStructure> {
-    const sprintDeskPath = path.join(projectPath, '.SprintDesk');
+    const sprintDeskPath = path.join(projectPath, SPRINTDESK_DIR);
     const structure: ProjectStructure = {
         name: path.basename(projectPath),
         path: projectPath,
-        lastCommit: 'Initial',
+        lastCommit: DEFAULT_LAST_COMMIT,
         lastUpdate: new Date().toLocaleDateString(),
         backlogs: [],
         epics: [],
@@ -63,25 +64,25 @@ export async function analyzeProjectStructure(projectPath: string): Promise<Proj
 
     try {
         // Analyze backlogs
-        const backlogsPath = path.join(sprintDeskPath, 'Backlogs');
+        const backlogsPath = path.join(sprintDeskPath, BACKLOGS_DIR);
         if (fs.existsSync(backlogsPath)) {
             structure.backlogs = await getItems(backlogsPath);
         }
 
         // Analyze epics
-        const epicsPath = path.join(sprintDeskPath, 'Epics');
+        const epicsPath = path.join(sprintDeskPath, EPICS_DIR);
         if (fs.existsSync(epicsPath)) {
             structure.epics = await getItems(epicsPath);
         }
 
         // Analyze sprints
-        const sprintsPath = path.join(sprintDeskPath, 'Sprints');
+        const sprintsPath = path.join(sprintDeskPath, SPRINTS_DIR);
         if (fs.existsSync(sprintsPath)) {
             structure.sprints = await getItems(sprintsPath);
         }
 
         // Analyze tasks
-        const tasksPath = path.join(sprintDeskPath, 'Tasks');
+        const tasksPath = path.join(sprintDeskPath, TASKS_DIR);
         if (fs.existsSync(tasksPath)) {
             structure.tasks = await getItems(tasksPath);
         }
@@ -101,7 +102,7 @@ async function getItems(directoryPath: string): Promise<ProjectItem[]> {
                 const stats = await fs.promises.stat(path.join(directoryPath, file));
                 items.push({
                     name: file.replace(/\.md$/, ''),
-                    lastCommit: 'Initial',
+                    lastCommit: DEFAULT_LAST_COMMIT,
                     lastUpdate: stats.mtime.toLocaleDateString()
                 });
             }
