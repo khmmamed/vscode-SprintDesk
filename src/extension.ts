@@ -276,42 +276,33 @@ export async function activate(context: vscode.ExtensionContext) {
   if (tasksProvider) {
     const tasksTreeView = vscode.window.createTreeView('sprintdesk-tasks', {
       treeDataProvider: tasksProvider,
-      dragAndDropController: new class implements vscode.TreeDragAndDropController<vscode.TreeItem> {
+      dragAndDropController: new class implements vscode.TreeDragAndDropController<TaskTreeItem> {
         dropMimeTypes = [];
         dragMimeTypes = ['application/vnd.code.tree.sprintdesk-tasks'];
 
         handleDrop(): void {}
 
-        handleDrag(source: readonly vscode.TreeItem[], dataTransfer: vscode.DataTransfer): void {
+        handleDrag(source: readonly TaskTreeItem[], dataTransfer: vscode.DataTransfer): void {
           try {
             const taskItem = source[0];
-            if (!(taskItem instanceof TaskTreeItem)) {
-              return;
+            if (!taskItem) {
+              throw new Error('No task item to drag');
             }
 
-            // Log for debugging
-            console.log('Task being dragged:', {
-              id: taskItem.taskId,
-              path: taskItem.filePath,
-            });
-
-            if (!taskItem.filePath) {
-              throw new Error('Task path is undefined');
-            }
-
-            if (!fs.existsSync(taskItem.filePath)) {
-              throw new Error(`Task file not found at ${taskItem.filePath}`);
-            }
-
+            // For tree items, we need to set the handle in the correct format
             const data = {
-              taskId: taskItem.taskId,
-              taskPath: taskItem.filePath
+              id: 'sprintdesk-tasks',
+              itemHandles: [`0/0:${taskItem.label}`]
             };
+            
+            // Add debug logging for data being transferred
+            console.log('Setting drag data:', data);
             
             dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks', 
               new vscode.DataTransferItem(JSON.stringify(data))
             );
           } catch (error) {
+            console.error('Drag error:', error);
             vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
           }
         }
