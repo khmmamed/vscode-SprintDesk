@@ -252,10 +252,12 @@ export async function activate(context: vscode.ExtensionContext) {
     ? new EpicsTreeDataProvider(vscode.workspace.workspaceFolders[0].uri.fsPath)
     : undefined;
 
-  // Register regular tree views
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('sprintdesk-sprints', sprintsProvider)
-  );
+  // Create and register sprints tree view with drag and drop support
+  const sprintsTreeView = vscode.window.createTreeView('sprintdesk-sprints', {
+    treeDataProvider: sprintsProvider,
+    dragAndDropController: sprintsProvider
+  });
+  context.subscriptions.push(sprintsTreeView);
 
   // Create and register backlogs tree view with drag and drop support
   const backlogsTreeView = vscode.window.createTreeView('sprintdesk-backlogs', {
@@ -293,17 +295,19 @@ export async function activate(context: vscode.ExtensionContext) {
               throw new Error('No task item to drag');
             }
 
-            // For tree items, we need to set the handle in the correct format
-            const data = {
-              id: 'sprintdesk-tasks',
-              itemHandles: [`0/0:${taskItem.label}`]
+            // Create a serializable task data object
+            const taskData = {
+              id: taskItem.taskId,
+              label: taskItem.label,
+              filePath: taskItem.filePath,
+              type: 'task'
             };
             
             // Add debug logging for data being transferred
-            console.log('Setting drag data:', data);
+            console.log('Setting drag data:', taskData);
             
             dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks', 
-              new vscode.DataTransferItem(JSON.stringify(data))
+              new vscode.DataTransferItem(JSON.stringify(taskData))
             );
           } catch (error) {
             console.error('Drag error:', error);
