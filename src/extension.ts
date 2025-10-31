@@ -256,9 +256,13 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('sprintdesk-sprints', sprintsProvider)
   );
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('sprintdesk-backlogs', backlogsProvider)
-  );
+
+  // Create and register backlogs tree view with drag and drop support
+  const backlogsTreeView = vscode.window.createTreeView('sprintdesk-backlogs', {
+    treeDataProvider: backlogsProvider,
+    dragAndDropController: backlogsProvider
+  });
+  context.subscriptions.push(backlogsTreeView);
   
   // Create and register epics tree view with drag and drop support
   if (epicsProvider) {

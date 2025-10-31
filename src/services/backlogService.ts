@@ -12,6 +12,7 @@ import {
 interface TreeItemLike {
   label: string;
   collapsibleState: vscode.TreeItemCollapsibleState;
+  taskPath?: string;
   command?: {
     command: string;
     title: string;
@@ -187,7 +188,8 @@ export function getTasksFromBacklog(filePath: string): TreeItemLike[] {
     for (const t of parsed.tasks) {
       const item: TreeItemLike = {
         label: t.label,
-        collapsibleState: vscode.TreeItemCollapsibleState.None
+        collapsibleState: vscode.TreeItemCollapsibleState.None,
+        taskPath: t.abs
       };
       
       if (t.abs) {
@@ -203,6 +205,52 @@ export function getTasksFromBacklog(filePath: string): TreeItemLike[] {
     return result;
   } catch {
     return [];
+  }
+}
+
+export async function moveTaskBetweenBacklogs(
+  taskPath: string,
+  sourceBacklogPath: string,
+  targetBacklogPath: string
+): Promise<void> {
+  try {
+    // Read source and target backlog files
+    const sourceContent = fs.readFileSync(sourceBacklogPath, 'utf8');
+    const targetContent = fs.readFileSync(targetBacklogPath, 'utf8');
+    
+    // Extract task details from source
+    const taskName = path.basename(taskPath, PROJECT.MD_FILE_EXTENSION)
+      .replace(new RegExp(`^${PROJECT.FILE_PREFIX.TASK}`), '')
+      .replace(/[_-]+/g, ' ')
+      .trim();
+    
+    const relativePath = path.relative(
+      path.dirname(targetBacklogPath),
+      taskPath
+    ).replace(/\\/g, '/');
+
+    // Remove task from source backlog
+    const sourceLines = sourceContent.split('\n');
+    const updatedSourceLines = sourceLines.filter(line => !line.includes(taskPath.replace(/\\/g, '/')));
+    fs.writeFileSync(sourceBacklogPath, updatedSourceLines.join('\n'));
+
+    // Add task to target backlog
+    const taskLink = `- ${TASK.LINK_MARKER} [${taskName}](${relativePath}) ${TASK.STATUS.WAITING}`;
+    const updatedTargetContent = insertTaskLinkUnderSection(targetContent, UI.SECTIONS.TASKS, taskLink);
+    fs.writeFileSync(targetBacklogPath, updatedTargetContent);
+
+    // Update task file to reference new backlog if needed
+    const taskContent = fs.readFileSync(taskPath, 'utf8');
+    const sourceBacklogName = path.basename(sourceBacklogPath, PROJECT.MD_FILE_EXTENSION);
+    const targetBacklogName = path.basename(targetBacklogPath, PROJECT.MD_FILE_EXTENSION);
+    const updatedTaskContent = taskContent.replace(
+      new RegExp(`\\[${sourceBacklogName}\\]`, 'g'),
+      `[${targetBacklogName}]`
+    );
+    fs.writeFileSync(taskPath, updatedTaskContent);
+
+  } catch (error: any) {
+    throw new Error(`Failed to move task: ${error?.message || 'Unknown error'}`);
   }
 }
 
