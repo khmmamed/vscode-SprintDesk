@@ -1,5 +1,5 @@
 ---
-_id: backlog_technical
+_id: backlog_tests
 name: bugs Backlog
 status: planned
 priority: high
@@ -19,7 +19,7 @@ related_backlogs:
   
 ---
 
-# 🧱 Backlog: Technical
+# 🧱 Backlog: Tests
 
 ## 🎯 Objective
 
