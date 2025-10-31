@@ -9,9 +9,10 @@ import {
   parseEpicMetadataFromFilename 
 } from '../utils/templateUtils';
 import { EpicMetadata } from '../types/types';
+import { PROJECT, EPIC, UI, TASK } from '../utils/constant';
 
 export function listEpics(ws: string): string[] {
-  const epicsDir = path.join(ws, '.SprintDesk', 'Epics');
+  const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
   if (!fs.existsSync(epicsDir)) {
     fs.mkdirSync(epicsDir, { recursive: true });
     return [];
@@ -23,7 +24,7 @@ export function createEpicFromMetadata(metadata: EpicMetadata): string {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   
-  const epicsDir = path.join(ws, '.SprintDesk', 'Epics');
+  const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
   fs.mkdirSync(epicsDir, { recursive: true });
   
   const fileName = generateEpicFileName(metadata.title);
@@ -61,13 +62,13 @@ export function deleteEpic(filePath: string) {
 export function addTaskToEpic(epicName: string, taskFileName: string) {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
-  const epicsDir = path.join(ws, '.SprintDesk', 'Epics');
-  const epicFile = path.join(epicsDir, `[Epic]_${epicName.replace(/\s+/g, '-')}.md`);
+  const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
+  const epicFile = path.join(epicsDir, `${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}.md`);
   
   // Read epic and task files
   const epicContent = fileService.readFileSyncSafe(epicFile);
   if (!epicContent) throw new Error('Epic file not found');
-  const taskPath = path.join(ws, '.SprintDesk', 'tasks', taskFileName);
+  const taskPath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, taskFileName);
   const taskContent = fileService.readFileSyncSafe(taskPath);
   if (!taskContent) throw new Error('Task file not found');
 
@@ -106,20 +107,20 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
   // Create task table
   function getStatusEmoji(status: string): string {
     switch (status?.toLowerCase()) {
-      case 'not-started': return '⏳';
-      case 'in-progress': return '🔄';
-      case 'done':
-      case 'completed': return '✅';
-      case 'blocked': return '⛔';
-      default: return '⏳';
+      case TASK.STATUS.NOT_STARTED: return UI.EMOJI.STATUS.NOT_STARTED;
+      case TASK.STATUS.IN_PROGRESS: return UI.EMOJI.STATUS.IN_PROGRESS;
+      case TASK.STATUS.DONE:
+      case TASK.STATUS.COMPLETED: return UI.EMOJI.STATUS.DONE;
+      case TASK.STATUS.BLOCKED: return UI.EMOJI.STATUS.BLOCKED;
+      default: return UI.EMOJI.STATUS.NOT_STARTED;
     }
   }
 
   function getPriorityEmoji(priority: string): string {
     switch (priority?.toLowerCase()) {
-      case 'high': return '🔴';
-      case 'low': return '🟢';
-      default: return '🟡';
+      case 'high': return UI.EMOJI.PRIORITY.HIGH;
+      case 'low': return UI.EMOJI.PRIORITY.LOW;
+      default: return UI.EMOJI.PRIORITY.MEDIUM;
     }
   }
 
@@ -132,9 +133,7 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
     .join('\n');
 
   // Replace tasks table in the content
-  const tasksSection = '## 🧱 Tasks';
-  const tableHeader = '| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|';
-  const tasksSectionStart = epicMatter.content.indexOf(tasksSection);
+  const tasksSectionStart = epicMatter.content.indexOf(EPIC.TASKS_SECTION);
   if (tasksSectionStart !== -1) {
     const nextSectionMatch = epicMatter.content.slice(tasksSectionStart).match(/\n##\s/);
     const tasksSectionEnd = nextSectionMatch
@@ -143,7 +142,7 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
     
     epicMatter.content = 
       epicMatter.content.slice(0, tasksSectionStart) +
-      `${tasksSection}\n\n${tableHeader}\n${taskTable}\n<!-- Tasks will be added here automatically -->\n\n` +
+      `${EPIC.TASKS_SECTION}\n\n${EPIC.TASKS_TABLE_HEADER}\n${taskTable}\n${UI.SECTIONS.AUTO_COMMENT}\n\n` +
       epicMatter.content.slice(tasksSectionEnd);
   }
 

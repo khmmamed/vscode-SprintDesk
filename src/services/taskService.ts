@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from './fileService';
 import { createEpicFromMetadata, addTaskToEpic, listEpics } from './epicService';
+import { PROJECT, TASK, UI } from '../utils/constant';
 
 import { 
   generateTaskContent, 
@@ -28,7 +29,7 @@ export function readTask(filePath: string): string {
 export function createTask(metadata: TaskMetadata): { filePath: string; fileName: string } {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
-  const tasksDir = path.join(ws, '.SprintDesk', 'tasks');
+  const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
   fs.mkdirSync(tasksDir, { recursive: true });
 
   const fileName = generateTaskFileName(metadata.title, metadata.epicName);
@@ -61,17 +62,17 @@ export async function createTaskInteractive() {
   // Get task metadata
   const taskName = await vscode.window.showInputBox({
     prompt: 'Enter task title',
-    placeHolder: 'e.g., Implement Login Feature'
+    placeHolder: UI.QUICK_PICK.TASK_TITLE
   });
   if (!taskName) return;
 
   // Get task type
   const type = await vscode.window.showQuickPick([
-    { label: '$(tools) Feature', description: 'New functionality', value: 'feature' as TaskType },
-    { label: '$(bug) Bug', description: 'Fix an issue', value: 'bug' as TaskType },
-    { label: '$(arrow-up) Improvement', description: 'Enhancement to existing feature', value: 'improvement' as TaskType },
-    { label: '$(book) Documentation', description: 'Documentation updates', value: 'documentation' as TaskType },
-    { label: '$(beaker) Test', description: 'Test implementation', value: 'test' as TaskType }
+    { label: TASK.TYPE.FEATURE, description: 'New functionality', value: 'feature' as TaskType },
+    { label: TASK.TYPE.BUG, description: 'Fix an issue', value: 'bug' as TaskType },
+    { label: TASK.TYPE.IMPROVEMENT, description: 'Enhancement to existing feature', value: 'improvement' as TaskType },
+    { label: TASK.TYPE.DOCUMENTATION, description: 'Documentation updates', value: 'documentation' as TaskType },
+    { label: TASK.TYPE.TEST, description: 'Test implementation', value: 'test' as TaskType }
   ], {
     placeHolder: 'Select task type'
   });
@@ -79,9 +80,9 @@ export async function createTaskInteractive() {
 
   // Get priority
   const priority = await vscode.window.showQuickPick([
-    { label: '🟢 High', description: 'Critical or urgent', value: 'high' as Priority },
-    { label: '🟡 Medium', description: 'Important but not urgent', value: 'medium' as Priority },
-    { label: '🔴 Low', description: 'Nice to have', value: 'low' as Priority }
+    { label: `${UI.EMOJI.PRIORITY.HIGH} High`, description: 'Critical or urgent', value: 'high' as Priority },
+    { label: `${UI.EMOJI.PRIORITY.MEDIUM} Medium`, description: 'Important but not urgent', value: 'medium' as Priority },
+    { label: `${UI.EMOJI.PRIORITY.LOW} Low`, description: 'Nice to have', value: 'low' as Priority }
   ], {
     placeHolder: 'Select priority'
   });
@@ -90,25 +91,25 @@ export async function createTaskInteractive() {
   // Get category
   const category = await vscode.window.showInputBox({
     prompt: 'Enter category (optional)',
-    placeHolder: 'e.g., frontend, backend, testing'
+    placeHolder: UI.QUICK_PICK.CATEGORY
   });
 
   // Get component
   const component = await vscode.window.showInputBox({
     prompt: 'Enter component (optional)',
-    placeHolder: 'e.g., authentication, database, ui'
+    placeHolder: UI.QUICK_PICK.COMPONENT
   });
 
   // Get duration estimate
   const duration = await vscode.window.showInputBox({
     prompt: 'Enter duration estimate (optional)',
-    placeHolder: 'e.g., 2d, 4h, 1w'
+    placeHolder: UI.QUICK_PICK.DURATION
   });
 
   // Get assignee
   const assignee = await vscode.window.showInputBox({
     prompt: 'Enter assignee (optional)',
-    placeHolder: 'e.g., John Doe'
+    placeHolder: UI.QUICK_PICK.ASSIGNEE
   });
 
   // Get epic list and show quickpick
@@ -132,14 +133,14 @@ export async function createTaskInteractive() {
     // Create new epic
     const newEpicName = await vscode.window.showInputBox({ 
       prompt: 'New epic name',
-      placeHolder: 'e.g., User Authentication'
+      placeHolder: UI.QUICK_PICK.EPIC_NAME
     });
     if (!newEpicName) return;
     
     const epicPriority = await vscode.window.showQuickPick([
-      { label: '🟢 High', value: 'high' as Priority },
-      { label: '🟡 Medium', value: 'medium' as Priority },
-      { label: '🔴 Low', value: 'low' as Priority }
+      { label: `${UI.EMOJI.PRIORITY.HIGH} High`, value: 'high' as Priority },
+      { label: `${UI.EMOJI.PRIORITY.MEDIUM} Medium`, value: 'medium' as Priority },
+      { label: `${UI.EMOJI.PRIORITY.LOW} Low`, value: 'low' as Priority }
     ], {
       placeHolder: 'Select epic priority'
     });
@@ -147,11 +148,11 @@ export async function createTaskInteractive() {
 
     const owner = await vscode.window.showInputBox({
       prompt: 'Epic owner (optional)',
-      placeHolder: 'e.g., Team Lead'
+      placeHolder: UI.QUICK_PICK.EPIC_OWNER
     });
 
     epicName = newEpicName;
-    epicId = `epic_${newEpicName.replace(/\s+/g, '_').toLowerCase()}`;
+    epicId = `${PROJECT.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
     
     const epicMetadata: EpicMetadata = {
       title: newEpicName,
@@ -162,7 +163,7 @@ export async function createTaskInteractive() {
     };
     createEpicFromMetadata(epicMetadata);
   } else if (epicName) {
-    epicId = `epic_${epicName.replace(/\s+/g, '_').toLowerCase()}`;
+    epicId = `${PROJECT.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
   }
 
   try {

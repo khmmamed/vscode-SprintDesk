@@ -3,6 +3,11 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import * as fileService from './fileService';
 import insertTaskLinkUnderSection from '../utils/mdUtils';
+import {
+  PROJECT,
+  TASK,
+  UI,
+} from '../utils/constant';
 
 interface TreeItemLike {
   label: string;
@@ -103,7 +108,7 @@ export function listBacklogsSummary(ws: string): { filePath: string; title: stri
 }
 
 export function listBacklogs(ws: string): string[] {
-  const backlogsDir = path.join(ws, '.SprintDesk', 'Backlogs');
+  const backlogsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
   return fileService.listMdFiles(backlogsDir).map(f => path.join(backlogsDir, f));
 }
 
@@ -114,11 +119,11 @@ export function readBacklog(filePath: string): string {
 export function createBacklog(name: string): string {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
-  const backlogsDir = path.join(ws, '.SprintDesk', 'Backlogs');
+  const backlogsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
   fs.mkdirSync(backlogsDir, { recursive: true });
-  const backlogFile = path.join(backlogsDir, `${name.replace(/\s+/g, '-')}.md`);
+  const backlogFile = path.join(backlogsDir, `${name.replace(/\s+/g, '-')}${PROJECT.MD_FILE_EXTENSION}`);
   if (!fs.existsSync(backlogFile)) {
-    fs.writeFileSync(backlogFile, `# Backlog: ${name}\n\n## Tasks\n`, 'utf8');
+    fs.writeFileSync(backlogFile, `# Backlog: ${name}\n\n${UI.SECTIONS.TASKS_MARKER}\n`, 'utf8');
   }
   return backlogFile;
 }
@@ -140,33 +145,33 @@ export async function addTaskToBacklogInteractive(item: any) {
   if (!taskName) return;
   const epicName = await vscode.window.showInputBox({ prompt: 'Epic name (optional)' });
 
-  const tasksDir = path.join(ws, '.SprintDesk', 'tasks');
-  const epicsDir = path.join(ws, '.SprintDesk', 'Epics');
+  const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
+  const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
   fs.mkdirSync(tasksDir, { recursive: true });
   fs.mkdirSync(epicsDir, { recursive: true });
 
-  let fileName = `[Task]_${taskName.replace(/\s+/g, '-')}`;
-  if (epicName) fileName += `_[Epic]_${epicName.replace(/\s+/g, '-')}`;
-  fileName += '.md';
+  let fileName = `${PROJECT.FILE_PREFIX.TASK}${taskName.replace(/\s+/g, '-')}`;
+  if (epicName) fileName += `_${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}`;
+  fileName += PROJECT.MD_FILE_EXTENSION;
 
   const taskPath = path.join(tasksDir, fileName);
   if (!fs.existsSync(taskPath)) {
-    const template = `---\n_id: tsk_${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
+    const template = `---\n_id: ${PROJECT.ID_PREFIX.TASK}${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
     fs.writeFileSync(taskPath, template, 'utf8');
   }
 
   if (epicName) {
-    const epicFile = path.join(epicsDir, `[Epic]_${epicName.replace(/\s+/g, '-')}.md`);
+    const epicFile = path.join(epicsDir, `${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}${PROJECT.MD_FILE_EXTENSION}`);
     let epicContent = fileService.readFileSyncSafe(epicFile) || `# Epic: ${epicName}\n`;
-    const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
-    epicContent = insertTaskLinkUnderSection(epicContent, 'tasks', taskLink);
+    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+    epicContent = insertTaskLinkUnderSection(epicContent, UI.SECTIONS.TASKS.toLowerCase(), taskLink);
     fs.writeFileSync(epicFile, epicContent, 'utf8');
   }
 
   try {
     let backlogContent = fs.readFileSync(backlogFile, 'utf8');
-    const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
-    backlogContent = insertTaskLinkUnderSection(backlogContent, 'Tasks', taskLink);
+    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+    backlogContent = insertTaskLinkUnderSection(backlogContent, UI.SECTIONS.TASKS, taskLink);
     fs.writeFileSync(backlogFile, backlogContent, 'utf8');
     vscode.window.showInformationMessage('Task added to backlog.');
   } catch (e) {
@@ -216,9 +221,15 @@ export async function addExistingTasksToBacklog(item: any) {
   if (!fileEntries.length) { vscode.window.showInformationMessage('No tasks found.'); return; }
 
   const itemsQP = fileEntries.map(({dir, file}) => {
-    const titleMatch = file.match(/^\[Task\]_(.+?)(?:_\[Epic\]_.+)?\.md$/i);
-    const title = titleMatch ? titleMatch[1].replace(/[_-]+/g, ' ') : file.replace(/\.md$/i, '');
-    return { label: title, file, dir } as { label: string, file: string, dir: string };
+    const titleMatch = file.match(new RegExp(`^${PROJECT.FILE_PREFIX.TASK}(.+?)(?:_${PROJECT.FILE_PREFIX.EPIC}.+)?${PROJECT.MD_FILE_EXTENSION}$`, 'i'));
+    const title = titleMatch ? titleMatch[1].replace(/[_-]+/g, ' ') : file.replace(new RegExp(PROJECT.MD_FILE_EXTENSION + '$', 'i'), '');
+    return {
+      label: title,
+      description: dir,
+      detail: file,
+      // Save original data for use later
+      data: { dir, file }
+    } as vscode.QuickPickItem & { data: { dir: string, file: string }};
   });
 
   const picked = await vscode.window.showQuickPick(itemsQP, { canPickMany: true, title: 'Select tasks to add to Backlog' });
@@ -228,9 +239,9 @@ export async function addExistingTasksToBacklog(item: any) {
     let content = fs.readFileSync(backlogFile, 'utf8');
     for (const p of picked) {
       const linkTitle = p.label.trim().replace(/\s+/g, '-').toLowerCase();
-      const tasksFolder = path.basename((p as any).dir || path.join(ws, '.SprintDesk', 'tasks'));
-      const link = `- 📌 [${linkTitle}](../${tasksFolder}/${p.file}) ✅ [waiting]`;
-      content = insertTaskLinkUnderSection(content, 'Tasks', link);
+      const tasksFolder = path.basename((p as any).data.dir || path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR));
+      const link = `- ${TASK.LINK_MARKER} [${linkTitle}](../${tasksFolder}/${(p as any).data.file}) ${TASK.STATUS.WAITING}`;
+      content = insertTaskLinkUnderSection(content, UI.SECTIONS.TASKS, link);
     }
     fs.writeFileSync(backlogFile, content, 'utf8');
     vscode.window.showInformationMessage('Tasks added to backlog.');

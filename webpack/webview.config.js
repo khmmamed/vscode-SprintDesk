@@ -25,7 +25,10 @@ const config = [
           test: /\.(ts|tsx)$/,
           exclude: /node_modules/,
           use: [{
-            loader: 'ts-loader'
+            loader: 'ts-loader',
+            options: {
+              configFile: 'tsconfig.build.json'
+            }
           }]
         },
         {

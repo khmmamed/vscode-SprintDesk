@@ -1,12 +1,12 @@
 // src/getWebviewContent.ts
 import { Uri, Webview, ExtensionContext, ExtensionMode } from "vscode";
-import { WEBVIEW_MAIN_JS, WEBVIEW_LOCAL_SERVER, WEBVIEW_DIST_DIR, WEBVIEW_MANIFEST_FILE } from "../utils/constant";
+import { WEBVIEW } from "../utils/constant";
 import { join } from "path";
 import { readFileSync } from "fs";
 
 export function getWebviewContent(context: ExtensionContext, webview: Webview, viewName?: string): string {
-  const jsFile = WEBVIEW_MAIN_JS;
-  const localServerUrl = WEBVIEW_LOCAL_SERVER;
+  const jsFile = WEBVIEW.BUNDLING.MAIN_JS;
+  const localServerUrl = WEBVIEW.BUNDLING.LOCAL_SERVER;
 
   let scriptUrl: string[] = [];
   let cssUrl: string | null = null;
@@ -14,7 +14,7 @@ export function getWebviewContent(context: ExtensionContext, webview: Webview, v
   const isProduction = context.extensionMode === ExtensionMode.Production;
   if (isProduction) {
     const manifest = readFileSync(
-      join(context.extensionPath, WEBVIEW_DIST_DIR, WEBVIEW_MANIFEST_FILE),
+      join(context.extensionPath, WEBVIEW.BUNDLING.DIST_DIR, WEBVIEW.BUNDLING.MANIFEST_FILE),
       "utf-8"
     );
     const manifestJson = JSON.parse(manifest);

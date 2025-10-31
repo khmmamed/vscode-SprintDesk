@@ -1,75 +1,230 @@
-// Centralized constants for SprintDesk
+/**
 
-export const EXTENSION_NAME = "sprintdesk";
-export const WEBVIEW_PANEL_TASKS_ID = "sprintdesk-tasks";
-export const WEBVIEW_PANEL_PROJECT_STRUCTURE_ID = "sprintdesk.projectStructure";
-export const WEBVIEW_PANEL_PROJECT_STRUCTURE_TITLE = "Project Structure";
-export const WEBVIEW_PANEL_TASKS_TITLE = "SprintDesk Tasks";
+ * SprintDesk Constants
+ * ===================
+ * Centralized configuration for the SprintDesk extension
+ */
 
-// Webview bundling
-export const WEBVIEW_MAIN_JS = "main.js";
-export const WEBVIEW_LOCAL_SERVER = "http://localhost:9001";
-export const WEBVIEW_DIST_DIR = "dist/webview";
-export const WEBVIEW_MANIFEST_FILE = "manifest.json";
+/**
+ * Project Structure
+ * ================
+ * Base directory and subdirectory configuration
+ */
+export const PROJECT = {
+    SPRINTDESK_DIR: ".SprintDesk",
+    BACKLOGS_DIR: "Backlogs",
+    EPICS_DIR: "Epics",
+    SPRINTS_DIR: "Sprints",
+    TASKS_DIR: "Tasks",
+    MD_FILE_EXTENSION: ".md",
 
-// SprintDesk hidden project folder and subfolders
-export const SPRINTDESK_DIR = ".SprintDesk";
-export const BACKLOGS_DIR = "Backlogs";
-export const EPICS_DIR = "Epics";
-export const SPRINTS_DIR = "Sprints";
-export const TASKS_DIR = "Tasks";
+    // File Naming Patterns
+    FILE_PREFIX: {
+        TASK: "[Task]_",
+        EPIC: "[Epic]_",
+        SPRINT: "[Sprint]_",
+        EPIC_TASK_LINK: "../tasks/",
+    },
 
-// Defaults and labels
-export const DEFAULT_LAST_COMMIT = "Initial";
-export const DEFAULT_LAST_UPDATE_TODAY = "today";
-export const DEFAULT_LAST_UPDATE_YESTERDAY = "yesterday";
-export const DEFAULT_INIT_COMMIT = "Initial commit";
+    // IDs
+    ID_PREFIX: {
+        TASK: "tsk_",
+        EPIC: "epic_"
+    }
+};
 
-// UI labels and emojis
-export const EMOJI_BACKLOG = "📌";
-export const EMOJI_EPIC = "🧩";
-export const EMOJI_SPRINT = "⏱️";
-export const EMOJI_TASK = "✅";
-export const EMOJI_PROJECT = "📂";
-export const EMOJI_FILE = "📄";
+/**
+ * Task Management
+ * ==============
+ */
+export const TASK = {
+    // Status
+    STATUS: {
+        NOT_STARTED: "not-started",
+        IN_PROGRESS: "in-progress",
+        DONE: "done",
+        COMPLETED: "completed",
+        BLOCKED: "blocked",
+        WAITING: "✅ [waiting]",
+        IN_PROGRESS_STATUS: "✅ [in progress]",
+    },
 
-export const STATUS_UPCOMING = "Upcoming";
-export const STATUS_CLOSED = "Closed";
-export const STATUS_IN_PROGRESS = "In Progress";
+    // Types
+    TYPE: {
+        FEATURE: "$(tools) Feature",
+        BUG: "$(bug) Bug",
+        IMPROVEMENT: "$(arrow-up) Improvement",
+        DOCUMENTATION: "$(book) Documentation",
+        TEST: "$(beaker) Test",
+    },
 
-export const COLOR_STATUS_DEFAULT = "#94a3b8"; // gray
-export const COLOR_STATUS_DONE = "#86efac"; // green
-export const COLOR_STATUS_PROGRESS = "#facc15"; // yellow
-export const COLOR_STATUS_BLOCKED = "#f87171"; // red
-export const COLOR_SPRINT_UPCOMING = "#1f2937"; // slate-800
-export const COLOR_SPRINT_CLOSED = "#065f46"; // emerald-900
-export const COLOR_SPRINT_IN_PROGRESS = "#1e3a8a"; // blue-900
+    // Markers
+    LINK_MARKER: "📌"
+};
 
-// App titles
-export const APP_TITLE = "Sprint Desk v0.2.4";
-export const PROJECTS_VIEW_TITLE = "Project Structure";
-export const TASK_TABLE_TITLE = "Task Table";
+/**
+ * Epic Management
+ * =============
+ */
+export const EPIC = {
+    STATUS: {
+        PLANNED: "⏳ Planned"
+    },
+    TASKS_SECTION: "## 🧱 Tasks",
+    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
+    DEFAULT_COLOR: "#0b2cc2"
+};
 
-// Common webview command strings
-export const CMD_SET_TASKS = "SET_TASKS";
-export const CMD_SET_BACKLOGS = "SET_BACKLOGS";
-export const CMD_SET_EPICS = "SET_EPICS";
-export const CMD_SET_PROJECTS = "SET_PROJECTS";
-export const CMD_REQUEST_PROJECTS = "REQUEST_PROJECTS";
-export const CMD_REQUEST_OPEN_FILE = "REQUEST_OPEN_FILE";
-export const CMD_SAVE_SPRINT_TABLE = "SAVE_SPRINT_TABLE";
+/**
+ * Sprint Management
+ * ===============
+ */
+export const SPRINT = {
+    SEPARATOR: {
+        DATE: "-",
+        DURATION: "_",
+        YEAR_PREFIX: "20"
+    }
+};
 
-// Quick pick labels
-export const QUICK_PICK_TASK_TYPE = "Select task type";
-export const QUICK_PICK_PRIORITY = "Select priority";
-export const QUICK_PICK_EPIC_PRIORITY = "Select epic priority";
+/**
+ * UI Colors and Themes
+ * ==================
+ */
+export const UI = {
+    // Sprint Colors
+    COLORS: {
+        SPRINT: {
+            UPCOMING: "#1f2937",    // slate-800
+            CLOSED: "#065f46",      // emerald-900
+            IN_PROGRESS: "#1e3a8a"  // blue-900
+        },
+        STATUS: {
+            DEFAULT: "#94a3b8",     // gray
+            DONE: "#86efac",        // green
+            PROGRESS: "#facc15",    // yellow
+            BLOCKED: "#f87171"      // red
+        }
+    },
 
-// Sample/demo defaults used in UI fallbacks
-export const SAMPLE_BACKLOG_1 = "Sample Backlog 1";
-export const SAMPLE_BACKLOG_2 = "Sample Backlog 2";
-export const SAMPLE_EPIC_1 = "Sample Epic 1";
-export const SAMPLE_SPRINT_1 = "Sprint 1";
-export const SAMPLE_TASK_1 = "Task 1";
+    // Status Text
+    STATUS: {
+        UPCOMING: "Upcoming",
+        CLOSED: "Closed",
+        IN_PROGRESS: "In Progress"
+    },
 
-// Colors used in Epics
-export const DEFAULT_EPIC_COLOR = "#0b2cc2";
+    // Section Headers
+    SECTIONS: {
+        TASKS: "Tasks",
+        TASKS_MARKER: "## Tasks",
+        AUTO_COMMENT: "<!-- Tasks will be added here automatically -->"
+    },
+
+    // Icons and Emojis
+    EMOJI: {
+        COMMON: {
+            BACKLOG: "📌",
+            EPIC: "🧩",
+            SPRINT: "⏱️",
+            TASK: "✅",
+            PROJECT: "📂",
+            FILE: "📄",
+            CALENDAR: "📅",
+            LAST_UPDATE: "🗓",
+            TOTAL_TASKS: "🛠",
+            PROGRESS: "📊",
+            SUMMARY: "📝",
+            TASK_LIST: "📋",
+            TASKS_SECTION: "🧱"
+        },
+        STATUS: {
+            NOT_STARTED: "⏳",
+            IN_PROGRESS: "🔄",
+            DONE: "✅",
+            BLOCKED: "⛔"
+        },
+        PRIORITY: {
+            HIGH: "🔴",
+            MEDIUM: "🟡",
+            LOW: "🟢"
+        }
+    },
+
+    // Quick Pick Options
+    QUICK_PICK: {
+        TASK_TYPE: "Select task type",
+        PRIORITY: "Select priority",
+        EPIC_PRIORITY: "Select epic priority",
+        TASK_TITLE: "e.g., Implement Login Feature",
+        CATEGORY: "e.g., frontend, backend, testing",
+        COMPONENT: "e.g., authentication, database, ui",
+        DURATION: "e.g., 2d, 4h, 1w",
+        ASSIGNEE: "e.g., John Doe",
+        EPIC_NAME: "e.g., User Authentication",
+        EPIC_OWNER: "e.g., Team Lead"
+    }
+};
+
+/**
+ * Sample/Demo Data
+ * ==============
+ */
+export const SAMPLE = {
+    BACKLOG_1: "Sample Backlog 1",
+    BACKLOG_2: "Sample Backlog 2",
+    EPIC_1: "Sample Epic 1",
+    SPRINT_1: "Sprint 1",
+    TASK_1: "Task 1"
+};
+
+/**
+ * Git Integration
+ * =============
+ */
+export const GIT = {
+    DEFAULT_COMMIT: "Initial",
+    LAST_UPDATE: {
+        TODAY: "today",
+        YESTERDAY: "yesterday"
+    },
+    INIT_COMMIT: "Initial commit"
+};
+
+/**
+ * WebView Configuration
+ * ===================
+ */
+export const WEBVIEW = {
+    APP_TITLE: "Sprint Desk v0.2.4",
+    EXTENSION_NAME: "sprintdesk",
+    PANEL: {
+        TASKS: {
+            ID: "sprintdesk-tasks",
+            TITLE: "SprintDesk Tasks"
+        },
+        PROJECT_STRUCTURE: {
+            ID: "sprintdesk.projectStructure",
+            TITLE: "Project Structure"
+        }
+    },
+    VIEWS: {
+        PROJECTS_TITLE: "Project Structure",
+        TASK_TABLE_TITLE: "Task Table"
+    },
+    COMMANDS: {
+        SET_TASKS: "SET_TASKS",
+        SET_BACKLOGS: "SET_BACKLOGS",
+        SET_EPICS: "SET_EPICS",
+        SET_PROJECTS: "SET_PROJECTS",
+        REQUEST_PROJECTS: "REQUEST_PROJECTS",
+        REQUEST_OPEN_FILE: "REQUEST_OPEN_FILE",
+        SAVE_SPRINT_TABLE: "SAVE_SPRINT_TABLE"
+    },
+    BUNDLING: {
+        MAIN_JS: "main.js",
+        LOCAL_SERVER: "http://localhost:9001",
+        DIST_DIR: "dist/webview",
+        MANIFEST_FILE: "manifest.json"
+    }
+};
