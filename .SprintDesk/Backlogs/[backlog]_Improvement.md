@@ -1,11 +1,42 @@
-# 📦 Improvement Backlog
+---
+_id: backlog_improvement
+name: bugs Backlog
+status: planned
+priority: high
+type: bugs_backlog
+created_at: 2025-10-28
+updated_at: 2025-10-28
+owner: Khmamid Meddd
 
-- **🗂 updated:** 2025-07-21
-- **📌 usage:** Link only `.md` tasks from `.SprintDesk/🚀_tasks`. Move tasks from here to sprints once selected.
-- **📘 description:** 
+epics:
+  
+sprints:
+  
+tasks:
+  
+related_backlogs:
+  
+---
+
+# 🧱 Backlog: Improvement
+
+## 🎯 Objective
 
 
-** tasks
+## 🧩 Description
 
-- [Open] 📌 we want after to add dropdown menu todo choose the backlog and create tasks with this name [Task]_task-title_[Bug]_backlog-title.md or [Task]_task-title_[Improvement] and so..
-- [Open] 📌 use different random color for Epics
+
+## 🧾 Acceptance Criteria
+
+
+## Epics
+
+
+## Sprints
+
+
+## Tasks
+
+
+## Related Backlogs
+
