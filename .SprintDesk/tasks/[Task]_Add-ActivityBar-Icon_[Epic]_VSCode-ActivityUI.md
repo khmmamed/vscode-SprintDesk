@@ -1,6 +1,6 @@
 ---
 _id: tsk_web_extension_details
-name: {task name}
+name: web extension details
 type: Feature
 duration: 0.5d
 priority: normal
@@ -10,9 +10,9 @@ objective:
 
 # Related Epic
 epic: 
-  _id: { epic _id after creation of the epic first}
-  name: { epic name after creation of the epic first}
-  file: { epic file after creation of the epic first}
+  _id: epic_extensions_management
+  name: Extensions Management
+  file: ../epics/[Epic]_extensions-management.md
 
 # Related Sprints (many-to-one)
 sprints:

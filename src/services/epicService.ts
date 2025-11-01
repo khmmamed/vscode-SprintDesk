@@ -9,7 +9,7 @@ import {
   parseEpicMetadataFromFilename 
 } from '../utils/templateUtils';
 import { EpicMetadata } from '../types/types';
-import { PROJECT, EPIC, UI, TASK } from '../utils/constant';
+import { PROJECT, UI, TASK } from '../utils/constant';
 
 export function listEpics(ws: string): string[] {
   const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
@@ -63,7 +63,7 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
-  const epicFile = path.join(epicsDir, `${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}.md`);
+  const epicFile = path.join(epicsDir, generateEpicFileName(epicName));
   
   // Read epic and task files
   const epicContent = fileService.readFileSyncSafe(epicFile);
@@ -133,7 +133,7 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
     .join('\n');
 
   // Replace tasks table in the content
-  const tasksSectionStart = epicMatter.content.indexOf(EPIC.TASKS_SECTION);
+  const tasksSectionStart = epicMatter.content.indexOf(UI.SECTIONS.TASKS_MARKER);
   if (tasksSectionStart !== -1) {
     const nextSectionMatch = epicMatter.content.slice(tasksSectionStart).match(/\n##\s/);
     const tasksSectionEnd = nextSectionMatch
@@ -142,7 +142,7 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
     
     epicMatter.content = 
       epicMatter.content.slice(0, tasksSectionStart) +
-      `${EPIC.TASKS_SECTION}\n\n${EPIC.TASKS_TABLE_HEADER}\n${taskTable}\n${UI.SECTIONS.AUTO_COMMENT}\n\n` +
+      `${UI.SECTIONS.TASKS_MARKER}\n\n| # | Task | Status | Priority | ID |\n|:--|:-----|:------:|:--------:|:-----|${taskTable}\n${UI.SECTIONS.AUTO_COMMENT}\n\n` +
       epicMatter.content.slice(tasksSectionEnd);
   }
 

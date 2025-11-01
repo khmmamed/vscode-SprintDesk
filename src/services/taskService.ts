@@ -51,6 +51,7 @@ export function deleteTask(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
+
 export async function createTaskInteractive() {
   // Get workspace
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

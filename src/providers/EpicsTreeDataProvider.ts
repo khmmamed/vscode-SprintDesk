@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import matter from 'gray-matter';
+import { PROJECT, UI } from '../utils/constant';
 
 export class EpicTreeItem extends vscode.TreeItem {
   constructor(
@@ -38,7 +39,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
   readonly dropMimeTypes = ['application/vnd.code.tree.sprintdesk-tasks'];
   readonly dragMimeTypes: string[] = [];
 
-  constructor(private workspaceRoot: string) { }
+  constructor(private workspaceRoot?: string) { }
 
   public refresh(): void {
     this._onDidChangeTreeData.fire(undefined);
@@ -49,20 +50,21 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
   }
 
   async getChildren(element?: EpicTreeItem): Promise<EpicTreeItem[]> {
-    if (!this.workspaceRoot) {
+    const ws = this.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!ws) {
       return [];
     }
 
     if (!element) {
       // Root level: list all epics under .SprintDesk/Epics
-      const epicsDir = path.join(this.workspaceRoot, '.SprintDesk', 'Epics');
+      const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
       if (!fs.existsSync(epicsDir)) {
         fs.mkdirSync(epicsDir, { recursive: true });
         return [];
       }
 
       const epicFiles = fs.readdirSync(epicsDir).filter(file =>
-        file.startsWith('[Epic]_') && file.endsWith('.md')
+        file.startsWith(PROJECT.FILE_PREFIX.EPIC) && file.endsWith(PROJECT.MD_FILE_EXTENSION)
       );
 
       return epicFiles.map(file => {
@@ -70,7 +72,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
         const content = fs.readFileSync(filePath, 'utf8');
         const { data } = matter(content);
 
-        const epicName = data.title || file.replace(/^\[Epic\]_(.+)\.md$/, '$1').replace(/-/g, ' ');
+        const epicName = data.title || file.replace(new RegExp(`^${PROJECT.FILE_PREFIX.EPIC}(.+)${PROJECT.MD_FILE_EXTENSION}$`), '$1').replace(/-/g, ' ');
         const epicId = data._id || `epic_${epicName.toLowerCase().replace(/\s+/g, '_')}`;
 
         // Add epic status emoji if available
@@ -151,59 +153,71 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
 
   // Implement drag and drop
   async handleDrop(target: EpicTreeItem, dataTransfer: vscode.DataTransfer): Promise<void> {
+    const ws = this.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!ws) {
+      throw new Error('No workspace folder found');
+    }
     try {
       const taskDataItem = dataTransfer.get('application/vnd.code.tree.sprintdesk-tasks');
       if (!taskDataItem || target.contextValue !== 'epic') {
         return;
       }
 
-      // Parse the transferred data
+      // Parse the transferred data (new format from TasksTreeDataProvider or other sources)
       const handleData = JSON.parse(taskDataItem.value as string);
       console.log('Received drop data:', handleData);
 
-      if (!handleData.itemHandles?.[0]) {
-        throw new Error('No task handle found in drop data');
+      // Determine task file path from multiple possible properties (new and legacy)
+      let taskPath: string | undefined;
+      let taskIdFromData: string | undefined;
+
+      if (handleData.path) {
+        taskPath = handleData.path;
+        taskIdFromData = handleData._id;
+      } else if (handleData.filePath) {
+        taskPath = handleData.filePath;
+        taskIdFromData = handleData._id;
+      } else if (handleData.taskPath) {
+        taskPath = handleData.taskPath;
+        taskIdFromData = handleData._id;
+      } else if (handleData.itemHandles?.[0]) {
+        // Legacy behavior: parse the tree handle string
+        const handle = handleData.itemHandles[0];
+        const matches = handle.match(/\d+\/\d+:(?:[\u{1F300}-\u{1F9FF}]\s)?(.+)/u);
+        if (!matches || !matches[1]) {
+          throw new Error('Invalid task handle format');
+        }
+
+        const fullTaskName = matches[1].trim();
+        const cleanTaskName = fullTaskName
+          .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+          .trim()
+          .replace(/\s+/g, '-')
+          .toLowerCase();
+
+        const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
+        const taskFileName = `${PROJECT.FILE_PREFIX.TASK}${cleanTaskName}${PROJECT.MD_FILE_EXTENSION}`;
+        taskPath = path.join(tasksDir, taskFileName);
+      } else {
+        throw new Error('No task path found in drop data');
       }
 
-      // Get the handle from the data
-      const handle = handleData.itemHandles[0];
+      console.log('Resolved task path:', taskPath);
 
-      // Parse handle which contains task info in format "0/0:⏳ Task Name"
-      // The format may include an emoji before the task name
-      const matches = handle.match(/\d+\/\d+:(?:[\u{1F300}-\u{1F9FF}]\s)?(.+)/u);
-      if (!matches || !matches[1]) {
-        throw new Error('Invalid task handle format');
+      // Ensure we actually resolved a path
+      if (!taskPath) {
+        throw new Error('No task path resolved from drop data');
       }
-
-      // Extract and clean up task name
-      const fullTaskName = matches[1].trim();
-
-      // Remove emojis and normalize name
-      const cleanTaskName = fullTaskName
-        .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '') // remove emoji
-        .trim()
-        .replace(/\s+/g, '-') // replace spaces with hyphens
-        .toLowerCase(); // normalize to lowercase
-
-      console.log('Clean task name:', cleanTaskName);
-
-      // Construct task file path
-      const tasksDir = path.join(this.workspaceRoot, '.SprintDesk', 'Tasks');
-      const taskFileName = `[Task]_` + cleanTaskName + `.md`;
-      const taskPath = path.join(tasksDir, taskFileName);
-
-
-      console.log('Constructed task path:', taskPath);
 
       // Verify task file exists
       if (!fs.existsSync(taskPath)) {
         throw new Error(`Task file not found: ${taskPath}`);
       }
 
-      // Read both task and epic files
-      const taskContent = fs.readFileSync(taskPath, 'utf8');
-      const taskMatter = matter(taskContent);
-      const taskId = taskMatter.data._id;
+  // Read both task and epic files
+  const taskContent = fs.readFileSync(taskPath, 'utf8');
+  const taskMatter = matter(taskContent);
+  const taskId = taskIdFromData || taskMatter.data._id;
 
       // Read epic file
       const epicContent = fs.readFileSync(target.filePath, 'utf8');
@@ -214,7 +228,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
         epicMatter.data.tasks = [];
       }
 
-      // Create task data object
+      // Create task data object to save inside the epic frontmatter
       const taskData = {
         _id: taskId,
         name: taskMatter.data.title || taskMatter.data.name,

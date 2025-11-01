@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as backlogService from '../services/backlogService';
-import { UI } from '../utils/constant';
+import { UI, PROJECT } from '../utils/constant';
 import matter from 'gray-matter';
 
 export class BacklogsTreeItem extends vscode.TreeItem {
@@ -192,14 +192,36 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
         // Handle drop from any source
         console.log(`Received drop data from ${sourceType}:`, handleData);
 
-        // Handle the new task data format
+        // Handle the task data format
         let taskPath: string;
-        if (handleData.filePath) {
-          // New format from tasks view
+        
+        if (handleData.path) {
+          taskPath = handleData.path;
+        } else if (handleData.filePath) {
           taskPath = handleData.filePath;
         } else if (handleData.taskPath) {
-          // Format from sprints/backlogs views
           taskPath = handleData.taskPath;
+        } else if (handleData.itemHandles && handleData.itemHandles.length > 0) {
+          // Extract task name from the handle
+          const handle = handleData.itemHandles[0];
+          // The format might be "0/0:Task Name" or similar
+          const matches = handle.match(/\d+\/\d+:(?:[\u{1F300}-\u{1F9FF}]\s)?(.+)/u);
+          if (!matches || !matches[1]) {
+            throw new Error('Invalid task handle format');
+          }
+
+          // Clean up task name and construct file path
+          const taskName = matches[1].trim()
+            .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+            .trim();
+            
+          // Construct task file path
+          taskPath = path.join(
+            this.workspaceRoot,
+            PROJECT.SPRINTDESK_DIR,
+            PROJECT.TASKS_DIR,
+            `${PROJECT.FILE_PREFIX.TASK}${taskName}${PROJECT.MD_FILE_EXTENSION}`
+          );
         } else {
           throw new Error('No task path found in drop data');
         }
@@ -210,36 +232,50 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
 
         // Read the task content to get metadata and the backlog content
         const taskContent = fs.readFileSync(taskPath, 'utf8');
-        const backlogContent = fs.readFileSync(target.filePath, 'utf8');
         const taskMatter = matter(taskContent);
+
+        // Handle the case where the task is being moved from another backlog
+        if (handleData.sourceContainer?.type === 'backlog' && handleData.sourceContainer.path) {
+          const sourceBacklogPath = handleData.sourceContainer.path;
+          
+          // Only remove from source if it's a different backlog
+          if (sourceBacklogPath !== target.filePath) {
+            const sourceContent = fs.readFileSync(sourceBacklogPath, 'utf8');
+            const relativeTaskPath = path.relative(path.dirname(sourceBacklogPath), taskPath).replace(/\\/g, '/');
+            const taskPattern = new RegExp(`^.*\\[.*?\\]\\(${relativeTaskPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\).*$`, 'gm');
+            const updatedSourceContent = sourceContent.replace(taskPattern, '').replace(/\n\n\n+/g, '\n\n');
+            fs.writeFileSync(sourceBacklogPath, updatedSourceContent);
+          }
+        }
+
+        // Read the backlog content
+        let backlogContent = fs.readFileSync(target.filePath, 'utf8');
         const taskName = taskMatter.data.title || taskMatter.data.name || 
           path.basename(taskPath, '.md').replace(/^\[Task\]_/, '').replace(/-/g, ' ');
 
         // Find the Tasks section or create it if it doesn't exist
         const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
-        let updatedContent = backlogContent;
-
         if (!backlogContent.includes(tasksSectionMarker)) {
           // If no Tasks section exists, add it at the end
-          updatedContent += `\n\n${tasksSectionMarker}\n`;
+          backlogContent += `\n\n${tasksSectionMarker}\n`;
         }
 
         // Add the task reference
         const taskLink = `- ${UI.EMOJI.COMMON.TASK} [${taskName}](${path.relative(path.dirname(target.filePath), taskPath).replace(/\\/g, '/')})`;
         
         // Insert the task link after the Tasks section
-        const tasksIndex = updatedContent.indexOf(tasksSectionMarker);
+        const tasksIndex = backlogContent.indexOf(tasksSectionMarker);
         if (tasksIndex !== -1) {
-          updatedContent = updatedContent.slice(0, tasksIndex + tasksSectionMarker.length) +
+          backlogContent = backlogContent.slice(0, tasksIndex + tasksSectionMarker.length) +
             '\n' + taskLink +
-            updatedContent.slice(tasksIndex + tasksSectionMarker.length);
+            backlogContent.slice(tasksIndex + tasksSectionMarker.length);
         }
 
         // Write the updated content back to the backlog file
-        fs.writeFileSync(target.filePath, updatedContent);
+        fs.writeFileSync(target.filePath, backlogContent);
 
         this.refresh();
-        void vscode.window.showInformationMessage(`Task added to backlog: ${target.label}`);
+        void vscode.window.showInformationMessage(`Task ${handleData.sourceContainer?.type === 'backlog' ? 'moved' : 'added'} to backlog: ${target.label}`);
         return;
       }
 
@@ -331,7 +367,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   }
 
   private async getBacklogs(workspaceRoot: string): Promise<BacklogsTreeItem[]> {
-    const backlogsDir = path.join(workspaceRoot, '.SprintDesk', 'Backlogs');
+    const backlogsDir = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
     const files = fileService.listMdFiles(backlogsDir);
 
     const items = files.map(name => {

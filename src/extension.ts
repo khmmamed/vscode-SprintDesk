@@ -20,6 +20,7 @@ import { createTaskInteractive } from './services/taskService';
 import { createEpicInteractive } from './services/epicService';
 import { addTaskToBacklogInteractive, addExistingTasksToBacklog } from './services/backlogService';
 import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
+
 import * as path from 'path';
 
 // existing tasks dir helper moved to services/fileService
@@ -32,7 +33,7 @@ const SIDEBAR_VIEW_IDS = [
 ];
 
 class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly context: vscode.ExtensionContext, private readonly viewId: string) {}
+  constructor(private readonly context: vscode.ExtensionContext, private readonly viewId: string) { }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -107,11 +108,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register the addTaskToEpic command
   context.subscriptions.push(
-    vscode.commands.registerCommand('sprintdesk.addTaskToEpic', async (params: { 
-      epicId: string, 
-      epicPath: string, 
-      taskId: string, 
-      taskPath: string 
+    vscode.commands.registerCommand('sprintdesk.addTaskToEpic', async (params: {
+      epicId: string,
+      epicPath: string,
+      taskId: string,
+      taskPath: string
     }) => {
       try {
         if (!fs.existsSync(params.epicPath) || !fs.existsSync(params.taskPath)) {
@@ -148,7 +149,7 @@ export async function activate(context: vscode.ExtensionContext) {
         } else {
           epicMatter.data.tasks.push(taskData);
         }
-        
+
         // Update epic's task counts
         epicMatter.data.total_tasks = epicMatter.data.tasks.length;
         epicMatter.data.completed_tasks = epicMatter.data.tasks
@@ -158,7 +159,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Update task list in markdown content
         const taskTableHeader = `| # | Task | Status | Priority | File |
 |:--|:-----|:------:|:--------:|:-----|`;
-        
+
         const taskListSection = epicMatter.data.tasks
           .map((task: any, index: number) => {
             const statusEmoji = getTaskStatusEmoji(task.status);
@@ -178,11 +179,11 @@ export async function activate(context: vscode.ExtensionContext) {
           const tableStart = epicMatter.content.indexOf('| # | Task |', tasksStart);
           const nextSectionMatch = epicMatter.content.slice(tasksStart).match(/\n##\s/);
           const tasksEnd = nextSectionMatch && nextSectionMatch.index !== undefined
-            ? tasksStart + nextSectionMatch.index 
+            ? tasksStart + nextSectionMatch.index
             : epicMatter.content.length;
 
           // Insert the new table right after the Tasks header
-          epicMatter.content = 
+          epicMatter.content =
             epicMatter.content.slice(0, tasksStart) +
             `${tasksSectionMarker}\n\n${taskTable}\n\n` +
             epicMatter.content.slice(tasksEnd);
@@ -193,7 +194,7 @@ export async function activate(context: vscode.ExtensionContext) {
           switch (status?.toLowerCase()) {
             case 'not-started': return '⏳';
             case 'in-progress': return '🔄';
-            case 'done': 
+            case 'done':
             case 'completed': return '✅';
             case 'blocked': return '⛔';
             default: return '⏳';
@@ -232,7 +233,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Register WebviewViewProviders for non-tree views
   const treeViewIds = ['sprintdesk-epics', 'sprintdesk-tasks', 'sprintdesk-sprints', 'sprintdesk-backlogs'];
   const webviewIds = SIDEBAR_VIEW_IDS.filter(id => !treeViewIds.includes(id));
-  
+
   for (const viewId of webviewIds) {
     context.subscriptions.push(
       vscode.window.registerWebviewViewProvider(
@@ -245,12 +246,9 @@ export async function activate(context: vscode.ExtensionContext) {
   // Tree providers
   const sprintsProvider = new SprintsTreeDataProvider();
   const backlogsProvider = new BacklogsTreeDataProvider();
-  const tasksProvider = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0)
-    ? new TasksTreeDataProvider(vscode.workspace.workspaceFolders[0].uri.fsPath)
-    : undefined;
-  const epicsProvider = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0)
-    ? new EpicsTreeDataProvider(vscode.workspace.workspaceFolders[0].uri.fsPath)
-    : undefined;
+
+  const tasksProvider = new TasksTreeDataProvider();
+  const epicsProvider = new EpicsTreeDataProvider();
 
   // Create and register sprints tree view with drag and drop support
   const sprintsTreeView = vscode.window.createTreeView('sprintdesk-sprints', {
@@ -259,72 +257,29 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(sprintsTreeView);
 
-  // Create and register backlogs tree view with drag and drop support
   const backlogsTreeView = vscode.window.createTreeView('sprintdesk-backlogs', {
     treeDataProvider: backlogsProvider,
     dragAndDropController: backlogsProvider
   });
   context.subscriptions.push(backlogsTreeView);
-  
-  // Create and register epics tree view with drag and drop support
-  if (epicsProvider) {
-    // Create the tree view with the provider (drag/drop is now integrated in the provider)
-    const epicsTreeView = vscode.window.createTreeView('sprintdesk-epics', {
-      treeDataProvider: epicsProvider,
-      dragAndDropController: epicsProvider
-    });
 
-    // Register the tree view and do initial refresh
-    context.subscriptions.push(epicsTreeView);
-    epicsProvider.refresh();
-  }
+  const epicsTreeView = vscode.window.createTreeView('sprintdesk-epics', {
+    treeDataProvider: epicsProvider,
+    dragAndDropController: epicsProvider
+  });
+  context.subscriptions.push(epicsTreeView);
 
-  if (tasksProvider) {
-    const tasksTreeView = vscode.window.createTreeView('sprintdesk-tasks', {
-      treeDataProvider: tasksProvider,
-      dragAndDropController: new class implements vscode.TreeDragAndDropController<TaskTreeItem> {
-        dropMimeTypes = [];
-        dragMimeTypes = ['application/vnd.code.tree.sprintdesk-tasks'];
+  const tasksTreeView = vscode.window.createTreeView('sprintdesk-tasks', {
+    treeDataProvider: tasksProvider,
+    dragAndDropController: tasksProvider
+  });
+  context.subscriptions.push(tasksTreeView);
 
-        handleDrop(): void {}
-
-        handleDrag(source: readonly TaskTreeItem[], dataTransfer: vscode.DataTransfer): void {
-          try {
-            const taskItem = source[0];
-            if (!taskItem) {
-              throw new Error('No task item to drag');
-            }
-
-            // Create a serializable task data object
-            const taskData = {
-              id: taskItem.taskId,
-              label: taskItem.label,
-              filePath: taskItem.filePath,
-              type: 'task'
-            };
-            
-            // Add debug logging for data being transferred
-            console.log('Setting drag data:', taskData);
-            
-            dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks', 
-              new vscode.DataTransferItem(JSON.stringify(taskData))
-            );
-          } catch (error) {
-            console.error('Drag error:', error);
-            vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
-          }
-        }
-      }
-    });
-    context.subscriptions.push(tasksTreeView);
-  }
-
-  // Epics tree view is already added to subscriptions in its creation block
 
   // Refresh command for sidebar trees
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.refresh', async () => {
     sprintsProvider.refresh();
-    backlogsProvider.refresh();
+    backlogsProvider?.refresh();
     tasksProvider?.refresh();
     vscode.window.showInformationMessage('SprintDesk refreshed.');
   }));
@@ -410,7 +365,7 @@ export async function activate(context: vscode.ExtensionContext) {
     await vscode.workspace.fs.stat(destTemplate);
     // If it exists, do nothing
     return;
-  } catch {}
+  } catch { }
 
   try {
     await vscode.workspace.fs.copy(sourceTemplate, destTemplate, { overwrite: false });
@@ -420,4 +375,4 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 }
 
-export function deactivate() {}
+export function deactivate() { }

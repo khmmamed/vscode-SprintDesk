@@ -50,7 +50,11 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
     while ((m = fileRegex.exec(fm)) !== null) {
       const rel = m[1].trim().replace(/['"]+/g, '');
       const abs = path.resolve(path.dirname(filePath), rel);
-      const prettyLabel = path.basename(rel).replace(/\.[^.]+$/, '').replace(/^[^_]*_?/, '').replace(/[_-]+/g, ' ').trim();
+      const prettyLabel = path.basename(rel)
+        .replace(new RegExp(`\\${PROJECT.MD_FILE_EXTENSION}$`), '')
+        .replace(new RegExp(`^${PROJECT.FILE_PREFIX.TASK}?`), '')
+        .replace(/[_-]+/g, ' ')
+        .trim();
       const key = `${prettyLabel}|${abs}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -164,14 +168,14 @@ export async function addTaskToBacklogInteractive(item: any) {
   if (epicName) {
     const epicFile = path.join(epicsDir, `${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}${PROJECT.MD_FILE_EXTENSION}`);
     let epicContent = fileService.readFileSyncSafe(epicFile) || `# Epic: ${epicName}\n`;
-    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+      const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
     epicContent = insertTaskLinkUnderSection(epicContent, UI.SECTIONS.TASKS.toLowerCase(), taskLink);
     fs.writeFileSync(epicFile, epicContent, 'utf8');
   }
 
   try {
     let backlogContent = fs.readFileSync(backlogFile, 'utf8');
-    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
     backlogContent = insertTaskLinkUnderSection(backlogContent, UI.SECTIONS.TASKS, taskLink);
     fs.writeFileSync(backlogFile, backlogContent, 'utf8');
     vscode.window.showInformationMessage('Task added to backlog.');

@@ -21,9 +21,10 @@ export const PROJECT = {
     // File Naming Patterns
     FILE_PREFIX: {
         TASK: "[Task]_",
+        BACKLOG: "[Backlog]_",
         EPIC: "[Epic]_",
         SPRINT: "[Sprint]_",
-        EPIC_TASK_LINK: "../tasks/",
+        TASK_LINK: "../Tasks/",
     },
 
     // IDs
@@ -58,21 +59,48 @@ export const TASK = {
         TEST: "$(beaker) Test",
     },
 
+    // File & Template
+    FILE_PREFIX: "[Task]_",
+    TASKS_SECTION: "## 📋 Tasks",
+    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
+    TEMPLATE: (title: string) => `# 🧩 Task: ${title}\n\n## 📋 Description\n`,
+
     // Markers
     LINK_MARKER: "📌"
 };
 
 /**
  * Epic Management
- * =============
+ * ================
  */
 export const EPIC = {
     STATUS: {
-        PLANNED: "⏳ Planned"
+        PLANNED: "⏳ Planned",
+        IN_PROGRESS: "🔄 In Progress",
+        COMPLETED: "✅ Completed",
+        BLOCKED: "⛔ Blocked"
     },
+    FILE_PREFIX: "[Epic]_",
     TASKS_SECTION: "## 🧱 Tasks",
+    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | ID |\n|:--|:-----|:------:|:--------:|:-----|",
+    TEMPLATE: (name: string) => `# 🌟 Epic: ${name}\n\n## 🧱 Tasks\n`,
+    DEFAULT_COLOR: "#0b2cc2"  // deep blue
+};
+
+/**
+ * Backlog Management
+ * ================
+ */
+export const BACKLOG = {
+    STATUS: {
+        ACTIVE: "active",
+        ARCHIVED: "archived"
+    },
+    FILE_PREFIX: "[Backlog]_",
+    TASKS_SECTION: "## 📋 Tasks",
     TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
-    DEFAULT_COLOR: "#0b2cc2"
+    TEMPLATE: (name: string) => `# Backlog: ${name}\n\n## 📋 Tasks\n`,
+    DEFAULT_COLOR: "#2563eb"  // blue-600
 };
 
 /**
@@ -80,6 +108,15 @@ export const EPIC = {
  * ===============
  */
 export const SPRINT = {
+    STATUS: {
+        UPCOMING: "upcoming",
+        IN_PROGRESS: "in-progress",
+        COMPLETED: "completed"
+    },
+    FILE_PREFIX: "[Sprint]_",
+    TASKS_SECTION: "## 📋 Tasks",
+    TASKS_TABLE_HEADER: "| # | Task | Epic | Status | Priority |\n|:--|:-----|:----:|:------:|:--------:|",
+    TEMPLATE: (name: string) => `# ⏱️ Sprint: ${name}\n\n## 📋 Tasks\n`,
     SEPARATOR: {
         DATE: "-",
         DURATION: "_",

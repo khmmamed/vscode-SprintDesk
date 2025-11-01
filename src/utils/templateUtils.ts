@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { PROJECT } from './constant';
 
 function getPriorityEmoji(priority?: Priority): string {
   switch (priority?.toLowerCase()) {
@@ -77,7 +78,7 @@ objective: ${metadata.title}
 ${metadata.epicId && metadata.epicName ? `epic:
   _id: ${metadata.epicId}
   name: ${metadata.epicName}
-  file: ../epics/[Epic]_${metadata.epicName.toLowerCase().replace(/\s+/g, '-')}.md` : ''}
+  file: ../epics/${generateEpicFileName(metadata.epicName)}` : ''}
 sprints: []
 backlogs: []
 related_tasks: []
@@ -122,7 +123,7 @@ Add task description here...
 
 ${metadata.epicName ? `
 ## Epic
-- [${metadata.epicName}](../epics/[Epic]_${metadata.epicName.replace(/\s+/g, '-')}.md)
+- [${metadata.epicName}](../epics/${generateEpicFileName(metadata.epicName)})
 ` : ''}
 
 ## Sprints
@@ -218,18 +219,21 @@ export function generateTaskFileName(title: string, epicName?: string): string {
   const taskSlug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   if (epicName) {
     const epicSlug = epicName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    return `[Task]_${taskId}_${taskSlug}_[Epic]_${epicSlug}.md`;
+    return `${PROJECT.FILE_PREFIX.TASK}${taskId}_${taskSlug}_${PROJECT.FILE_PREFIX.EPIC}${epicSlug}.md`;
   }
-  return `[Task]_${taskId}_${taskSlug}.md`;
+  return `${PROJECT.FILE_PREFIX.TASK}${taskId}_${taskSlug}.md`;
 }
 
 export function generateEpicFileName(title: string): string {
   const epicSlug = title.replace(/\s+/g, '-');
-  return `[Epic]_${epicSlug}.md`;
+  return `${PROJECT.FILE_PREFIX.EPIC}${epicSlug}.md`;
 }
 
 export function parseTaskMetadataFromFilename(filename: string): { taskName: string; epicName?: string } {
-  const match = filename.match(/\[Task\]_(.+?)(?:_\[Epic\]_(.+?))?\.md$/);
+  const taskPrefix = PROJECT.FILE_PREFIX.TASK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const epicPrefix = PROJECT.FILE_PREFIX.EPIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`${taskPrefix}(.+?)(?:_${epicPrefix}(.+?))?\.md$`);
+  const match = filename.match(pattern);
   if (!match) throw new Error('Invalid task filename format');
   
   return {
@@ -239,7 +243,9 @@ export function parseTaskMetadataFromFilename(filename: string): { taskName: str
 }
 
 export function parseEpicMetadataFromFilename(filename: string): { epicName: string } {
-  const match = filename.match(/\[Epic\]_(.+?)\.md$/);
+  const epicPrefix = PROJECT.FILE_PREFIX.EPIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`${epicPrefix}(.+?)\.md$`);
+  const match = filename.match(pattern);
   if (!match) throw new Error('Invalid epic filename format');
   
   return {

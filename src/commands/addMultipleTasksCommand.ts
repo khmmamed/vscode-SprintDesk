@@ -3,19 +3,8 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "../webview/getWebviewContent";
 import * as epicService from '../services/epicService';
 import * as taskService from '../services/taskService';
-
-
-// Helper: Extract Epic name
-function extractEpic(taskFileName: string): string | null {
-  const match = taskFileName.match(/\[Epic\]_([a-zA-Z0-9_-]+)(?=\.md$)/);
-  return match ? match[1] : null;
-}
-
-// Helper: Extract readable task title
-function getTaskTitle(taskFileName: string): string {
-  const match = taskFileName.match(/\[Task\]_([^_]+)_\[Epic\]/);
-  return match ? match[1].replace(/_/g, " ") : taskFileName.replace(".md", "");
-}
+import { parseTaskMetadataFromFilename } from '../utils/templateUtils';
+import { PROJECT, UI } from '../utils/constant';
 
 export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
   const command = vscode.commands.registerCommand(
@@ -57,8 +46,7 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
 
       panel.webview.html = modifiedHtml;
 
-      panel.webview.onDidReceiveMessage(
-        async (message) => {
+      panel.webview.onDidReceiveMessage(async (message) => {
           if (message.command === "validateTasks") {
             const tasks: string[] = message.payload.filter((t: string) => t.trim());
 
@@ -100,19 +88,22 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
               }
 
               // Create file using new data approach: generated _id and name (slug), others left empty
-              const title = getTaskTitle(fileName);
-              // Preserve provided filename but create file
-              const slug = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
-              const generatedId = `tsk_${slug}`;
-              const frontmatter = `---\n_id: ${generatedId}\nname: ${slug}\n---\n\n# 🧩 Task: ${title}\n`;
-              await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(frontmatter));
-              createdTasks.push(fileName);
+              try {
+                const { taskName, epicName } = parseTaskMetadataFromFilename(fileName);
+                const slug = taskName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
+                const generatedId = `tsk_${slug}`;
+                const frontmatter = `---\n_id: ${generatedId}\nname: ${slug}\n---\n\n# 🧩 Task: ${taskName}\n`;
+                await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(frontmatter));
+                createdTasks.push(fileName);
 
-              // Group by Epic
-              const epic = extractEpic(fileName);
-              if (epic) {
-                if (!epicTasks[epic]) epicTasks[epic] = [];
-                epicTasks[epic].push(fileName);
+                // Group by Epic
+                if (epicName) {
+                  if (!epicTasks[epicName]) epicTasks[epicName] = [];
+                  epicTasks[epicName].push(fileName);
+                }
+              } catch (error) {
+                console.error('Error processing task:', error);
+                skippedTasks.push(fileName);
               }
             }
 
@@ -120,15 +111,15 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
             const updatedEpics: string[] = [];
             const now = new Date().toISOString();
 
-            for (const [epic, taskFiles] of Object.entries(epicTasks)) {
-              const epicFileName = `[Epic]_${epic}.md`;
+            for (const [epic, taskFiles] of Object.entries(epicTasks) as [string, string[]][]) {
+              const epicFileName = `${PROJECT.FILE_PREFIX.EPIC}${epic}.md`;
               const epicFileUri = vscode.Uri.joinPath(epicsDir, epicFileName);
 
               // Generate content
               const taskLinks = taskFiles
                 .map((taskFile) => {
-                  const title = getTaskTitle(taskFile);
-                  return `- 📌 [${title}](../tasks/${taskFile})`;
+                  const { taskName } = parseTaskMetadataFromFilename(taskFile);
+                  return `- ${UI.EMOJI.COMMON.TASK} [${taskName}](../tasks/${taskFile})`;
                 })
                 .join("\n");
 
@@ -155,10 +146,7 @@ ${taskLinks}
             if (updatedEpics.length > 0) msg += `📘 Updated ${updatedEpics.length} epic(s).`;
             vscode.window.showInformationMessage(msg);
           }
-        },
-        undefined,
-        context.subscriptions
-      );
+      });
     }
   );
 

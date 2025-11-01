@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { PROJECT } from '../utils/constant';
 
 export function readFileSyncSafe(filePath: string): string {
   try {
@@ -20,10 +21,10 @@ export function listMdFiles(dir: string): string[] {
 }
 
 export function getExistingTasksDirs(ws: string): string[] {
-  const base = path.join(ws, '.SprintDesk');
-  const candidates = [path.join(base, 'tasks'), path.join(base, '🚀_tasks')];
+  const base = path.join(ws, PROJECT.SPRINTDESK_DIR);
+  const candidates = [path.join(base, PROJECT.TASKS_DIR)];
   const found = candidates.filter(d => fs.existsSync(d));
-  return found.length ? found : [path.join(base, 'tasks')];
+  return found.length ? found : [path.join(base, PROJECT.TASKS_DIR)];
 }
 
 export function fileExists(filePath: string): boolean {
