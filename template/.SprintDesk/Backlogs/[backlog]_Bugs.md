@@ -1,26 +1,19 @@
 ---
-_id: backlog_bugs
-name: Features Backlog
+_id: backlog_Bugs
+title: backlog Bugs
 status: planned
-priority: medium
-type: feature_backlog
-created_at: 2025-10-28
-updated_at: 2025-10-28
+priority: high
+type: bugs_backlog
+created_at: 2025-10-28T00:00:00.000Z
+updated_at: 2025-10-28T00:00:00.000Z
 owner: Khmamid Meddd
-
-epics:
-  
-sprints:
-  
+epics: null
+sprints: null
 tasks:
   
-
-# Related Backlogs (many-to-many)
-related_backlogs:
-  
+related_backlogs: null
 ---
-
-# 🧱 Backlog: Bugs Planning
+# 🧱 Backlog: Bugs
 
 ## 🎯 Objective
 Plan and organize upcoming bugs tasks for the project.
@@ -39,6 +32,4 @@ Plan and organize upcoming bugs tasks for the project.
 
 ## Tasks
 
-
 ## Related Backlogs
-

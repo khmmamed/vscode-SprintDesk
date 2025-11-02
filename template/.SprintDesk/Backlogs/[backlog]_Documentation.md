@@ -1,23 +1,18 @@
 ---
-_id: backlog_documentation
-name: bugs Backlog
+_id: backlog_Documentation
+title: backlog Documentation
 status: planned
 priority: high
-type: bugs_backlog
-created_at: 2025-10-28
-updated_at: 2025-10-28
+type: documentation
+created_at: 2025-10-28T00:00:00.000Z
+updated_at: 2025-10-28T00:00:00.000Z
 owner: Khmamid Meddd
-
-epics:
-  
-sprints:
-  
+epics: null
+sprints: null
 tasks:
   
-related_backlogs:
-  
+related_backlogs: null
 ---
-
 # 🧱 Backlog: Documentation
 
 ## 🎯 Objective
@@ -28,15 +23,11 @@ related_backlogs:
 
 ## 🧾 Acceptance Criteria
 
-
 ## Epics
 
-
 ## Sprints
-
 
 ## Tasks
 
 
 ## Related Backlogs
-

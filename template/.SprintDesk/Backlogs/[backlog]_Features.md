@@ -1,21 +1,17 @@
 ---
-_id: backlog_features
-name: bugs Backlog
+_id: backlog_Features
+title: backlog Features
 status: planned
 priority: high
-type: bugs_backlog
-created_at: 2025-10-28
-updated_at: 2025-10-28
+type: bugs
+created_at: 2025-10-28T00:00:00.000Z
+updated_at: 2025-10-28T00:00:00.000Z
 owner: Khmamid Meddd
-
-epics:
-  
-sprints:
-  
+epics: null
+sprints: null
 tasks:
   
-related_backlogs:
-  
+related_backlogs: null
 ---
 
 # 🧱 Backlog: Features
@@ -34,9 +30,6 @@ related_backlogs:
 
 ## Sprints
 
-
 ## Tasks
 
-
 ## Related Backlogs
-

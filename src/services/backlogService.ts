@@ -15,7 +15,7 @@ interface TreeItemLike {
   label: string;
   collapsibleState: vscode.TreeItemCollapsibleState;
   // absolute path if file exists
-  taskPath?: string;
+  path?: string;
   // relative path as listed in backlog frontmatter or link
   rel?: string;
   command?: {
@@ -24,6 +24,42 @@ interface TreeItemLike {
     arguments: any[];
   };
 }
+export function getTasksFromBacklog(backlogName: string): TreeItemLike[] {
+  console.log('backlog name:', backlogName);
+  try {
+    const tasks = getBacklogTasks(backlogName);
+
+    return tasks.map((t: any) => {
+      const label = path.basename(t.path || '');
+      const absPath = t.path;
+      return { label, absPath, collapsibleState: vscode.TreeItemCollapsibleState.None, path: t.path };
+    });
+  } catch (e) {
+     throw new Error('No tasks found.');
+  }
+}
+
+export async function removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
+  const backlogFile = matter(fs.readFileSync(backlogPath, 'utf8'));
+  const relativeTaskPath = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
+  
+  // Remove from markdown content
+  const taskPattern = new RegExp(`^.*\\[.*?\\]\\(${relativeTaskPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\).*$`, 'gm');
+  let content = backlogFile.content.replace(taskPattern, '').replace(/\n\n\n+/g, '\n\n');
+  
+  // Remove from YAML frontmatter
+  const taskId = path.basename(taskPath);
+  if (backlogFile.data.tasks) {
+    backlogFile.data.tasks = backlogFile.data.tasks.filter((t: any) => t._id !== taskId);
+  }
+
+  // Write updated content
+  const updatedContent = matter.stringify(content, backlogFile.data);
+  fs.writeFileSync(backlogPath, updatedContent);
+}
+
+
+
 
 // Helper: remove git conflict blocks like <<<<<<< ... ======= ... >>>>>>>
 function stripMergeMarkers(content: string): string {
@@ -151,145 +187,18 @@ export function listBacklogsSummary(ws: string): { filePath: string; title: stri
 }
 export function listBacklogs(ws: string): string[] {
   const backlogsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
+
+  console.log('returned fileservice: ', fileService.listMdFiles(backlogsDir));
   return fileService.listMdFiles(backlogsDir).map(f => path.join(backlogsDir, f));
 }
 export function readBacklog(filePath: string): string {
   return fileService.readFileSyncSafe(filePath);
-}
-export function createBacklog(name: string): string {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!ws) throw new Error('No workspace');
-  const backlogsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
-  fs.mkdirSync(backlogsDir, { recursive: true });
-  const backlogFile = path.join(backlogsDir, `${name.replace(/\s+/g, '-')}${PROJECT.MD_FILE_EXTENSION}`);
-  if (!fs.existsSync(backlogFile)) {
-    fs.writeFileSync(backlogFile, `# Backlog: ${name}\n\n${UI.SECTIONS.TASKS_MARKER}\n`, 'utf8');
-  }
-  return backlogFile;
 }
 export function updateBacklog(filePath: string, content: string) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
 export function deleteBacklog(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-}
-export async function addTaskToBacklogInteractive(item: any) {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
-  const backlogFile: string | undefined = item?.filePath;
-  if (!backlogFile) { vscode.window.showErrorMessage('Backlog file not found for this item.'); return; }
-  const taskName = await vscode.window.showInputBox({ prompt: 'Task title' });
-  if (!taskName) return;
-  const epicName = await vscode.window.showInputBox({ prompt: 'Epic name (optional)' });
-
-  const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
-  const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
-  fs.mkdirSync(tasksDir, { recursive: true });
-  fs.mkdirSync(epicsDir, { recursive: true });
-
-  let fileName = `${PROJECT.FILE_PREFIX.TASK}${taskName.replace(/\s+/g, '-')}`;
-  if (epicName) fileName += `_${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}`;
-  fileName += PROJECT.MD_FILE_EXTENSION;
-
-  const taskPath = path.join(tasksDir, fileName);
-  if (!fs.existsSync(taskPath)) {
-    const template = `---\n_id: ${PROJECT.ID_PREFIX.TASK}${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
-    fs.writeFileSync(taskPath, template, 'utf8');
-  }
-
-  if (epicName) {
-    const epicFile = path.join(epicsDir, `${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}${PROJECT.MD_FILE_EXTENSION}`);
-    let epicContent = fileService.readFileSyncSafe(epicFile) || `# Epic: ${epicName}\n`;
-      const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
-    epicContent = insertTaskLinkUnderSection(epicContent, UI.SECTIONS.TASKS.toLowerCase(), taskLink);
-    fs.writeFileSync(epicFile, epicContent, 'utf8');
-  }
-
-  try {
-    let backlogContent = fs.readFileSync(backlogFile, 'utf8');
-    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
-    backlogContent = insertTaskLinkUnderSection(backlogContent, UI.SECTIONS.TASKS, taskLink);
-    fs.writeFileSync(backlogFile, backlogContent, 'utf8');
-    vscode.window.showInformationMessage('Task added to backlog.');
-  } catch (e) {
-    vscode.window.showErrorMessage('Failed to update backlog file.');
-  }
-}
-export function getTasksFromBacklog(backlogName: string): TreeItemLike[] {
-  try {
-    const tasks = getBacklogTasks(backlogName);
-
-    return tasks.map((t: any) => {
-      const label = path.basename(t.path || '');
-      const absPath = t.path;
-      return { label, absPath, collapsibleState: vscode.TreeItemCollapsibleState.None };
-    });
-  } catch (e) {
-     throw new Error('Failed to get tasks from backlog.');
-  }
-}
-export async function moveTaskBetweenBacklogs(
-  taskPath: string,
-  sourceBacklogPath: string,
-  targetBacklogPath: string
-): Promise<void> {
-  try {
-    // Read source and target backlog files
-    const sourceContent = fs.readFileSync(sourceBacklogPath, 'utf8');
-    const targetContent = fs.readFileSync(targetBacklogPath, 'utf8');
-    
-    // Extract task details from source
-    const taskName = path.basename(taskPath, PROJECT.MD_FILE_EXTENSION)
-      .replace(new RegExp(`^${PROJECT.FILE_PREFIX.TASK}`), '')
-      .replace(/[_-]+/g, ' ')
-      .trim();
-    
-    const relativePath = path.relative(
-      path.dirname(targetBacklogPath),
-      taskPath
-    ).replace(/\\/g, '/');
-
-    // Remove task from source backlog
-    const sourceLines = sourceContent.split('\n');
-    const updatedSourceLines = sourceLines.filter(line => !line.includes(taskPath.replace(/\\/g, '/')));
-    fs.writeFileSync(sourceBacklogPath, updatedSourceLines.join('\n'));
-
-    // Add task to target backlog
-    const taskLink = `- ${TASK.LINK_MARKER} [${taskName}](${relativePath}) ${TASK.STATUS.WAITING}`;
-    const updatedTargetContent = insertTaskLinkUnderSection(targetContent, UI.SECTIONS.TASKS, taskLink);
-    fs.writeFileSync(targetBacklogPath, updatedTargetContent);
-
-    // Update task file to reference new backlog if needed
-    const taskContent = fs.readFileSync(taskPath, 'utf8');
-    const sourceBacklogName = path.basename(sourceBacklogPath, PROJECT.MD_FILE_EXTENSION);
-    const targetBacklogName = path.basename(targetBacklogPath, PROJECT.MD_FILE_EXTENSION);
-    const updatedTaskContent = taskContent.replace(
-      new RegExp(`\\[${sourceBacklogName}\\]`, 'g'),
-      `[${targetBacklogName}]`
-    );
-    fs.writeFileSync(taskPath, updatedTaskContent);
-
-  } catch (error: any) {
-    throw new Error(`Failed to move task: ${error?.message || 'Unknown error'}`);
-  }
-}
-export async function removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
-  const backlogFile = matter(fs.readFileSync(backlogPath, 'utf8'));
-  const relativeTaskPath = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
-  
-  // Remove from markdown content
-  const taskPattern = new RegExp(`^.*\\[.*?\\]\\(${relativeTaskPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\).*$`, 'gm');
-  let content = backlogFile.content.replace(taskPattern, '').replace(/\n\n\n+/g, '\n\n');
-  
-  // Remove from YAML frontmatter
-  const taskId = path.basename(taskPath);
-  if (backlogFile.data.tasks) {
-    backlogFile.data.tasks = backlogFile.data.tasks.filter((t: any) => t._id !== taskId);
-  }
-
-  // Write updated content
-  const updatedContent = matter.stringify(content, backlogFile.data);
-  fs.writeFileSync(backlogPath, updatedContent);
 }
 export async function addExistingTasksToBacklog(item: any) {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -331,6 +240,48 @@ export async function addExistingTasksToBacklog(item: any) {
     fs.writeFileSync(backlogFile, content, 'utf8');
     vscode.window.showInformationMessage('Tasks added to backlog.');
   } catch {
+    vscode.window.showErrorMessage('Failed to update backlog file.');
+  }
+}
+export async function addTaskToBacklogInteractive(item: any) {
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
+  const backlogFile: string | undefined = item?.filePath;
+  if (!backlogFile) { vscode.window.showErrorMessage('Backlog file not found for this item.'); return; }
+  const taskName = await vscode.window.showInputBox({ prompt: 'Task title' });
+  if (!taskName) return;
+  const epicName = await vscode.window.showInputBox({ prompt: 'Epic name (optional)' });
+
+  const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
+  const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
+  fs.mkdirSync(tasksDir, { recursive: true });
+  fs.mkdirSync(epicsDir, { recursive: true });
+
+  let fileName = `${PROJECT.FILE_PREFIX.TASK}${taskName.replace(/\s+/g, '-')}`;
+  if (epicName) fileName += `_${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}`;
+  fileName += PROJECT.MD_FILE_EXTENSION;
+
+  const taskPath = path.join(tasksDir, fileName);
+  if (!fs.existsSync(taskPath)) {
+    const template = `---\n_id: ${PROJECT.ID_PREFIX.TASK}${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
+    fs.writeFileSync(taskPath, template, 'utf8');
+  }
+
+  if (epicName) {
+    const epicFile = path.join(epicsDir, `${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}${PROJECT.MD_FILE_EXTENSION}`);
+    let epicContent = fileService.readFileSyncSafe(epicFile) || `# Epic: ${epicName}\n`;
+      const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
+    epicContent = insertTaskLinkUnderSection(epicContent, UI.SECTIONS.TASKS.toLowerCase(), taskLink);
+    fs.writeFileSync(epicFile, epicContent, 'utf8');
+  }
+
+  try {
+    let backlogContent = fs.readFileSync(backlogFile, 'utf8');
+    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
+    backlogContent = insertTaskLinkUnderSection(backlogContent, UI.SECTIONS.TASKS, taskLink);
+    fs.writeFileSync(backlogFile, backlogContent, 'utf8');
+    vscode.window.showInformationMessage('Task added to backlog.');
+  } catch (e) {
     vscode.window.showErrorMessage('Failed to update backlog file.');
   }
 }

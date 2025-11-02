@@ -6,8 +6,9 @@ import * as backlogService from '../services/backlogService';
 import * as backlogController from '../controller/backlogController';
 import { UI, PROJECT } from '../utils/constant';
 import matter from 'gray-matter';
-import { getTasksPath } from '../utils/backlogUtils';
+import { getBacklogPath, getTasksPath } from '../utils/backlogUtils';
 import { getTaskPath } from '../utils/taskUtils';
+import { json } from 'stream/consumers';
 
 export class BacklogsTreeItem extends vscode.TreeItem {
   constructor(
@@ -46,7 +47,7 @@ export class BacklogsTreeItem extends vscode.TreeItem {
       this.contextValue = 'task';
 
       try {
-        
+
         const content = fs.readFileSync(taskPath, 'utf8');
         const taskData = content.match(/^status:\s*(.+)|^priority:\s*(.+)|^type:\s*(.+)/gm);
 
@@ -166,38 +167,6 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     });
   }
 
-  handleDrag(source: readonly BacklogsTreeItem[], dataTransfer: vscode.DataTransfer): void {
-    try {
-      if (source.length > 0) {
-        const taskItem = source[0];
-        if (!taskItem.taskPath) {
-          throw new Error('No task path found for drag operation');
-        }
-
-        // Create a consistent task data object
-        const taskData = {
-          id: path.basename(taskItem.taskPath, '.md'),
-          label: taskItem.label,
-          filePath: taskItem.taskPath,
-          type: 'task',
-          sourceContainer: {
-            type: 'backlog',
-            path: taskItem.sourceBacklogPath || taskItem.filePath
-          }
-        };
-
-        dataTransfer.set('application/vnd.code.tree.sprintdesk-backlogs',
-          new vscode.DataTransferItem(JSON.stringify(taskData))
-        );
-
-        void vscode.window.showInformationMessage(`Dragging task: ${taskItem.label}`);
-      }
-    } catch (error) {
-      console.error('Drag error:', error);
-      void vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
-    }
-  }
-
   private async handleTaskDropFromTasks(target: BacklogsTreeItem, handleData: any): Promise<void> {
     let taskFilePath: string | undefined;
     let taskName: string | undefined;
@@ -212,47 +181,100 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
 
     await this.addTaskToBacklog(target.filePath!, taskPath);
   }
-
   private async handleTaskDropFromSprints(target: BacklogsTreeItem, handleData: any): Promise<void> {
-    const taskPath = this.resolveTaskPath(handleData);
-    await this.addTaskToBacklog(target.filePath!, taskPath);
-  }
+    let taskFilePath: string | undefined;
+    let taskName: string | undefined;
+    // If legacy itemHandles exists, extract basename using split(' ')[1]
+    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+      const raw = String(handleData.itemHandles[0] || '');
+      const parts = raw.split(' ');
+      taskName = parts[1] || parts.pop() || raw;
+    }
+    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
 
+    await this.addTaskToBacklog(target.filePath!, taskPath);
+    await this.removeTaskFromBacklog(handleData.sourceContainer?.path, taskPath);
+  }
   private async handleTaskDropFromEpics(target: BacklogsTreeItem, handleData: any): Promise<void> {
     const taskPath = this.resolveTaskPath(handleData);
     await this.addTaskToBacklog(target.filePath!, taskPath);
   }
-
   private async handleTaskDropFromBacklogs(target: BacklogsTreeItem, handleData: any): Promise<void> {
-    const taskPath = this.resolveTaskPath(handleData);
-    const sourceBacklogPath = handleData.sourceContainer?.path;
 
-    if (sourceBacklogPath && sourceBacklogPath !== target.filePath) {
-      await this.removeTaskFromBacklog(sourceBacklogPath, taskPath);
-    }
+    const { taskName, backlog } = handleData;
+
+    const taskPath = getTaskPath(taskName);
+    const backlogPath = getBacklogPath(backlog.backlogName)
+
+    console.log('Moving task:', taskPath, 'to backlog:', target.filePath);
 
     await this.addTaskToBacklog(target.filePath!, taskPath);
+    await this.removeTaskFromBacklog(backlogPath, taskPath);
+    await this.refresh();
   }
-
   private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<void> {
-    const taskName = path.basename(taskPath);
-    const confirm = await vscode.window.showInformationMessage(
-      `Add task "${taskName}" to backlog?`,
-      { modal: true },
-      'Add'
-    );
 
-    if (confirm === 'Add') {
-      await backlogController.addTaskToBacklog(backlogPath, taskPath);
-      this.refresh();
-      void vscode.window.showInformationMessage(`Task added to backlog`);
+    await backlogController.addTaskToBacklog(backlogPath, taskPath);
+    this.refresh();
+    void vscode.window.showInformationMessage(`Task added to backlog`);
+
+  }
+  private async removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
+    await backlogController.removeTaskFromBacklog(backlogPath, taskPath);
+  }
+  private async getTasksFromBacklogName(backlogName: string): Promise<BacklogsTreeItem[]> {
+
+    const treeItems = backlogService.getTasksFromBacklog(backlogName);
+    return treeItems.map(item => {
+
+      const treeItem = new BacklogsTreeItem(
+        item.label,
+        item.collapsibleState,
+        [],
+        undefined,
+        item.path,
+        backlogName
+      );
+      if (item.command) {
+        treeItem.command = item.command;
+      }
+      treeItem.tooltip = `Task: ${item.label}\nPath: ${item.path}\nBacklog: ${backlogName}`;
+      return treeItem;
+    });
+  } 
+  // handle drag and drop
+  handleDrag(source: readonly BacklogsTreeItem[], dataTransfer: vscode.DataTransfer): void {
+    console.log('handle drag source: ', source);
+    try {
+      if (source.length > 0) {
+        const taskItem = source[0];
+        if (!taskItem.taskPath) {
+          throw new Error('No task path found for drag operation');
+        }
+
+        // Create a consistent task data object
+        const taskData = {
+          type: 'task',
+          label: taskItem.label,
+          taskName: taskItem.label,
+          path: taskItem.taskPath,
+          backlog: {
+            type: 'backlog',
+            backlogName: taskItem.sourceBacklogPath || taskItem.filePath
+          }
+        };
+
+        dataTransfer.set('application/vnd.code.tree.sprintdesk-backlogs',
+          new vscode.DataTransferItem(JSON.stringify(taskData))
+        );
+
+        void vscode.window.showInformationMessage(`Dragging task: ${taskItem.label}`);
+      }
+    } catch (error) {
+      console.error('Drag error:', error);
+      void vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
     }
   }
-
-  private async removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
-    await backlogService.removeTaskFromBacklog(backlogPath, taskPath);
-  }
-
   async handleDrop(target: BacklogsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     try {
       if (!target?.filePath || target.contextValue !== 'backlog') {
@@ -265,7 +287,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
         epics: 'application/vnd.code.tree.sprintdesk-epics',
         sprints: 'application/vnd.code.tree.sprintdesk-sprints'
       };
-     
+
       for (const [source, mimeType] of Object.entries(taskSources)) {
         const dataItem = dataTransfer.get(mimeType);
         if (dataItem) {
@@ -295,35 +317,20 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
       void vscode.window.showErrorMessage(`Failed to move task: ${errorMessage}`);
     }
   }
-
-  public refresh(): void {
-    this._onDidChangeTreeData.fire(undefined);
+  private humanizeBacklogName(filename: string): string {
+    const base = filename.replace(/\.[^.]+$/, '');
+    const cleaned = base
+      .replace(/^\[(?:backlog|b)\]_?/i, '')
+      .replace(/[_-]+/g, ' ')
+      .trim();
+    return cleaned || base;
   }
 
-  getTreeItem(element: BacklogsTreeItem): vscode.TreeItem {
-    return element;
-  }
 
-  async getChildren(element?: BacklogsTreeItem): Promise<BacklogsTreeItem[]> {
-    const workspaceRoot = this.getWorkspaceRoot();
-    if (!workspaceRoot) return [];
 
-    if (!element) {
-      return this.getBacklogs(workspaceRoot);
-    }
 
-    if (element.filePath) {
-      return this.getTasksFromBacklogFile(element.filePath);
-    }
-
-    return [];
-  }
-
-  private getWorkspaceRoot(): string {
-    return this.workspaceRoot;
-  }
-
-  private async getBacklogs(workspaceRoot: string): Promise<BacklogsTreeItem[]> {
+  // tree visualization methods
+  private async getBacklogsTree(workspaceRoot: string): Promise<BacklogsTreeItem[]> {
     const backlogsDir = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
     const files = fileService.listMdFiles(backlogsDir);
 
@@ -334,36 +341,30 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     });
 
     items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
+
     return items;
   }
-
-  private humanizeBacklogName(filename: string): string {
-    const base = filename.replace(/\.[^.]+$/, '');
-    const cleaned = base
-      .replace(/^\[(?:backlog|b)\]_?/i, '')
-      .replace(/[_-]+/g, ' ')
-      .trim();
-    return cleaned || base;
+  getTreeItem(element: BacklogsTreeItem): vscode.TreeItem {
+    return element;
   }
+  async getChildren(element?: BacklogsTreeItem): Promise<BacklogsTreeItem[]> {
+    const workspaceRoot = this.getWorkspaceRoot();
+    if (!workspaceRoot) return [];
 
-  private async getTasksFromBacklogFile(filePath: string): Promise<BacklogsTreeItem[]> {
-    console.log('Getting tasks from backlog file:', path.basename(filePath));
-    const treeItems = backlogService.getTasksFromBacklog(path.basename(filePath));
-    return treeItems.map(item => {
+    if (!element) {
+      return this.getBacklogsTree(workspaceRoot);
+    }
 
-      const treeItem = new BacklogsTreeItem(
-        item.label,
-        item.collapsibleState,
-        [],
-        undefined,
-        item.taskPath,
-        filePath  // Pass the current backlog's path as sourceBacklogPath
-      );
-      if (item.command) {
-        treeItem.command = item.command;
-      }
-      treeItem.tooltip = `Task: ${item.label}\nPath: ${item.taskPath}\nBacklog: ${filePath}`;
-      return treeItem;
-    });
+    if (element.filePath) {
+      return this.getTasksFromBacklogName(path.basename(element.filePath));
+    }
+
+    return [];
+  }
+  private getWorkspaceRoot(): string {
+    return this.workspaceRoot;
+  }
+  public refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
   }
 }

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { getBacklogPath, getBacklogsPath } from '../utils/backlogUtils';
 import matter from 'gray-matter';
 import { UI } from '../utils/constant';
+import { getTaskPath } from '../utils/taskUtils';
 
 interface ITask {
   _id: string;
@@ -41,12 +42,17 @@ export function getBacklogTasks(backlogName: string): ITask[] {
   const { tasks } = getBacklogMetadata(backlogName);
   return tasks;
 }
+export function getBacklogTotalTasks(backlogName: string): number {
+  const tasks = getBacklogTasks(backlogName);
+  return tasks ? tasks.length : 0;
+}
 /* Tasks Operations */
 export function addTaskToBacklog(backlogPath: string, taskPath: string): void {
   const { data: taskMetadata } = matter.read(taskPath);
   const { data: backlogMetadata, content: backlogContent } = matter.read(backlogPath);
 
-  const existingTaskIndex = backlogMetadata.tasks ? backlogMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
+  const existingTaskIndex = backlogMetadata.tasks ?
+    backlogMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
   if (existingTaskIndex === -1) {
     // Add task to markdown section
     const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
@@ -73,9 +79,10 @@ export function addTaskToBacklog(backlogPath: string, taskPath: string): void {
     };
 
     if (!backlogMetadata.tasks) {
-      backlogMetadata.tasks = [];
+      backlogMetadata.tasks = [task];
+    } else {
+      backlogMetadata.tasks.push(task);
     }
-    backlogMetadata.tasks.push(task);
     // Write updated content with both markdown and frontmatter changes
     const updatedContent = matter.stringify(content, backlogMetadata);
     fs.writeFileSync(backlogPath, updatedContent);
@@ -84,4 +91,25 @@ export function addTaskToBacklog(backlogPath: string, taskPath: string): void {
     return;
   }
 
+}
+export function removeTaskFromBacklog(backlogPath: string, taskPath: string): void {
+  const { data: backlogMetadata, content: backlogContent } = matter.read(backlogPath);
+  const { data: taskMetadata } = matter.read(taskPath);
+  const taskIndex = backlogMetadata.tasks ?
+    backlogMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
+
+  if (taskIndex !== -1) {
+    // remove from backlog metadata
+    const tasks = backlogMetadata.tasks.filter((task: ITask) => task._id !== taskMetadata._id);
+    backlogMetadata.tasks = tasks;
+    // Remove task from markdown section
+    const taskPathFormatted = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
+    const taskLinkPattern = new RegExp(`^- \\[.*\\]\\(${taskPathFormatted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\s*`, 'm');
+    const updatedBacklogContent = backlogContent.replace(taskLinkPattern, '').trim();
+    // Write updated content with both markdown and frontmatter changes
+    const updatedContent = matter.stringify(updatedBacklogContent, backlogMetadata);
+    fs.writeFileSync(backlogPath, updatedContent);
+  } else {
+    console.log(`Task with ID ${taskMetadata._id} not found in backlog.`);
+  }
 }
