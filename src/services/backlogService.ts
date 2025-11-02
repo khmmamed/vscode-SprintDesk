@@ -30,13 +30,11 @@ function stripMergeMarkers(content: string): string {
   return content.replace(/<<<<<<<[\s\S]*?>>>>>>>\s*.*/g, '')
                 .replace(/={7,}[\s\S]*?={7,}\n?/g, '');
 }
-
 // Helper: extract YAML frontmatter block (between first pair of ---)
 function extractFrontmatter(content: string): string | null {
   const m = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
   return m ? m[1] : null;
 }
-
 export function parseBacklogFile(filePath: string): { title: string; tasks: { label: string; abs?: string; rel?: string }[] } {
   let content = fileService.readFileSyncSafe(filePath);
   content = stripMergeMarkers(content);
@@ -144,7 +142,6 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
 
   return { title, tasks };
 }
-
 export function listBacklogsSummary(ws: string): { filePath: string; title: string; tasks: { label: string; abs?: string }[] }[] {
   const files = listBacklogs(ws);
   return files.map(f => {
@@ -156,11 +153,9 @@ export function listBacklogs(ws: string): string[] {
   const backlogsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
   return fileService.listMdFiles(backlogsDir).map(f => path.join(backlogsDir, f));
 }
-
 export function readBacklog(filePath: string): string {
   return fileService.readFileSyncSafe(filePath);
 }
-
 export function createBacklog(name: string): string {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
@@ -172,15 +167,12 @@ export function createBacklog(name: string): string {
   }
   return backlogFile;
 }
-
 export function updateBacklog(filePath: string, content: string) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
-
 export function deleteBacklog(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
-
 export async function addTaskToBacklogInteractive(item: any) {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
@@ -223,7 +215,6 @@ export async function addTaskToBacklogInteractive(item: any) {
     vscode.window.showErrorMessage('Failed to update backlog file.');
   }
 }
-
 export function getTasksFromBacklog(backlogName: string): TreeItemLike[] {
   try {
     const tasks = getBacklogTasks(backlogName);
@@ -282,55 +273,6 @@ export async function moveTaskBetweenBacklogs(
     throw new Error(`Failed to move task: ${error?.message || 'Unknown error'}`);
   }
 }
-
-export async function addTaskToBacklogWithYaml(backlogPath: string, taskPath: string): Promise<void> {
-  const taskContent = fs.readFileSync(taskPath, 'utf8');
-  const taskMatter = matter(taskContent);
-  const backlogFile = matter(fs.readFileSync(backlogPath, 'utf8'));
-
-  const taskName = path.basename(taskPath); // Keep the full filename with extension
-
-  // Add task to markdown section
-  const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
-  let content = backlogFile.content;
-  if (!content.includes(tasksSectionMarker)) {
-    content += `\n\n${tasksSectionMarker}\n`;
-  }
-
-  const taskLink = `- [${taskName}](${path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/')})`;
-  const tasksIndex = content.indexOf(tasksSectionMarker);
-
-  if (tasksIndex !== -1) {
-    content = content.slice(0, tasksIndex + tasksSectionMarker.length) +
-      '\n' + taskLink +
-      content.slice(tasksIndex + tasksSectionMarker.length);
-  }
-
-  // Add task to YAML frontmatter
-  const taskId = path.basename(taskPath);
-  const taskMetadata = {
-    _id: taskId,
-    name: taskName,
-    path: path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/')
-  };
-
-  if (!backlogFile.data.tasks) {
-    backlogFile.data.tasks = [];
-  }
-  
-  // Check if task already exists in frontmatter
-  const existingTaskIndex = backlogFile.data.tasks.findIndex((t: any) => t._id === taskId);
-  if (existingTaskIndex === -1) {
-    backlogFile.data.tasks.push(taskMetadata);
-  } else {
-    backlogFile.data.tasks[existingTaskIndex] = taskMetadata;
-  }
-
-  // Write updated content with both markdown and frontmatter changes
-  const updatedContent = matter.stringify(content, backlogFile.data);
-  fs.writeFileSync(backlogPath, updatedContent);
-}
-
 export async function removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
   const backlogFile = matter(fs.readFileSync(backlogPath, 'utf8'));
   const relativeTaskPath = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
@@ -349,7 +291,6 @@ export async function removeTaskFromBacklog(backlogPath: string, taskPath: strin
   const updatedContent = matter.stringify(content, backlogFile.data);
   fs.writeFileSync(backlogPath, updatedContent);
 }
-
 export async function addExistingTasksToBacklog(item: any) {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
