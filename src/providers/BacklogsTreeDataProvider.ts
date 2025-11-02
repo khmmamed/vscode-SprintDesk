@@ -3,8 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as backlogService from '../services/backlogService';
+import * as backlogController from '../controller/backlogController';
 import { UI, PROJECT } from '../utils/constant';
 import matter from 'gray-matter';
+import { getTasksPath } from '../utils/backlogUtils';
+import { getTaskPath } from '../utils/taskUtils';
 
 export class BacklogsTreeItem extends vscode.TreeItem {
   constructor(
@@ -195,7 +198,22 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   }
 
   private async handleTaskDropFromTasks(target: BacklogsTreeItem, handleData: any): Promise<void> {
-    const taskPath = this.resolveTaskPath(handleData);
+    let taskFilePath: string | undefined;
+    let taskName: string | undefined;
+
+    // Prefer explicit path-like fields first
+    if (handleData.path) taskFilePath = handleData.path;
+    else if (handleData.filePath) taskFilePath = handleData.filePath;
+    else if (handleData.taskPath) taskFilePath = handleData.taskPath;
+
+    // If legacy itemHandles exists, extract basename using split(' ')[1]
+    if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+      const raw = String(handleData.itemHandles[0] || '');
+      const parts = raw.split(' ');
+      taskName = parts[1] || parts.pop() || raw;
+    }
+    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
+
     await this.addTaskToBacklog(target.filePath!, taskPath);
   }
 
@@ -212,11 +230,11 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   private async handleTaskDropFromBacklogs(target: BacklogsTreeItem, handleData: any): Promise<void> {
     const taskPath = this.resolveTaskPath(handleData);
     const sourceBacklogPath = handleData.sourceContainer?.path;
-    
+
     if (sourceBacklogPath && sourceBacklogPath !== target.filePath) {
       await this.removeTaskFromBacklog(sourceBacklogPath, taskPath);
     }
-    
+
     await this.addTaskToBacklog(target.filePath!, taskPath);
   }
 
@@ -229,7 +247,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     );
 
     if (confirm === 'Add') {
-      await backlogService.addTaskToBacklogWithYaml(backlogPath, taskPath);
+      await backlogController.addTaskToBacklog(backlogPath, taskPath);
       this.refresh();
       void vscode.window.showInformationMessage(`Task added to backlog`);
     }
@@ -335,7 +353,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   private async getTasksFromBacklogFile(filePath: string): Promise<BacklogsTreeItem[]> {
     const treeItems = backlogService.getTasksFromBacklog(filePath);
     return treeItems.map(item => {
-      // Use label computed by backlogService.parseBacklogFile (already follows pattern)
+
       const treeItem = new BacklogsTreeItem(
         item.label,
         item.collapsibleState,

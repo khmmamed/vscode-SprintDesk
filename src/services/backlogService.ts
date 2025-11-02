@@ -9,6 +9,7 @@ import {
   UI,
 } from '../utils/constant';
 import matter from 'gray-matter';
+import { getBacklogTasks } from '../controller/backlogController';
 
 interface TreeItemLike {
   label: string;
@@ -225,33 +226,17 @@ export async function addTaskToBacklogInteractive(item: any) {
 
 export function getTasksFromBacklog(filePath: string): TreeItemLike[] {
   try {
-    const parsed = parseBacklogFile(filePath);
-    const result: TreeItemLike[] = [];
-    
-    for (const t of parsed.tasks) {
-      const item: TreeItemLike = {
-        label: t.label,
-        collapsibleState: vscode.TreeItemCollapsibleState.None,
-        taskPath: t.abs,
-        rel: t.rel
-      };
-      
-      if (t.abs) {
-        item.command = {
-          command: 'vscode.open',
-          title: 'Open Task',
-          arguments: [vscode.Uri.file(t.abs)]
-        };
-      }
-      result.push(item);
-    }
-    
-    return result;
-  } catch {
-    return [];
+    const tasks = getBacklogTasks('[backlog]_Features.md');
+
+    return tasks.map((t: any) => {
+      const label = path.basename(t.path || '');
+      const absPath = t.path ? path.resolve(path.dirname(filePath), t.path) : undefined;
+      return { label, absPath, collapsibleState: vscode.TreeItemCollapsibleState.None };
+    });
+  } catch (e) {
+     throw new Error('Failed to get tasks from backlog.');
   }
 }
-
 export async function moveTaskBetweenBacklogs(
   taskPath: string,
   sourceBacklogPath: string,

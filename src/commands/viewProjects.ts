@@ -73,7 +73,7 @@ export async function scanSprintDeskFolders(baseUri: vscode.Uri): Promise<Projec
                                             const text = Buffer.from(bytes).toString('utf8');
                                             const parsed = matter.default(text);
                                             meta = parsed.data || {};
-                                            console.log('Parsed Metadata:', fileName, meta);
+                                          
                                             if (parsed.data && parsed.data.title) {
                                                 displayName = parsed.data.title;
                                             }

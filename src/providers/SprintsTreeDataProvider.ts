@@ -263,7 +263,7 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
   async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     try {
       if (!target?.filePath || target.contextValue !== 'sprint') {
-        console.log('Drop target invalid or not a sprint');
+      
         return;
       }
 
@@ -280,13 +280,12 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
         .find(x => x.data !== undefined && x.data !== null);
 
       if (!dt?.data) {
-        console.log('No valid task data found in dataTransfer');
+       
         return;
       }
 
       const handleData = JSON.parse(dt.data.value as string);
       if (!handleData) {
-        console.log('No valid task data in drop');
         return;
       }
 

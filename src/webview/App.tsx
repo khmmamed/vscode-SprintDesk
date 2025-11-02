@@ -49,15 +49,10 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
 
   React.useEffect(() => {
     if (view === 'projects') {
-      console.log('Requesting projects data from extension...');
-        console.log('Current view is projects');
         const vscode = acquireVsCodeApiOnce();
         try {
-          console.log('Sending REQUEST_PROJECTS message...');
-          vscode.postMessage({ command: 'REQUEST_PROJECTS' });
+
         } catch (e) {
-          console.error('Error requesting projects:', e);
-          console.log('Falling back to sample data');
         // Show sample data for development
         setProjects([{
           name: 'Development Sample',
@@ -98,14 +93,14 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
       else if (command === "SET_BACKLOGS") setBacklogs(payload);
       else if (command === "SET_EPICS") setEpics(payload);
       else if (command === "SET_PROJECTS") {
-          console.log('Received SET_PROJECTS message:', payload);
+          
         if (payload.projects) {
-            console.log('Setting projects state with:', payload.projects);
+           
           setProjects(payload.projects);
-            console.log('Projects state updated');
+          
         }
           else {
-            console.log('No projects in payload');
+         
           }
       }
     };

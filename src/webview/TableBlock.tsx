@@ -386,7 +386,7 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     const isExpanded = expandedItems[categoryKey];
   const folderName = category === 'backlogs' ? 'Backlogs' : category === 'epics' ? 'Epics' : category === 'sprints' ? 'Sprints' : 'tasks/🚀_tasks';
   const categoryPath = `${project.path}/.SprintDesk/${folderName}`;
-    console.log('items', items);
+  
     return (
       <React.Fragment key={categoryKey}>
         <tr style={styles.itemStyle} onClick={() => toggleExpand(categoryKey)}>
