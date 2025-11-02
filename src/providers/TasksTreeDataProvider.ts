@@ -126,8 +126,6 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
       epic: taskData.epic,
       path: taskData.path
     };
-
-    console.log("Dragging task:", transferData);
     
     dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks', 
       new vscode.DataTransferItem(JSON.stringify(transferData))
@@ -169,10 +167,6 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
         try {
           const content = fs.readFileSync(filePath, 'utf8');
           const { data } = matter(content);
-          
-          console.log('Parsed task metadata:', data);
-
-       
 
           // Create structured task data
           const taskData = {
@@ -191,9 +185,6 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
           
           // Create TreeItem with taskData
           const item = new TaskTreeItem(taskData);
-
-          // Log for debugging
-          console.log('Created task item:', taskData);
 
           return item;
         } catch (error) {
