@@ -3,31 +3,89 @@ import * as path from 'path';
 import * as fs from 'fs';
 import matter from 'gray-matter';
 import { PROJECT, UI } from '../utils/constant';
+import * as fileService from '../services/fileService';
 
 export class EpicTreeItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-    public readonly epicId: string,
-    public readonly filePath: string
+    public readonly children: EpicTreeItem[] = [],
+    public readonly filePath?: string,
+    public readonly taskPath?: string,
+    public readonly sourceEpicPath?: string
+
   ) {
     super(label, collapsibleState);
 
-    this.tooltip = `${this.label}\nDrag tasks here to add them to this epic`;
-    this.contextValue = 'epic';
+    if (filePath) {
+      // Setup epic item
+      this.contextValue = 'epic';
+      this.resourceUri = vscode.Uri.file(filePath);
 
-    // Support dropping tasks onto epics
-    this.resourceUri = vscode.Uri.file(filePath);
+      // Count tasks in epic
+      try {
+        const { data } = matter.read(filePath);
+        const taskCount = data.tasks?.length;
+        this.description = `${UI.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;
+      } catch {
+        this.description = `${UI.EMOJI.COMMON.TASK_LIST} 0 tasks`;
+      }
 
-    // Make the epic clickable to open it
-    this.command = {
-      command: 'vscode.open',
-      title: 'Open Epic',
-      arguments: [vscode.Uri.file(filePath)]
-    };
+      // Add backlog icon and tooltip
+      this.iconPath = new vscode.ThemeIcon('repo');
+      this.tooltip = new vscode.MarkdownString()
+        .appendMarkdown(`**${label}**\n\n`)
+        .appendMarkdown(`${UI.EMOJI.COMMON.FILE} Path: \`${filePath}\`\n\n`)
+        .appendMarkdown('*Drop tasks here to add them to this backlog*');
 
-    // Add icon for epics
-    this.iconPath = new vscode.ThemeIcon('notebook');
+    } else if (taskPath) {
+      // Setup task item
+      this.contextValue = 'task';
+
+      try {
+
+        const { data: taskMetadata } = matter.read(taskPath);
+        const { status, priority, type } = taskMetadata;
+
+        const statusKey = (status || 'NOT_STARTED').toUpperCase() as keyof typeof UI.EMOJI.STATUS;
+        const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
+
+        // Determine priority emoji (if any)
+        const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+        const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+
+        console.log('this.label before:', this.label);
+        // Use the full filename with extension for the label and include priority emoji
+        this.label = `${statusEmoji} ${path.basename(taskPath)}`;
+
+        // Keep priority emoji also as description for compact view
+        if (priorityEmoji) this.description = priorityEmoji;
+
+        // Create detailed tooltip
+        const tooltipMd = new vscode.MarkdownString();
+        tooltipMd.supportHtml = true;
+        tooltipMd
+          .appendMarkdown(`**${label}**\n\n`)
+          .appendMarkdown(`${statusEmoji} Status: ${status}\n`);
+
+        if (priority) {
+          const priorityKey = priority.toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+          tooltipMd.appendMarkdown(`${UI.EMOJI.PRIORITY[priorityKey] || ''} Priority: ${priority}\n`);
+        }
+
+        if (type) {
+          tooltipMd.appendMarkdown(`${type.toLowerCase().includes('bug') ? '🐛' : '✨'} Type: ${type}\n`);
+        }
+
+        tooltipMd.appendMarkdown(`\n${UI.EMOJI.COMMON.FILE} Path: \`${taskPath}\``);
+        this.tooltip = tooltipMd;
+
+      } catch {
+        // Fallback if can't read task file
+        this.iconPath = new vscode.ThemeIcon('tasklist');
+        this.tooltip = `Task: ${label}\nPath: ${taskPath}`;
+      }
+    }
   }
 }
 
@@ -38,114 +96,81 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
   // DragAndDrop
   readonly dropMimeTypes = ['application/vnd.code.tree.sprintdesk-tasks'];
   readonly dragMimeTypes: string[] = [];
+  private workspaceRoot: string;
 
-  constructor(private workspaceRoot?: string) { }
+  constructor() {
+    // Initialize workspace root
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) {
+      throw new Error('No workspace folder found');
+    }
+    this.workspaceRoot = folders[0].uri.fsPath;
+  }
+
+  private async getTasksFromEpicName(epicName: string): Promise<EpicTreeItem[]> {
+      const treeItems = epicService.getTasksFromEpic(epicName);
+      return treeItems.map(item => {
+        const treeItem = new EpicTreeItem(
+          item.label,
+          item.collapsibleState,
+          [],
+          undefined,
+          item.path,
+          epicName
+        );
+        if (item.command) {
+          treeItem.command = item.command;
+        }
+        treeItem.tooltip = `Task: ${item.label}\nPath: ${item.path}\nEpic: ${epicName}`;
+        return treeItem;
+      });
+    }
 
   public refresh(): void {
     this._onDidChangeTreeData.fire(undefined);
   }
 
+  private humanizeEpicName(filename: string): string {
+    const base = filename.replace(/\.[^.]+$/, '');
+    const cleaned = base
+      .replace(/^\[(?:epic|e)\]_?/i, '')
+      .replace(/[_-]+/g, ' ')
+      .trim();
+    return cleaned || base;
+  }
+  private async getEpicsTree(workspaceRoot: string): Promise<EpicTreeItem[]> {
+      const epicsDir = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
+      const files = fileService.listMdFiles(epicsDir);
+
+      const items = files.map(name => {
+        const filePath = path.join(epicsDir, name);
+        const label = this.humanizeEpicName(name);
+        return new EpicTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
+      });
+  
+      items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
+  
+      return items;
+    }
   getTreeItem(element: EpicTreeItem): vscode.TreeItem {
     return element;
   }
 
   async getChildren(element?: EpicTreeItem): Promise<EpicTreeItem[]> {
-    const ws = this.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!ws) {
-      return [];
-    }
+    const workspaceRoot = this.getWorkspaceRoot();
+    if (!workspaceRoot) return [];
 
     if (!element) {
-      // Root level: list all epics under .SprintDesk/Epics
-      const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
-      if (!fs.existsSync(epicsDir)) {
-        fs.mkdirSync(epicsDir, { recursive: true });
-        return [];
-      }
-
-      const epicFiles = fs.readdirSync(epicsDir).filter(file =>
-        file.startsWith(PROJECT.FILE_PREFIX.EPIC) && file.endsWith(PROJECT.MD_FILE_EXTENSION)
-      );
-
-      return epicFiles.map(file => {
-        const filePath = path.join(epicsDir, file);
-        const content = fs.readFileSync(filePath, 'utf8');
-        const { data } = matter(content);
-
-        const epicName = data.title || file.replace(new RegExp(`^${PROJECT.FILE_PREFIX.EPIC}(.+)${PROJECT.MD_FILE_EXTENSION}$`), '$1').replace(/-/g, ' ');
-        const epicId = data._id || `epic_${epicName.toLowerCase().replace(/\s+/g, '_')}`;
-
-        // Display epic name without emoji; show status in tooltip instead
-        let label = epicName;
-
-        const item = new EpicTreeItem(
-    label,
-          vscode.TreeItemCollapsibleState.Collapsed,
-          epicId,
-          filePath
-        );
-
-        // Support dropping tasks onto epics
-        item.contextValue = 'epic';
-
-        return item;
-      });
+      return this.getEpicsTree(workspaceRoot);
     }
 
-  // Children level: list tasks under this epic
-    try {
-      const epicContent = fs.readFileSync(element.filePath, 'utf8');
-      const { data } = matter(epicContent);
-
-      if (!Array.isArray(data.tasks) || data.tasks.length === 0) {
-        return [];
-      }
-
-      return data.tasks.map((task: any) => {
-        // Construct absolute file path for task
-        const taskPath = path.isAbsolute(task.file)
-          ? task.file
-          : path.resolve(path.dirname(element.filePath), task.file);
-
-        // Compute status and priority emojis and show filename with extension
-        const statusEmoji = this.getTaskStatusEmoji(task.status || 'not-started');
-        const priorityEmoji = this.getPriorityEmoji(task.priority || '');
-        const baseName = path.basename(taskPath || task.file || '');
-        const label = `${statusEmoji} ${baseName}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
-
-        const taskItem = new EpicTreeItem(
-          label,
-          vscode.TreeItemCollapsibleState.None,
-          task._id,
-          taskPath
-        );
-
-        // Add task details to tooltip and description
-        const priorityLabel = task.priority ? `${this.getPriorityEmoji(task.priority)} ${task.priority}` : '';
-        const tooltipMd = new vscode.MarkdownString();
-        tooltipMd.appendMarkdown(`**${task.name}**\n\n`);
-        if (task.description) tooltipMd.appendMarkdown(`${task.description}\n\n`);
-        tooltipMd.appendMarkdown(`Status: ${this.getTaskStatusEmoji(task.status)} ${task.status}\n`);
-        if (priorityLabel) tooltipMd.appendMarkdown(`Priority: ${priorityLabel}\n`);
-        tooltipMd.appendMarkdown(`\n[Open Task](${taskPath})`);
-        taskItem.tooltip = tooltipMd;
-
-        // Add icons and metadata
-        taskItem.contextValue = 'epic-task';
-        taskItem.iconPath = new vscode.ThemeIcon('tasklist');
-        taskItem.description = priorityLabel; // Show priority in the tree view
-        taskItem.command = {
-          command: 'vscode.open',
-          title: 'Open Task',
-          arguments: [vscode.Uri.file(taskPath)]
-        };
-
-        return taskItem;
-      });
-    } catch (error) {
-      return [];
+    if (element.filePath) {
+      return this.getTasksFromEpicName(path.basename(element.filePath));
     }
+
+    return [];
   }
+
 
   // Implement drag and drop
   async handleDrop(target: EpicTreeItem, dataTransfer: vscode.DataTransfer): Promise<void> {
@@ -212,14 +237,14 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
         epicMatter.data.tasks.push(taskData);
       }
 
-  // Confirm with the user before writing
-  const confirm = await vscode.window.showInformationMessage(`Add task "${taskData.name}" to epic "${path.basename(target.filePath)}"?`, { modal: true }, 'Add');
-  if (confirm !== 'Add') return;
+      // Confirm with the user before writing
+      const confirm = await vscode.window.showInformationMessage(`Add task "${taskData.name}" to epic "${path.basename(target.filePath)}"?`, { modal: true }, 'Add');
+      if (confirm !== 'Add') return;
 
-  // Write back the epic file (use parsed content to preserve body)
-  fs.writeFileSync(target.filePath, matter.stringify(epicMatter.content, epicMatter.data));
+      // Write back the epic file (use parsed content to preserve body)
+      fs.writeFileSync(target.filePath, matter.stringify(epicMatter.content, epicMatter.data));
 
-  // Now execute the command to handle any additional processing
+      // Now execute the command to handle any additional processing
       await vscode.commands.executeCommand('sprintdesk.addTaskToEpic', {
         epicId: target.epicId,
         epicPath: target.filePath,
@@ -240,39 +265,38 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
   }
 
   handleDrag(source: EpicTreeItem[], dataTransfer: vscode.DataTransfer): void {
-    // Epics are not draggable
+    try {
+      if (source.length > 0) {
+        const taskItem = source[0];
+        if (!taskItem.taskPath) {
+          throw new Error('No task path found for drag operation');
+        }
+
+        // Create a consistent task data object
+        const taskData = {
+          type: 'task',
+          label: taskItem.label,
+          taskName: taskItem.label,
+          path: taskItem.taskPath,
+          backlog: {
+            type: 'epic',
+            backlogName: taskItem.sourceEpicPath || taskItem.filePath
+          }
+        };
+
+        dataTransfer.set('application/vnd.code.tree.sprintdesk-epics',
+          new vscode.DataTransferItem(JSON.stringify(taskData))
+        );
+
+        void vscode.window.showInformationMessage(`Dragging task: ${taskItem.label}`);
+      }
+    } catch (error) {
+      void vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
+    }
     return;
   }
 
-  private getStatusEmoji(status: string): string {
-    switch (status.toLowerCase()) {
-      case 'planned':
-      case '⏳ planned': return '⏳';
-      case 'in progress':
-      case '🔄 in progress': return '🔄';
-      case 'completed':
-      case '✅ completed': return '✅';
-      case 'blocked':
-      case '⛔ blocked': return '⛔';
-      default: return '⏳';
-    }
-  }
-
-  private getTaskStatusEmoji(status: string): string {
-    switch (status.toLowerCase()) {
-      case 'not-started': return '⏳';
-      case 'in-progress': return '🔄';
-      case 'done': return '✅';
-      case 'blocked': return '⛔';
-      default: return '⏳';
-    }
-  }
-
-  private getPriorityEmoji(priority: string): string {
-    switch (priority.toLowerCase()) {
-      case 'high': return '🔴';
-      case 'low': return '🟢';
-      default: return '🟡';
-    }
+  private getWorkspaceRoot(): string {
+    return this.workspaceRoot;
   }
 }

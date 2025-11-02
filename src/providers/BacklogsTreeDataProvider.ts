@@ -8,7 +8,7 @@ import { UI, PROJECT } from '../utils/constant';
 import matter from 'gray-matter';
 import { getBacklogPath, getTasksPath } from '../utils/backlogUtils';
 import { getTaskPath } from '../utils/taskUtils';
-import { json } from 'stream/consumers';
+
 
 export class BacklogsTreeItem extends vscode.TreeItem {
   constructor(
@@ -28,9 +28,9 @@ export class BacklogsTreeItem extends vscode.TreeItem {
 
       // Count tasks in backlog
       try {
-        const content = fs.readFileSync(filePath, 'utf8');
-        const taskCount = (content.match(/^-\s*✅/gm) || []).length;
-        this.description = `${UI.EMOJI.COMMON.TASK_LIST} ${taskCount} tasks`;
+        const { data } = matter.read(filePath);
+        const taskCount = data.tasks?.length;
+        this.description = `${UI.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;
       } catch {
         this.description = `${UI.EMOJI.COMMON.TASK_LIST} 0 tasks`;
       }
@@ -48,36 +48,22 @@ export class BacklogsTreeItem extends vscode.TreeItem {
 
       try {
 
-        const content = fs.readFileSync(taskPath, 'utf8');
-        const taskData = content.match(/^status:\s*(.+)|^priority:\s*(.+)|^type:\s*(.+)/gm);
+        const { data: taskMetadata } = matter.read(taskPath);
+        const { status, priority, type } = taskMetadata;
 
-        // Extract status and priority if available
-        let status = 'not-started';
-        let priority = '';
-        let type = '';
-
-        taskData?.forEach(line => {
-          if (line.startsWith('status:')) status = line.replace('status:', '').trim();
-          if (line.startsWith('priority:')) priority = line.replace('priority:', '').trim();
-          if (line.startsWith('type:')) type = line.replace('type:', '').trim();
-        });
-
-        // Map status to emoji
-        const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
+        const statusKey = (status || 'NOT_STARTED').toUpperCase() as keyof typeof UI.EMOJI.STATUS;
         const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
 
         // Determine priority emoji (if any)
         const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
         const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
 
+        console.log('this.label before:', this.label);
         // Use the full filename with extension for the label and include priority emoji
-        this.label = `${statusEmoji} ${path.basename(taskPath)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
+        this.label = `${statusEmoji} ${path.basename(taskPath)}`;
 
         // Keep priority emoji also as description for compact view
         if (priorityEmoji) this.description = priorityEmoji;
-
-        // Set icon based on type
-        this.iconPath = new vscode.ThemeIcon(type?.toLowerCase().includes('bug') ? 'bug' : 'tasklist');
 
         // Create detailed tooltip
         const tooltipMd = new vscode.MarkdownString();
@@ -111,7 +97,6 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   private _onDidChangeTreeData: vscode.EventEmitter<BacklogsTreeItem | undefined | void> = new vscode.EventEmitter<BacklogsTreeItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<BacklogsTreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
-  private treeView: vscode.TreeView<BacklogsTreeItem>;
   private workspaceRoot: string;
 
   // DragAndDrop interface implementation
@@ -159,12 +144,6 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     }
     this.workspaceRoot = folders[0].uri.fsPath;
 
-    // Create tree view
-    this.treeView = vscode.window.createTreeView('sprintdesk-backlogs', {
-      treeDataProvider: this,
-      dragAndDropController: this,
-      canSelectMany: true
-    });
   }
 
   private async handleTaskDropFromTasks(target: BacklogsTreeItem, handleData: any): Promise<void> {
@@ -223,10 +202,8 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     await backlogController.removeTaskFromBacklog(backlogPath, taskPath);
   }
   private async getTasksFromBacklogName(backlogName: string): Promise<BacklogsTreeItem[]> {
-
     const treeItems = backlogService.getTasksFromBacklog(backlogName);
     return treeItems.map(item => {
-
       const treeItem = new BacklogsTreeItem(
         item.label,
         item.collapsibleState,
@@ -241,10 +218,9 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
       treeItem.tooltip = `Task: ${item.label}\nPath: ${item.path}\nBacklog: ${backlogName}`;
       return treeItem;
     });
-  } 
+  }
   // handle drag and drop
   handleDrag(source: readonly BacklogsTreeItem[], dataTransfer: vscode.DataTransfer): void {
-    console.log('handle drag source: ', source);
     try {
       if (source.length > 0) {
         const taskItem = source[0];
@@ -271,7 +247,6 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
         void vscode.window.showInformationMessage(`Dragging task: ${taskItem.label}`);
       }
     } catch (error) {
-      console.error('Drag error:', error);
       void vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
     }
   }

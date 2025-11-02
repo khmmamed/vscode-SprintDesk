@@ -10,6 +10,7 @@ import {
 } from '../utils/constant';
 import matter from 'gray-matter';
 import { getBacklogTasks } from '../controller/backlogController';
+import { relativePathTaskToTaskpath } from '../utils/taskUtils';
 
 interface TreeItemLike {
   label: string;
@@ -25,14 +26,18 @@ interface TreeItemLike {
   };
 }
 export function getTasksFromBacklog(backlogName: string): TreeItemLike[] {
-  console.log('backlog name:', backlogName);
   try {
     const tasks = getBacklogTasks(backlogName);
 
     return tasks.map((t: any) => {
       const label = path.basename(t.path || '');
       const absPath = t.path;
-      return { label, absPath, collapsibleState: vscode.TreeItemCollapsibleState.None, path: t.path };
+      return { 
+        label, 
+        absPath, 
+        collapsibleState: vscode.TreeItemCollapsibleState.None, 
+        path: relativePathTaskToTaskpath(t.path) 
+      };
     });
   } catch (e) {
      throw new Error('No tasks found.');

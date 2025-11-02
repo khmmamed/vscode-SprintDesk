@@ -146,6 +146,7 @@ export const UI = {
 
     // Status Text
     STATUS: {
+        NOT_STARTED: "Not_Started",
         UPCOMING: "Upcoming",
         CLOSED: "Closed",
         IN_PROGRESS: "In Progress"

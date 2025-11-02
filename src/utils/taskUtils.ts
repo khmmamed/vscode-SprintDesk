@@ -17,6 +17,12 @@ export const getTaskPath = (taskName: string): string => {
     const tasksPath = getTasksPath();
     return path.join(tasksPath, `${taskName}`);
 }
+export const relativePathTaskToTaskpath = (rel: string): string => {
+    const ws = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+    const ProjectDir = path.join(ws!, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
+    return path.resolve(ProjectDir, rel);
+};
+
 
 export interface TaskRow {
     task: string;
