@@ -347,7 +347,8 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   }
 
   private async getTasksFromBacklogFile(filePath: string): Promise<BacklogsTreeItem[]> {
-    const treeItems = backlogService.getTasksFromBacklog(filePath);
+    console.log('Getting tasks from backlog file:', path.basename(filePath));
+    const treeItems = backlogService.getTasksFromBacklog(path.basename(filePath));
     return treeItems.map(item => {
 
       const treeItem = new BacklogsTreeItem(

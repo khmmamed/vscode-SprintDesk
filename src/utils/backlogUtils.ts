@@ -13,7 +13,7 @@ export const getBacklogsPath = (): string => {
 };
 export const getBacklogPath = (backlogName: string): string => {
     const backlogsPath = getBacklogsPath();
-    return path.join(backlogsPath, `${backlogName}.md`);
+    return path.join(backlogsPath, `${backlogName}`);
 }
 export const getEpicsPath = (): string => {
     const wsFolders = vscode.workspace.workspaceFolders;

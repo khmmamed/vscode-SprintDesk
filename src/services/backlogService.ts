@@ -224,13 +224,13 @@ export async function addTaskToBacklogInteractive(item: any) {
   }
 }
 
-export function getTasksFromBacklog(filePath: string): TreeItemLike[] {
+export function getTasksFromBacklog(backlogName: string): TreeItemLike[] {
   try {
-    const tasks = getBacklogTasks('[backlog]_Features');
+    const tasks = getBacklogTasks(backlogName);
 
     return tasks.map((t: any) => {
       const label = path.basename(t.path || '');
-      const absPath = t.path ? path.resolve(path.dirname(filePath), t.path) : undefined;
+      const absPath = t.path;
       return { label, absPath, collapsibleState: vscode.TreeItemCollapsibleState.None };
     });
   } catch (e) {
