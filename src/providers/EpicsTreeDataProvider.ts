@@ -75,15 +75,11 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
         const epicName = data.title || file.replace(new RegExp(`^${PROJECT.FILE_PREFIX.EPIC}(.+)${PROJECT.MD_FILE_EXTENSION}$`), '$1').replace(/-/g, ' ');
         const epicId = data._id || `epic_${epicName.toLowerCase().replace(/\s+/g, '_')}`;
 
-        // Add epic status emoji if available
+        // Display epic name without emoji; show status in tooltip instead
         let label = epicName;
-        if (data.status) {
-          const statusEmoji = this.getStatusEmoji(data.status);
-          label = `${statusEmoji} ${epicName}`;
-        }
 
         const item = new EpicTreeItem(
-          label,
+    label,
           vscode.TreeItemCollapsibleState.Collapsed,
           epicId,
           filePath
@@ -96,7 +92,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
       });
     }
 
-    // Children level: list tasks under this epic
+  // Children level: list tasks under this epic
     try {
       const epicContent = fs.readFileSync(element.filePath, 'utf8');
       const { data } = matter(epicContent);
@@ -106,11 +102,8 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
       }
 
       return data.tasks.map((task: any) => {
-        let label = task.name;
-        if (task.status) {
-          const statusEmoji = this.getTaskStatusEmoji(task.status);
-          label = `${statusEmoji} ${task.name}`;
-        }
+        // Display task name without emoji. Put status/priority into description/tooltip.
+        const label = task.name;
 
         // Construct absolute file path for task
         const taskPath = path.isAbsolute(task.file)
@@ -124,20 +117,20 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
           taskPath
         );
 
-        // Add task details to tooltip
-        const priority = task.priority ? this.getPriorityEmoji(task.priority) + ' ' + task.priority : '';
-        taskItem.tooltip = new vscode.MarkdownString(
-          `**${task.name}**\n\n` +
-          (task.description ? `${task.description}\n\n` : '') +
-          `Status: ${this.getTaskStatusEmoji(task.status)} ${task.status}\n` +
-          (priority ? `Priority: ${priority}\n` : '') +
-          `\n[Open Task](${taskPath})`
-        );
+        // Add task details to tooltip and description
+        const priorityLabel = task.priority ? `${this.getPriorityEmoji(task.priority)} ${task.priority}` : '';
+        const tooltipMd = new vscode.MarkdownString();
+        tooltipMd.appendMarkdown(`**${task.name}**\n\n`);
+        if (task.description) tooltipMd.appendMarkdown(`${task.description}\n\n`);
+        tooltipMd.appendMarkdown(`Status: ${this.getTaskStatusEmoji(task.status)} ${task.status}\n`);
+        if (priorityLabel) tooltipMd.appendMarkdown(`Priority: ${priorityLabel}\n`);
+        tooltipMd.appendMarkdown(`\n[Open Task](${taskPath})`);
+        taskItem.tooltip = tooltipMd;
 
         // Add icons and metadata
         taskItem.contextValue = 'epic-task';
         taskItem.iconPath = new vscode.ThemeIcon('tasklist');
-        taskItem.description = priority; // Show priority in the tree view
+        taskItem.description = priorityLabel; // Show priority in the tree view
         taskItem.command = {
           command: 'vscode.open',
           title: 'Open Task',
@@ -159,65 +152,35 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
     }
     try {
       const taskDataItem = dataTransfer.get('application/vnd.code.tree.sprintdesk-tasks');
-      if (!taskDataItem || target.contextValue !== 'epic') {
-        return;
-      }
+      if (!taskDataItem || target.contextValue !== 'epic') return;
 
-      // Parse the transferred data (new format from TasksTreeDataProvider or other sources)
       const handleData = JSON.parse(taskDataItem.value as string);
-      console.log('Received drop data:', handleData);
 
-      // Determine task file path from multiple possible properties (new and legacy)
+      // Resolve task path: prefer explicit fields, then legacy itemHandles using exact basename extraction
       let taskPath: string | undefined;
       let taskIdFromData: string | undefined;
-
-      if (handleData.path) {
-        taskPath = handleData.path;
-        taskIdFromData = handleData._id;
-      } else if (handleData.filePath) {
-        taskPath = handleData.filePath;
-        taskIdFromData = handleData._id;
-      } else if (handleData.taskPath) {
-        taskPath = handleData.taskPath;
-        taskIdFromData = handleData._id;
-      } else if (handleData.itemHandles?.[0]) {
-        // Legacy behavior: parse the tree handle string
-        const handle = handleData.itemHandles[0];
-        const matches = handle.match(/\d+\/\d+:(?:[\u{1F300}-\u{1F9FF}]\s)?(.+)/u);
-        if (!matches || !matches[1]) {
-          throw new Error('Invalid task handle format');
-        }
-
-        const fullTaskName = matches[1].trim();
-        const cleanTaskName = fullTaskName
-          .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
-          .trim()
-          .replace(/\s+/g, '-')
-          .toLowerCase();
-
-        const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
-        const taskFileName = `${PROJECT.FILE_PREFIX.TASK}${cleanTaskName}${PROJECT.MD_FILE_EXTENSION}`;
-        taskPath = path.join(tasksDir, taskFileName);
+      if (handleData.path) taskPath = handleData.path, taskIdFromData = handleData._id;
+      else if (handleData.filePath) taskPath = handleData.filePath, taskIdFromData = handleData._id;
+      else if (handleData.taskPath) taskPath = handleData.taskPath, taskIdFromData = handleData._id;
+      else if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+        // exact extraction per request: itemHandles[0].split(' ')[1]
+        const raw = String(handleData.itemHandles[0] || '');
+        const parts = raw.split(' ');
+        const maybeBase = parts[1] || parts.pop() || raw;
+        let base = path.basename(maybeBase).trim();
+        if (!base.toLowerCase().endsWith('.md')) base = `${base}.md`;
+        taskPath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, base);
       } else {
         throw new Error('No task path found in drop data');
       }
 
-      console.log('Resolved task path:', taskPath);
+      if (!taskPath) throw new Error('No task path resolved');
+      if (!fs.existsSync(taskPath)) throw new Error(`Task file not found: ${taskPath}`);
 
-      // Ensure we actually resolved a path
-      if (!taskPath) {
-        throw new Error('No task path resolved from drop data');
-      }
-
-      // Verify task file exists
-      if (!fs.existsSync(taskPath)) {
-        throw new Error(`Task file not found: ${taskPath}`);
-      }
-
-  // Read both task and epic files
-  const taskContent = fs.readFileSync(taskPath, 'utf8');
-  const taskMatter = matter(taskContent);
-  const taskId = taskIdFromData || taskMatter.data._id;
+      // Read both task and epic files
+      const taskContent = fs.readFileSync(taskPath, 'utf8');
+      const taskMatter = matter(taskContent);
+      const taskId = taskIdFromData || taskMatter.data._id;
 
       // Read epic file
       const epicContent = fs.readFileSync(target.filePath, 'utf8');
@@ -246,10 +209,14 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
         epicMatter.data.tasks.push(taskData);
       }
 
-      // Write back the epic file
-      fs.writeFileSync(target.filePath, matter.stringify(epicContent, epicMatter.data));
+  // Confirm with the user before writing
+  const confirm = await vscode.window.showInformationMessage(`Add task "${taskData.name}" to epic "${path.basename(target.filePath)}"?`, { modal: true }, 'Add');
+  if (confirm !== 'Add') return;
 
-      // Now execute the command to handle any additional processing
+  // Write back the epic file (use parsed content to preserve body)
+  fs.writeFileSync(target.filePath, matter.stringify(epicMatter.content, epicMatter.data));
+
+  // Now execute the command to handle any additional processing
       await vscode.commands.executeCommand('sprintdesk.addTaskToEpic', {
         epicId: target.epicId,
         epicPath: target.filePath,

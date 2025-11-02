@@ -141,155 +141,210 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     return `${dd}-${mm}-${yyyy}`;
   }
 
+// Helper to resolve task path from drop data
+private resolveTaskPath(handleData: any): string {
+  let taskFilePath: string | undefined;
+
+  // Prefer explicit path-like fields first
+  if (handleData.path) taskFilePath = handleData.path;
+  else if (handleData.filePath) taskFilePath = handleData.filePath;
+  else if (handleData.taskPath) taskFilePath = handleData.taskPath;
+
+  // If legacy itemHandles exists, extract basename using split(' ')[1]
+  if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+    const raw = String(handleData.itemHandles[0] || '');
+    const parts = raw.split(' ');
+    const maybeBasename = parts[1] || parts.pop() || raw;
+    let base = path.basename(maybeBasename).trim();
+    if (!base.toLowerCase().endsWith('.md')) base = `${base}.md`;
+
+    const ws = this.getWorkspaceRoot();
+    if (!ws) throw new Error('No workspace root found');
+    taskFilePath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, base);
+  }
+
+  if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
+  if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
+  
+  return taskFilePath;
+}
+
+// Helper to parse task metadata from file
+private getTaskMetadata(taskFilePath: string, sprintFilePath: string) {
+  const taskMatter = matter(fs.readFileSync(taskFilePath, 'utf8'));
+  const taskName = taskMatter.data.title || taskMatter.data.name ||
+    path.basename(taskFilePath, '.md').replace(/^\[Task\]_?/i, '').replace(/[-_]+/g, ' ').trim();
+
+  return {
+    name: taskName,
+    status: taskMatter.data.status || 'not-started',
+    file: path.relative(path.dirname(sprintFilePath), taskFilePath).replace(/\\/g, '/'),
+    description: taskMatter.data.description || '',
+    priority: taskMatter.data.priority || 'medium',
+    type: taskMatter.data.type || 'feature'
+  };
+}
+
+// Helper to add task to sprint file
+private async addTaskToSprint(sprintFilePath: string, taskData: any) {
+  const sprintContent = fs.readFileSync(sprintFilePath, 'utf8');
+  const sprintMatter = matter(sprintContent);
+  if (!Array.isArray(sprintMatter.data.tasks)) sprintMatter.data.tasks = [];
+
+  const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
+  if (idx >= 0) sprintMatter.data.tasks[idx] = taskData;
+  else sprintMatter.data.tasks.push(taskData);
+
+  const marker = UI.SECTIONS.TASKS_MARKER;
+  if (!sprintMatter.content.includes(marker)) sprintMatter.content += `\n\n${marker}\n`;
+
+  const link = `- [${taskData.name}](${taskData.file})`;
+  const pos = sprintMatter.content.indexOf(marker);
+  if (pos !== -1) {
+    sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) + "\n" + link + sprintMatter.content.slice(pos + marker.length);
+  }
+
+  fs.writeFileSync(sprintFilePath, matter.stringify(sprintMatter.content, sprintMatter.data));
+}
+
+// Source-specific handlers
+private async handleTaskDropFromTasks(target: SprintsTreeItem, handleData: any): Promise<void> {
+  const taskFilePath = this.resolveTaskPath(handleData);
+  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+  
+  const confirmed = await vscode.window.showInformationMessage(
+    `Add task "${taskData.name}" to sprint?`,
+    { modal: true },
+    'Add'
+  );
+  if (confirmed !== 'Add') return;
+
+  await this.addTaskToSprint(target.filePath!, taskData);
+}
+
+private async handleTaskDropFromSprints(target: SprintsTreeItem, handleData: any): Promise<void> {
+  const taskFilePath = handleData.filePath;
+  if (!taskFilePath || !fs.existsSync(taskFilePath)) throw new Error('Invalid task path from sprint');
+  
+  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+  const confirmed = await vscode.window.showInformationMessage(
+    `Move task "${taskData.name}" to this sprint?`,
+    { modal: true },
+    'Move'
+  );
+  if (confirmed !== 'Move') return;
+
+  // Add to new sprint and remove from source sprint if provided
+  await this.addTaskToSprint(target.filePath!, taskData);
+  if (handleData.sourceContainer?.path) {
+    // TODO: Implement removal from source sprint
+  }
+}
+
+private async handleTaskDropFromEpics(target: SprintsTreeItem, handleData: any): Promise<void> {
+  const taskFilePath = this.resolveTaskPath(handleData);
+  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+  
+  const confirmed = await vscode.window.showInformationMessage(
+    `Add epic task "${taskData.name}" to sprint?`,
+    { modal: true },
+    'Add'
+  );
+  if (confirmed !== 'Add') return;
+
+  await this.addTaskToSprint(target.filePath!, taskData);
+}
+
+private async handleTaskDropFromBacklogs(target: SprintsTreeItem, handleData: any): Promise<void> {
+  const taskFilePath = this.resolveTaskPath(handleData);
+  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+  
+  const confirmed = await vscode.window.showInformationMessage(
+    `Move backlog task "${taskData.name}" to sprint?`,
+    { modal: true },
+    'Move'
+  );
+  if (confirmed !== 'Move') return;
+
+  await this.addTaskToSprint(target.filePath!, taskData);
+}
+
 async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
   try {
     if (!target?.filePath || target.contextValue !== 'sprint') {
-      console.log("Drop target invalid or not a sprint");
+      console.log('Drop target invalid or not a sprint');
       return;
     }
 
-    console.log("Starting handleDrop for sprint:", target.filePath);
-
-    const taskSources = [
-      { mimeType: 'application/vnd.code.tree.sprintdesk-tasks', source: 'Tasks' },
-      { mimeType: 'application/vnd.code.tree.sprintdesk-backlogs', source: 'Backlogs' },
-      { mimeType: 'application/vnd.code.tree.sprintdesk-epics', source: 'Epics' },
-      { mimeType: 'application/vnd.code.tree.sprintdesk-sprints', source: 'Sprints' }
-    ];
-
-    let handleData: any = null;
-    let sourceType = '';
-    for (const source of taskSources) {
-      const item = dataTransfer.get(source.mimeType);
-
-      if (item) {
-        handleData = JSON.parse(item.value as string);
-        sourceType = source.source;
-        break;
-      }
-    }
-    if (!handleData) {
-      console.log("No task data found in dataTransfer");
-      return;
-    }
-
-    console.log("Received drop data from:", sourceType, handleData);
-
-    let taskFilePath: string;
-    let taskMetadata: any = {};
-
-    // Check if we have the new combined format
-    if (handleData.taskData) {
-      console.log("Found full task data in transfer");
-      taskFilePath = handleData.taskData.path;
-      taskMetadata = {
-        name: handleData.taskData.name,
-        status: handleData.taskData.status,
-        priority: handleData.taskData.priority,
-        type: handleData.taskData.type,
-        epic: handleData.taskData.epic
-      };
-    }
-
-    // Handle new TaskData format
-    if (handleData._id && handleData.path) {
-      console.log("Using new TaskData format");
-      taskFilePath = handleData.path;
-      taskMetadata = {
-        name: handleData.name,
-        status: handleData.status,
-        priority: handleData.priority,
-        type: handleData.type
-      };
-    }
-    // Handle legacy filePath format
-    else if (handleData.filePath) {
-      taskFilePath = handleData.filePath;
-      console.log("Using provided filePath:", taskFilePath);
-    }
-    // Handle legacy taskPath format
-    else if (handleData.taskPath) {
-      taskFilePath = handleData.taskPath;
-      console.log("Using provided taskPath:", taskFilePath);
-    }
-    // Handle legacy itemHandles format
-    else if (handleData.itemHandles && handleData.itemHandles.length > 0) {
-      const handleRaw = handleData.itemHandles[0];
-      console.log("Raw item handle:", handleRaw);
-
-      // Extract task ID if present in the original form
-      const idMatch = handleRaw.match(/tsk_([a-zA-Z0-9_-]+)/);
-      if (idMatch) {
-        const taskId = idMatch[1];
-        const ws = this.getWorkspaceRoot();
-        if (!ws) throw new Error("No workspace root found");
-        
-        taskFilePath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, `[Task]_tsk_${taskId}.md`);
-      } else {
-        // Fallback to legacy path construction
-        const m = handleRaw.match(/\d+\/\d+:(.+)$/);
-        if (!m?.[1]) throw new Error('Invalid task handle format');
-
-        const taskName = m[1]
-          .replace(/^[^\w[]+\s*/u, '');
-
-        const ws = this.getWorkspaceRoot();
-        if (!ws) throw new Error("No workspace root found");
-
-
-        taskFilePath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, `[Task]_${taskName}.md`);
-      }
-      console.log("Constructed task file path:", taskFilePath);
-    } else {
-      throw new Error("No task path found in drop data");
-    }
-
-    if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
-
-    console.log("Task file exists:", taskFilePath);
-
-    const sprintContent = fs.readFileSync(target.filePath, 'utf8');
-    const sprintMatter = matter(sprintContent);
-    if (!Array.isArray(sprintMatter.data.tasks)) sprintMatter.data.tasks = [];
-
-    const taskContent = fs.readFileSync(taskFilePath, 'utf8');
-    const taskMatter = matter(taskContent);
-
-    const taskName = taskMatter.data.title || taskMatter.data.name ||
-      path.basename(taskFilePath, '.md').replace(/^\[Task\]_/, '').replace(/-/g, ' ');
-
-    console.log("Task name resolved:", taskName);
-
-    // Merge metadata from the drag source with file data
-    const taskData = {
-      name: taskMetadata.name || taskName,
-      status: taskMetadata.status || taskMatter.data.status || 'not-started',
-      file: path.relative(path.dirname(target.filePath), taskFilePath).replace(/\\/g, '/'),
-      description: taskMatter.data.description || '',
-      priority: taskMetadata.priority || taskMatter.data.priority || 'medium',
-      type: taskMetadata.type || taskMatter.data.type || 'feature'
+    const mimeTypes = {
+      tasks: 'application/vnd.code.tree.sprintdesk-tasks',
+      sprints: 'application/vnd.code.tree.sprintdesk-sprints',
+      epics: 'application/vnd.code.tree.sprintdesk-epics',
+      backlogs: 'application/vnd.code.tree.sprintdesk-backlogs'
     };
 
-    const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
-    if (idx >= 0) sprintMatter.data.tasks[idx] = taskData;
-    else sprintMatter.data.tasks.push(taskData);
-
-    const marker = UI.SECTIONS.TASKS_MARKER;
-    if (!sprintMatter.content.includes(marker)) sprintMatter.content += `\n\n${marker}\n`;
-
-    const link = `- ${UI.EMOJI.STATUS.NOT_STARTED} [${taskData.name}](${taskData.file})`;
-    const pos = sprintMatter.content.indexOf(marker);
-    if (pos !== -1) {
-      sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) + "\n" + link + sprintMatter.content.slice(pos + marker.length);
+    // Get first available transfer item
+    const dt = Object.values(mimeTypes)
+      .map(m => ({ mime: m, data: dataTransfer.get(m) }))
+      .find(x => x.data !== undefined && x.data !== null);
+    
+    if (!dt?.data) {
+      console.log('No valid task data found in dataTransfer');
+      return;
     }
 
-    fs.writeFileSync(target.filePath, matter.stringify(sprintMatter.content, sprintMatter.data));
+    const handleData = JSON.parse(dt.data.value as string);
+    if (!handleData) {
+      console.log('No valid task data in drop');
+      return;
+    }
+
+    // Route to appropriate handler based on mime type
+    switch (dt.mime) {
+      case mimeTypes.tasks:
+        await this.handleTaskDropFromTasks(target, handleData);
+        break;
+      case mimeTypes.sprints:
+        await this.handleTaskDropFromSprints(target, handleData);
+        break;
+      case mimeTypes.epics:
+        await this.handleTaskDropFromEpics(target, handleData);
+        break;
+      case mimeTypes.backlogs:
+        await this.handleTaskDropFromBacklogs(target, handleData);
+        break;
+    }
+
     this.refresh();
-    void vscode.window.showInformationMessage(`Task added to sprint: ${taskData.name}`);
+    void vscode.window.showInformationMessage(`Task successfully added to sprint`);
 
   } catch (err: any) {
-    console.error("Drop error:", err);
+    console.error('Drop error:', err);
     void vscode.window.showErrorMessage(`Failed to add task to sprint: ${err.message || err}`);
+  }
+}
+
+
+
+private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData: any) {
+  const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
+  if (idx >= 0) {
+    sprintMatter.data.tasks[idx] = taskData;
+  } else {
+    sprintMatter.data.tasks.push(taskData);
+  }
+
+  const marker = UI.SECTIONS.TASKS_MARKER;
+  if (!sprintMatter.content.includes(marker)) {
+    sprintMatter.content += `\n\n${marker}\n`;
+  }
+
+  // Add task link without emoji
+  const link = `- [${taskData.name}](${taskData.file})`;
+  const pos = sprintMatter.content.indexOf(marker);
+  if (pos !== -1) {
+    sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) + 
+      "\n" + link + sprintMatter.content.slice(pos + marker.length);
   }
 }
 

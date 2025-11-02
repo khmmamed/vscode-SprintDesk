@@ -215,13 +215,13 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
             .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
             .trim();
             
-          // Construct task file path
-          taskPath = path.join(
-            this.workspaceRoot,
-            PROJECT.SPRINTDESK_DIR,
-            PROJECT.TASKS_DIR,
-            `${PROJECT.FILE_PREFIX.TASK}${taskName}${PROJECT.MD_FILE_EXTENSION}`
-          );
+            // Construct task file path using exact basename extraction if provided
+            // If taskName already contains extension or prefix, keep it; otherwise build filename
+            let base = taskName;
+            if (!base.toLowerCase().endsWith('.md')) base = `${base}${PROJECT.MD_FILE_EXTENSION}`;
+            // If it already includes the TASK prefix, use as-is, otherwise prefix
+            if (!base.startsWith(PROJECT.FILE_PREFIX.TASK)) base = `${PROJECT.FILE_PREFIX.TASK}${base}`;
+            taskPath = path.join(this.workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, base);
         } else {
           throw new Error('No task path found in drop data');
         }
@@ -260,9 +260,9 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
           backlogContent += `\n\n${tasksSectionMarker}\n`;
         }
 
-        // Add the task reference
-        const taskLink = `- ${UI.EMOJI.COMMON.TASK} [${taskName}](${path.relative(path.dirname(target.filePath), taskPath).replace(/\\/g, '/')})`;
-        
+        // Add the task reference (no emoji in link)
+        const taskLink = `- [${taskName}](${path.relative(path.dirname(target.filePath), taskPath).replace(/\\/g, '/')})`;
+
         // Insert the task link after the Tasks section
         const tasksIndex = backlogContent.indexOf(tasksSectionMarker);
         if (tasksIndex !== -1) {
@@ -270,6 +270,10 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
             '\n' + taskLink +
             backlogContent.slice(tasksIndex + tasksSectionMarker.length);
         }
+
+        // Confirm with the user before writing
+        const confirm = await vscode.window.showInformationMessage(`Add task "${taskName}" to backlog "${target.label}"?`, { modal: true }, 'Add');
+        if (confirm !== 'Add') return;
 
         // Write the updated content back to the backlog file
         fs.writeFileSync(target.filePath, backlogContent);
@@ -309,7 +313,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
           .replace(/^\[Task\]_/, '')
           .replace(/-/g, ' ');
 
-        const taskLink = `- ${UI.EMOJI.COMMON.TASK} [${taskName}](${path.relative(path.dirname(target.filePath), source.taskPath).replace(/\\/g, '/')})`;
+  const taskLink = `- [${taskName}](${path.relative(path.dirname(target.filePath), source.taskPath).replace(/\\/g, '/')})`;
         
         // Insert the task link after the Tasks section
         const tasksIndex = targetContent.indexOf(tasksSectionMarker);
@@ -329,9 +333,13 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
         }
       }
 
-      // Write updated content to target backlog
-      fs.writeFileSync(target.filePath, targetContent);
-      this.refresh();
+  // Confirm with the user before writing moved tasks
+  const confirmMove = await vscode.window.showInformationMessage(`Add ${sources.length} task(s) to backlog "${target.label}"?`, { modal: true }, 'Add');
+  if (confirmMove !== 'Add') return;
+
+  // Write updated content to target backlog
+  fs.writeFileSync(target.filePath, targetContent);
+  this.refresh();
     } catch (error: unknown) {
       console.error('Drop error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
