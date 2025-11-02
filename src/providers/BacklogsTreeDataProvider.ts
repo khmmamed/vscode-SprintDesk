@@ -46,6 +46,7 @@ export class BacklogsTreeItem extends vscode.TreeItem {
       this.contextValue = 'task';
 
       try {
+        
         const content = fs.readFileSync(taskPath, 'utf8');
         const taskData = content.match(/^status:\s*(.+)|^priority:\s*(.+)|^type:\s*(.+)/gm);
 
@@ -201,13 +202,8 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     let taskFilePath: string | undefined;
     let taskName: string | undefined;
 
-    // Prefer explicit path-like fields first
-    if (handleData.path) taskFilePath = handleData.path;
-    else if (handleData.filePath) taskFilePath = handleData.filePath;
-    else if (handleData.taskPath) taskFilePath = handleData.taskPath;
-
     // If legacy itemHandles exists, extract basename using split(' ')[1]
-    if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
       const raw = String(handleData.itemHandles[0] || '');
       const parts = raw.split(' ');
       taskName = parts[1] || parts.pop() || raw;
@@ -269,7 +265,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
         epics: 'application/vnd.code.tree.sprintdesk-epics',
         sprints: 'application/vnd.code.tree.sprintdesk-sprints'
       };
-
+     
       for (const [source, mimeType] of Object.entries(taskSources)) {
         const dataItem = dataTransfer.get(mimeType);
         if (dataItem) {

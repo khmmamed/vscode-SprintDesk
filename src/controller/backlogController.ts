@@ -46,44 +46,42 @@ export function addTaskToBacklog(backlogPath: string, taskPath: string): void {
   const { data: taskMetadata } = matter.read(taskPath);
   const { data: backlogMetadata, content: backlogContent } = matter.read(backlogPath);
 
-
-  // Add task to markdown section
-  const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
-  let content = backlogContent;
-  if (!content.includes(tasksSectionMarker)) {
-    content += `\n\n${tasksSectionMarker}\n`;
-  }
-  const taskPathFormatted = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
-  const taskLink = `- [${taskMetadata.title}](${taskPathFormatted})`;
-  const tasksIndex = content.indexOf(tasksSectionMarker);
-
-  if (tasksIndex !== -1) {
-    content = content.slice(0, tasksIndex + tasksSectionMarker.length) +
-      '\n' + taskLink +
-      content.slice(tasksIndex + tasksSectionMarker.length);
-  }
-
-  // Add task to YAML frontmatter
-  const task = {
-    _id: taskMetadata._id,
-    title: taskMetadata.title,
-    priority: taskMetadata.priority || 'Medium',
-    status: taskMetadata.status || 'Not Started',
-    path: taskPathFormatted
-  };
-
-  if (!backlogMetadata.tasks) {
-    backlogMetadata.tasks = [];
-  }
-  // Check if task already exists in frontmatter
-  const existingTaskIndex = backlogMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id);
+  const existingTaskIndex = backlogMetadata.tasks ? backlogMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
   if (existingTaskIndex === -1) {
+    // Add task to markdown section
+    const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
+    let content = backlogContent;
+    if (!content.includes(tasksSectionMarker)) {
+      content += `\n\n${tasksSectionMarker}\n`;
+    }
+    const taskPathFormatted = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
+    const taskLink = `- [${taskMetadata.title}](${taskPathFormatted})`;
+    const tasksIndex = content.indexOf(tasksSectionMarker);
+
+    if (tasksIndex !== -1) {
+      content = content.slice(0, tasksIndex + tasksSectionMarker.length) +
+        '\n' + taskLink +
+        content.slice(tasksIndex + tasksSectionMarker.length);
+    }
+    // Add task to YAML frontmatter
+    const task = {
+      _id: taskMetadata._id,
+      title: taskMetadata.title,
+      priority: taskMetadata.priority || 'Medium',
+      status: taskMetadata.status || 'Not Started',
+      path: taskPathFormatted
+    };
+
+    if (!backlogMetadata.tasks) {
+      backlogMetadata.tasks = [];
+    }
     backlogMetadata.tasks.push(task);
+    // Write updated content with both markdown and frontmatter changes
+    const updatedContent = matter.stringify(content, backlogMetadata);
+    fs.writeFileSync(backlogPath, updatedContent);
   } else {
-    backlogMetadata.tasks[existingTaskIndex] = task;
+    console.log(`Task with ID ${taskMetadata._id} already exists in backlog.`);
+    return;
   }
 
-  // Write updated content with both markdown and frontmatter changes
-  const updatedContent = matter.stringify(content, backlogMetadata);
-  fs.writeFileSync(backlogPath, updatedContent);
 }

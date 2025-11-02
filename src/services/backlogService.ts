@@ -226,7 +226,7 @@ export async function addTaskToBacklogInteractive(item: any) {
 
 export function getTasksFromBacklog(filePath: string): TreeItemLike[] {
   try {
-    const tasks = getBacklogTasks('[backlog]_Features.md');
+    const tasks = getBacklogTasks('[backlog]_Features');
 
     return tasks.map((t: any) => {
       const label = path.basename(t.path || '');
