@@ -127,13 +127,11 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
     return items;
   }
-
   private humanizeSprintName(filename: string): string {
     const base = filename.replace(/\.[^.]+$/, '');
     const cleaned = base.replace(/^\[(?:Sprint|S)\]_?/i, '').replace(/[_-]+/g, ' ').trim();
     return cleaned || base;
   }
-
   private formatDMY(d: Date): string {
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -141,218 +139,202 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     return `${dd}-${mm}-${yyyy}`;
   }
 
-// Helper to resolve task path from drop data
-private resolveTaskPath(handleData: any): string {
-  let taskFilePath: string | undefined;
+  // Helper to resolve task path from drop data
+  private resolveTaskPath(handleData: any): string {
+    let taskFilePath: string | undefined;
 
-  // Prefer explicit path-like fields first
-  if (handleData.path) taskFilePath = handleData.path;
-  else if (handleData.filePath) taskFilePath = handleData.filePath;
-  else if (handleData.taskPath) taskFilePath = handleData.taskPath;
+    // Prefer explicit path-like fields first
+    if (handleData.path) taskFilePath = handleData.path;
+    else if (handleData.filePath) taskFilePath = handleData.filePath;
+    else if (handleData.taskPath) taskFilePath = handleData.taskPath;
 
-  // If legacy itemHandles exists, extract basename using split(' ')[1]
-  if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
-    const raw = String(handleData.itemHandles[0] || '');
-    const parts = raw.split(' ');
-    const maybeBasename = parts[1] || parts.pop() || raw;
-    let base = path.basename(maybeBasename).trim();
-    if (!base.toLowerCase().endsWith('.md')) base = `${base}.md`;
+    // If legacy itemHandles exists, extract basename using split(' ')[1]
+    if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+      const raw = String(handleData.itemHandles[0] || '');
+      const parts = raw.split(' ');
+      const maybeBasename = parts[1] || parts.pop() || raw;
+      let base = path.basename(maybeBasename).trim();
+      if (!base.toLowerCase().endsWith('.md')) base = `${base}.md`;
 
-    const ws = this.getWorkspaceRoot();
-    if (!ws) throw new Error('No workspace root found');
-    taskFilePath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, base);
-  }
-
-  if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
-  if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
-  
-  return taskFilePath;
-}
-
-// Helper to parse task metadata from file
-private getTaskMetadata(taskFilePath: string, sprintFilePath: string) {
-  const taskMatter = matter(fs.readFileSync(taskFilePath, 'utf8'));
-  const taskName = taskMatter.data.title || taskMatter.data.name ||
-    path.basename(taskFilePath, '.md').replace(/^\[Task\]_?/i, '').replace(/[-_]+/g, ' ').trim();
-
-  return {
-    name: taskName,
-    status: taskMatter.data.status || 'not-started',
-    file: path.relative(path.dirname(sprintFilePath), taskFilePath).replace(/\\/g, '/'),
-    description: taskMatter.data.description || '',
-    priority: taskMatter.data.priority || 'medium',
-    type: taskMatter.data.type || 'feature'
-  };
-}
-
-// Helper to add task to sprint file
-private async addTaskToSprint(sprintFilePath: string, taskData: any) {
-  const sprintContent = fs.readFileSync(sprintFilePath, 'utf8');
-  const sprintMatter = matter(sprintContent);
-  if (!Array.isArray(sprintMatter.data.tasks)) sprintMatter.data.tasks = [];
-
-  const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
-  if (idx >= 0) sprintMatter.data.tasks[idx] = taskData;
-  else sprintMatter.data.tasks.push(taskData);
-
-  const marker = UI.SECTIONS.TASKS_MARKER;
-  if (!sprintMatter.content.includes(marker)) sprintMatter.content += `\n\n${marker}\n`;
-
-  const link = `- [${taskData.name}](${taskData.file})`;
-  const pos = sprintMatter.content.indexOf(marker);
-  if (pos !== -1) {
-    sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) + "\n" + link + sprintMatter.content.slice(pos + marker.length);
-  }
-
-  fs.writeFileSync(sprintFilePath, matter.stringify(sprintMatter.content, sprintMatter.data));
-}
-
-// Source-specific handlers
-private async handleTaskDropFromTasks(target: SprintsTreeItem, handleData: any): Promise<void> {
-  const taskFilePath = this.resolveTaskPath(handleData);
-  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
-  
-  const confirmed = await vscode.window.showInformationMessage(
-    `Add task "${taskData.name}" to sprint?`,
-    { modal: true },
-    'Add'
-  );
-  if (confirmed !== 'Add') return;
-
-  await this.addTaskToSprint(target.filePath!, taskData);
-}
-
-private async handleTaskDropFromSprints(target: SprintsTreeItem, handleData: any): Promise<void> {
-  const taskFilePath = handleData.filePath;
-  if (!taskFilePath || !fs.existsSync(taskFilePath)) throw new Error('Invalid task path from sprint');
-  
-  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
-  const confirmed = await vscode.window.showInformationMessage(
-    `Move task "${taskData.name}" to this sprint?`,
-    { modal: true },
-    'Move'
-  );
-  if (confirmed !== 'Move') return;
-
-  // Add to new sprint and remove from source sprint if provided
-  await this.addTaskToSprint(target.filePath!, taskData);
-  if (handleData.sourceContainer?.path) {
-    // TODO: Implement removal from source sprint
-  }
-}
-
-private async handleTaskDropFromEpics(target: SprintsTreeItem, handleData: any): Promise<void> {
-  const taskFilePath = this.resolveTaskPath(handleData);
-  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
-  
-  const confirmed = await vscode.window.showInformationMessage(
-    `Add epic task "${taskData.name}" to sprint?`,
-    { modal: true },
-    'Add'
-  );
-  if (confirmed !== 'Add') return;
-
-  await this.addTaskToSprint(target.filePath!, taskData);
-}
-
-private async handleTaskDropFromBacklogs(target: SprintsTreeItem, handleData: any): Promise<void> {
-  const taskFilePath = this.resolveTaskPath(handleData);
-  const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
-  
-  const confirmed = await vscode.window.showInformationMessage(
-    `Move backlog task "${taskData.name}" to sprint?`,
-    { modal: true },
-    'Move'
-  );
-  if (confirmed !== 'Move') return;
-
-  await this.addTaskToSprint(target.filePath!, taskData);
-}
-
-async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
-  try {
-    if (!target?.filePath || target.contextValue !== 'sprint') {
-      console.log('Drop target invalid or not a sprint');
-      return;
+      const ws = this.getWorkspaceRoot();
+      if (!ws) throw new Error('No workspace root found');
+      taskFilePath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, base);
     }
 
-    const mimeTypes = {
-      tasks: 'application/vnd.code.tree.sprintdesk-tasks',
-      sprints: 'application/vnd.code.tree.sprintdesk-sprints',
-      epics: 'application/vnd.code.tree.sprintdesk-epics',
-      backlogs: 'application/vnd.code.tree.sprintdesk-backlogs'
+    if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
+    if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
+
+    return taskFilePath;
+  }
+  // Helper to parse task metadata from file
+  private getTaskMetadata(taskFilePath: string, sprintFilePath: string) {
+    const taskMatter = matter(fs.readFileSync(taskFilePath, 'utf8'));
+    const taskName = taskMatter.data.title || taskMatter.data.name ||
+      path.basename(taskFilePath, '.md').replace(/^\[Task\]_?/i, '').replace(/[-_]+/g, ' ').trim();
+
+    return {
+      name: taskName,
+      status: taskMatter.data.status || 'not-started',
+      file: path.relative(path.dirname(sprintFilePath), taskFilePath).replace(/\\/g, '/'),
+      description: taskMatter.data.description || '',
+      priority: taskMatter.data.priority || 'medium',
+      type: taskMatter.data.type || 'feature'
     };
+  }
+  // Helper to add task to sprint file
+  private async addTaskToSprint(sprintFilePath: string, taskData: any) {
+    const sprintContent = fs.readFileSync(sprintFilePath, 'utf8');
+    const sprintMatter = matter(sprintContent);
+    if (!Array.isArray(sprintMatter.data.tasks)) sprintMatter.data.tasks = [];
 
-    // Get first available transfer item
-    const dt = Object.values(mimeTypes)
-      .map(m => ({ mime: m, data: dataTransfer.get(m) }))
-      .find(x => x.data !== undefined && x.data !== null);
-    
-    if (!dt?.data) {
-      console.log('No valid task data found in dataTransfer');
-      return;
+    const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
+    if (idx >= 0) sprintMatter.data.tasks[idx] = taskData;
+    else sprintMatter.data.tasks.push(taskData);
+
+    const marker = UI.SECTIONS.TASKS_MARKER;
+    if (!sprintMatter.content.includes(marker)) sprintMatter.content += `\n\n${marker}\n`;
+
+    const link = `- [${taskData.name}](${taskData.file})`;
+    const pos = sprintMatter.content.indexOf(marker);
+    if (pos !== -1) {
+      sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) + "\n" + link + sprintMatter.content.slice(pos + marker.length);
     }
 
-    const handleData = JSON.parse(dt.data.value as string);
-    if (!handleData) {
-      console.log('No valid task data in drop');
-      return;
+    fs.writeFileSync(sprintFilePath, matter.stringify(sprintMatter.content, sprintMatter.data));
+  }
+  // Source-specific handlers
+  private async handleTaskDropFromTasks(target: SprintsTreeItem, handleData: any): Promise<void> {
+    const taskFilePath = this.resolveTaskPath(handleData);
+    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+
+    const confirmed = await vscode.window.showInformationMessage(
+      `Add task "${taskData.name}" to sprint?`,
+      { modal: true },
+      'Add'
+    );
+    if (confirmed !== 'Add') return;
+
+    await this.addTaskToSprint(target.filePath!, taskData);
+  }
+  private async handleTaskDropFromSprints(target: SprintsTreeItem, handleData: any): Promise<void> {
+    const taskFilePath = handleData.filePath;
+    if (!taskFilePath || !fs.existsSync(taskFilePath)) throw new Error('Invalid task path from sprint');
+
+    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+    const confirmed = await vscode.window.showInformationMessage(
+      `Move task "${taskData.name}" to this sprint?`,
+      { modal: true },
+      'Move'
+    );
+    if (confirmed !== 'Move') return;
+
+    // Add to new sprint and remove from source sprint if provided
+    await this.addTaskToSprint(target.filePath!, taskData);
+    if (handleData.sourceContainer?.path) {
+      // TODO: Implement removal from source sprint
+    }
+  }
+  private async handleTaskDropFromEpics(target: SprintsTreeItem, handleData: any): Promise<void> {
+    const taskFilePath = this.resolveTaskPath(handleData);
+    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+
+    const confirmed = await vscode.window.showInformationMessage(
+      `Add epic task "${taskData.name}" to sprint?`,
+      { modal: true },
+      'Add'
+    );
+    if (confirmed !== 'Add') return;
+
+    await this.addTaskToSprint(target.filePath!, taskData);
+  }
+  private async handleTaskDropFromBacklogs(target: SprintsTreeItem, handleData: any): Promise<void> {
+    const taskFilePath = this.resolveTaskPath(handleData);
+    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+
+    const confirmed = await vscode.window.showInformationMessage(
+      `Move backlog task "${taskData.name}" to sprint?`,
+      { modal: true },
+      'Move'
+    );
+    if (confirmed !== 'Move') return;
+
+    await this.addTaskToSprint(target.filePath!, taskData);
+  }
+  async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    try {
+      if (!target?.filePath || target.contextValue !== 'sprint') {
+        console.log('Drop target invalid or not a sprint');
+        return;
+      }
+
+      const mimeTypes = {
+        tasks: 'application/vnd.code.tree.sprintdesk-tasks',
+        sprints: 'application/vnd.code.tree.sprintdesk-sprints',
+        epics: 'application/vnd.code.tree.sprintdesk-epics',
+        backlogs: 'application/vnd.code.tree.sprintdesk-backlogs'
+      };
+
+      // Get first available transfer item
+      const dt = Object.values(mimeTypes)
+        .map(m => ({ mime: m, data: dataTransfer.get(m) }))
+        .find(x => x.data !== undefined && x.data !== null);
+
+      if (!dt?.data) {
+        console.log('No valid task data found in dataTransfer');
+        return;
+      }
+
+      const handleData = JSON.parse(dt.data.value as string);
+      if (!handleData) {
+        console.log('No valid task data in drop');
+        return;
+      }
+
+      // Route to appropriate handler based on mime type
+      switch (dt.mime) {
+        case mimeTypes.tasks:
+          await this.handleTaskDropFromTasks(target, handleData);
+          break;
+        case mimeTypes.sprints:
+          await this.handleTaskDropFromSprints(target, handleData);
+          break;
+        case mimeTypes.epics:
+          await this.handleTaskDropFromEpics(target, handleData);
+          break;
+        case mimeTypes.backlogs:
+          await this.handleTaskDropFromBacklogs(target, handleData);
+          break;
+      }
+
+      this.refresh();
+      void vscode.window.showInformationMessage(`Task successfully added to sprint`);
+
+    } catch (err: any) {
+      console.error('Drop error:', err);
+      void vscode.window.showErrorMessage(`Failed to add task to sprint: ${err.message || err}`);
+    }
+  }
+  private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData: any) {
+    const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
+    if (idx >= 0) {
+      sprintMatter.data.tasks[idx] = taskData;
+    } else {
+      sprintMatter.data.tasks.push(taskData);
     }
 
-    // Route to appropriate handler based on mime type
-    switch (dt.mime) {
-      case mimeTypes.tasks:
-        await this.handleTaskDropFromTasks(target, handleData);
-        break;
-      case mimeTypes.sprints:
-        await this.handleTaskDropFromSprints(target, handleData);
-        break;
-      case mimeTypes.epics:
-        await this.handleTaskDropFromEpics(target, handleData);
-        break;
-      case mimeTypes.backlogs:
-        await this.handleTaskDropFromBacklogs(target, handleData);
-        break;
+    const marker = UI.SECTIONS.TASKS_MARKER;
+    if (!sprintMatter.content.includes(marker)) {
+      sprintMatter.content += `\n\n${marker}\n`;
     }
 
-    this.refresh();
-    void vscode.window.showInformationMessage(`Task successfully added to sprint`);
-
-  } catch (err: any) {
-    console.error('Drop error:', err);
-    void vscode.window.showErrorMessage(`Failed to add task to sprint: ${err.message || err}`);
+    // Add task link without emoji
+    const link = `- [${taskData.name}](${taskData.file})`;
+    const pos = sprintMatter.content.indexOf(marker);
+    if (pos !== -1) {
+      sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) +
+        "\n" + link + sprintMatter.content.slice(pos + marker.length);
+    }
   }
-}
-
-
-
-private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData: any) {
-  const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
-  if (idx >= 0) {
-    sprintMatter.data.tasks[idx] = taskData;
-  } else {
-    sprintMatter.data.tasks.push(taskData);
-  }
-
-  const marker = UI.SECTIONS.TASKS_MARKER;
-  if (!sprintMatter.content.includes(marker)) {
-    sprintMatter.content += `\n\n${marker}\n`;
-  }
-
-  // Add task link without emoji
-  const link = `- [${taskData.name}](${taskData.file})`;
-  const pos = sprintMatter.content.indexOf(marker);
-  if (pos !== -1) {
-    sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) + 
-      "\n" + link + sprintMatter.content.slice(pos + marker.length);
-  }
-}
-
-
-
-
-
-
   handleDrag(source: SprintsTreeItem[], dataTransfer: vscode.DataTransfer): void {
     try {
       if (source.length > 0) {
@@ -425,7 +407,6 @@ private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData:
       return null;
     }
   }
-
   private parseDateRangeFromFilename(name: string): [Date, Date] | null {
     // Expected filename pattern (without extension): [Sprint]_dd-mm_dd-mm_yyyy or [Sprint]_dd-mm_dd-mm_yy
     const base = name.replace(/\.[^.]+$/, '');
@@ -444,7 +425,6 @@ private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData:
     const end = new Date(y, m2, d2);
     return start <= end ? [start, end] : [end, start];
   }
-
   private getStatusEmojiFromText(text: string): string {
     const m = text.match(/\{[^}]*status\s*:\s*([a-z]+)[^}]*\}/i);
     const status = m ? m[1].toLowerCase() : '';
@@ -463,7 +443,6 @@ private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData:
         return '';
     }
   }
-
   private async getTasksFromSprintFile(filePath: string): Promise<SprintsTreeItem[]> {
     try {
       let content = fs.readFileSync(filePath, 'utf8');
@@ -482,8 +461,21 @@ private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData:
           const rel = m[1].trim().replace(/['"]+/g, '');
           const abs = path.resolve(path.dirname(filePath), rel);
           const prettyLabel = path.basename(rel).replace(/\.[^.]+$/, '').replace(/^[^_]*_?/, '').replace(/[_-]+/g, ' ').trim();
-          const displayLabel = prettyLabel;
-          const treeItem = new SprintsTreeItem(displayLabel, vscode.TreeItemCollapsibleState.None, [], undefined, prettyLabel, abs, filePath);
+            // If the task file exists, compute status/priority and show formatted label: {statusEmoji} {basename} {priorityEmoji}
+            let displayLabel = prettyLabel;
+            if (fs.existsSync(abs)) {
+              try {
+                const meta = this.getTaskMetadata(abs, filePath);
+                const statusKey = (meta.status || 'not-started').toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
+                const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
+                const priorityKey = (meta.priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+                const priorityEmoji = meta.priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+                displayLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
+              } catch {
+                displayLabel = prettyLabel;
+              }
+            }
+            const treeItem = new SprintsTreeItem(displayLabel, vscode.TreeItemCollapsibleState.None, [], undefined, prettyLabel, abs, filePath);
           treeItem.contextValue = 'sprintTask';
           if (fs.existsSync(abs)) {
             Object.assign(treeItem, {
@@ -530,8 +522,25 @@ private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData:
         const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
         let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
         const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
-        const emoji = this.getStatusEmojiFromText(itemText);
-        const displayLabel = (emoji ? `${emoji} ` : '') + prettyLabel;
+        let displayLabel = prettyLabel;
+        const relPath = linkMatch ? linkMatch[2] : undefined;
+        const absPath = relPath ? path.resolve(path.dirname(filePath), relPath) : undefined;
+        if (absPath && fs.existsSync(absPath)) {
+          try {
+            const meta = this.getTaskMetadata(absPath, filePath);
+            const statusKey = (meta.status || 'not-started').toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
+            const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
+            const priorityKey = (meta.priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+            const priorityEmoji = meta.priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+            displayLabel = `${statusEmoji} ${path.basename(absPath)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
+          } catch {
+            displayLabel = prettyLabel;
+          }
+        } else {
+          // fallback to any inline emoji parsing
+          const emoji = this.getStatusEmojiFromText(itemText);
+          displayLabel = (emoji ? `${emoji} ` : '') + prettyLabel;
+        }
         let key = prettyLabel;
         const rel = linkMatch ? linkMatch[2] : undefined;
         const abs = rel ? path.resolve(path.dirname(filePath), rel) : undefined;

@@ -8,11 +8,15 @@ import {
   TASK,
   UI,
 } from '../utils/constant';
+import matter from 'gray-matter';
 
 interface TreeItemLike {
   label: string;
   collapsibleState: vscode.TreeItemCollapsibleState;
+  // absolute path if file exists
   taskPath?: string;
+  // relative path as listed in backlog frontmatter or link
+  rel?: string;
   command?: {
     command: string;
     title: string;
@@ -32,7 +36,7 @@ function extractFrontmatter(content: string): string | null {
   return m ? m[1] : null;
 }
 
-export function parseBacklogFile(filePath: string): { title: string; tasks: { label: string; abs?: string }[] } {
+export function parseBacklogFile(filePath: string): { title: string; tasks: { label: string; abs?: string; rel?: string }[] } {
   let content = fileService.readFileSyncSafe(filePath);
   content = stripMergeMarkers(content);
 
@@ -40,7 +44,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
   let titleMatch = content.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1].trim() : path.basename(filePath, '.md');
 
-  const tasks: { label: string; abs?: string }[] = [];
+  const tasks: { label: string; abs?: string; rel?: string }[] = [];
   const seen = new Set<string>();
 
   const fm = extractFrontmatter(content);
@@ -50,15 +54,32 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
     while ((m = fileRegex.exec(fm)) !== null) {
       const rel = m[1].trim().replace(/['"]+/g, '');
       const abs = path.resolve(path.dirname(filePath), rel);
-      const prettyLabel = path.basename(rel)
-        .replace(new RegExp(`\\${PROJECT.MD_FILE_EXTENSION}$`), '')
-        .replace(new RegExp(`^${PROJECT.FILE_PREFIX.TASK}?`), '')
-        .replace(/[_-]+/g, ' ')
-        .trim();
+      // Build label from task YAML frontmatter when possible
+      let prettyLabel = path.basename(rel);
+      let computedLabel = prettyLabel;
+      if (fileService.fileExists(abs) && fs.existsSync(abs)) {
+        try {
+          const tm = matter(fs.readFileSync(abs, 'utf8'));
+          const status = (tm.data.status || 'not-started') as string;
+          const priority = (tm.data.priority || '') as string;
+          const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
+          const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
+          const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+          const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+          computedLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
+        } catch {
+          // fallback to basename if parsing fails
+          computedLabel = path.basename(rel);
+        }
+      } else {
+        // Task file missing — show default status emoji + basename
+        const statusEmoji = UI.EMOJI.STATUS.NOT_STARTED;
+        computedLabel = `${statusEmoji} ${path.basename(rel)}`;
+      }
       const key = `${prettyLabel}|${abs}`;
       if (!seen.has(key)) {
         seen.add(key);
-        tasks.push({ label: prettyLabel, abs: fileService.fileExists(abs) ? abs : undefined });
+        tasks.push({ label: computedLabel, abs: fileService.fileExists(abs) ? abs : undefined, rel });
       }
     }
     if (tasks.length) return { title, tasks };
@@ -91,12 +112,31 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
       key = `${prettyLabel}|${abs}`;
       if (!seen.has(key)) {
         seen.add(key);
-        tasks.push({ label: prettyLabel, abs: fileService.fileExists(abs) ? abs : undefined });
+        // compute label from YAML if possible
+        let computedLabel = prettyLabel;
+        if (fileService.fileExists(abs) && fs.existsSync(abs)) {
+          try {
+            const tm = matter(fs.readFileSync(abs, 'utf8'));
+            const status = (tm.data.status || 'not-started') as string;
+            const priority = (tm.data.priority || '') as string;
+            const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
+            const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
+            const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+            const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+            computedLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
+          } catch {
+            computedLabel = path.basename(rel);
+          }
+        } else {
+          computedLabel = `${UI.EMOJI.STATUS.NOT_STARTED} ${path.basename(rel)}`;
+        }
+        tasks.push({ label: computedLabel, abs: fileService.fileExists(abs) ? abs : undefined, rel });
       }
     } else {
       if (!seen.has(key)) {
         seen.add(key);
-        tasks.push({ label: prettyLabel });
+        // no linked file — show default status and the pretty label
+        tasks.push({ label: `${UI.EMOJI.STATUS.NOT_STARTED} ${prettyLabel}` });
       }
     }
   }
@@ -111,7 +151,6 @@ export function listBacklogsSummary(ws: string): { filePath: string; title: stri
     return { filePath: f, title: parsed.title, tasks: parsed.tasks };
   });
 }
-
 export function listBacklogs(ws: string): string[] {
   const backlogsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
   return fileService.listMdFiles(backlogsDir).map(f => path.join(backlogsDir, f));
@@ -193,7 +232,8 @@ export function getTasksFromBacklog(filePath: string): TreeItemLike[] {
       const item: TreeItemLike = {
         label: t.label,
         collapsibleState: vscode.TreeItemCollapsibleState.None,
-        taskPath: t.abs
+        taskPath: t.abs,
+        rel: t.rel
       };
       
       if (t.abs) {
@@ -256,6 +296,73 @@ export async function moveTaskBetweenBacklogs(
   } catch (error: any) {
     throw new Error(`Failed to move task: ${error?.message || 'Unknown error'}`);
   }
+}
+
+export async function addTaskToBacklogWithYaml(backlogPath: string, taskPath: string): Promise<void> {
+  const taskContent = fs.readFileSync(taskPath, 'utf8');
+  const taskMatter = matter(taskContent);
+  const backlogFile = matter(fs.readFileSync(backlogPath, 'utf8'));
+
+  const taskName = path.basename(taskPath); // Keep the full filename with extension
+
+  // Add task to markdown section
+  const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
+  let content = backlogFile.content;
+  if (!content.includes(tasksSectionMarker)) {
+    content += `\n\n${tasksSectionMarker}\n`;
+  }
+
+  const taskLink = `- [${taskName}](${path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/')})`;
+  const tasksIndex = content.indexOf(tasksSectionMarker);
+
+  if (tasksIndex !== -1) {
+    content = content.slice(0, tasksIndex + tasksSectionMarker.length) +
+      '\n' + taskLink +
+      content.slice(tasksIndex + tasksSectionMarker.length);
+  }
+
+  // Add task to YAML frontmatter
+  const taskId = path.basename(taskPath);
+  const taskMetadata = {
+    _id: taskId,
+    name: taskName,
+    path: path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/')
+  };
+
+  if (!backlogFile.data.tasks) {
+    backlogFile.data.tasks = [];
+  }
+  
+  // Check if task already exists in frontmatter
+  const existingTaskIndex = backlogFile.data.tasks.findIndex((t: any) => t._id === taskId);
+  if (existingTaskIndex === -1) {
+    backlogFile.data.tasks.push(taskMetadata);
+  } else {
+    backlogFile.data.tasks[existingTaskIndex] = taskMetadata;
+  }
+
+  // Write updated content with both markdown and frontmatter changes
+  const updatedContent = matter.stringify(content, backlogFile.data);
+  fs.writeFileSync(backlogPath, updatedContent);
+}
+
+export async function removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
+  const backlogFile = matter(fs.readFileSync(backlogPath, 'utf8'));
+  const relativeTaskPath = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
+  
+  // Remove from markdown content
+  const taskPattern = new RegExp(`^.*\\[.*?\\]\\(${relativeTaskPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\).*$`, 'gm');
+  let content = backlogFile.content.replace(taskPattern, '').replace(/\n\n\n+/g, '\n\n');
+  
+  // Remove from YAML frontmatter
+  const taskId = path.basename(taskPath);
+  if (backlogFile.data.tasks) {
+    backlogFile.data.tasks = backlogFile.data.tasks.filter((t: any) => t._id !== taskId);
+  }
+
+  // Write updated content
+  const updatedContent = matter.stringify(content, backlogFile.data);
+  fs.writeFileSync(backlogPath, updatedContent);
 }
 
 export async function addExistingTasksToBacklog(item: any) {

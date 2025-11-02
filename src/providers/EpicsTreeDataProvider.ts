@@ -102,13 +102,16 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicTreeIt
       }
 
       return data.tasks.map((task: any) => {
-        // Display task name without emoji. Put status/priority into description/tooltip.
-        const label = task.name;
-
         // Construct absolute file path for task
         const taskPath = path.isAbsolute(task.file)
           ? task.file
           : path.resolve(path.dirname(element.filePath), task.file);
+
+        // Compute status and priority emojis and show filename with extension
+        const statusEmoji = this.getTaskStatusEmoji(task.status || 'not-started');
+        const priorityEmoji = this.getPriorityEmoji(task.priority || '');
+        const baseName = path.basename(taskPath || task.file || '');
+        const label = `${statusEmoji} ${baseName}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
 
         const taskItem = new EpicTreeItem(
           label,
