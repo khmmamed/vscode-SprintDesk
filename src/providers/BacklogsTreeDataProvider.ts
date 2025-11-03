@@ -301,9 +301,6 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     return cleaned || base;
   }
 
-
-
-
   // tree visualization methods
   private async getBacklogsTree(workspaceRoot: string): Promise<BacklogsTreeItem[]> {
     const backlogsDir = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);

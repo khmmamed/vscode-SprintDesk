@@ -10,7 +10,22 @@ import {
 } from '../utils/templateUtils';
 import { EpicMetadata } from '../types/types';
 import { PROJECT, UI, TASK } from '../utils/constant';
+import { getEpicTasks } from '../controller/epicController';
+import { relativePathTaskToTaskpath } from '../utils/taskUtils';
 
+interface TreeItemLike {
+  label: string;
+  collapsibleState: vscode.TreeItemCollapsibleState;
+  // absolute path if file exists
+  path?: string;
+  // relative path as listed in backlog frontmatter or link
+  rel?: string;
+  command?: {
+    command: string;
+    title: string;
+    arguments: any[];
+  };
+}
 export function listEpics(ws: string): string[] {
   const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
   if (!fs.existsSync(epicsDir)) {
@@ -155,4 +170,23 @@ export async function createEpicInteractive() {
   if (!epicName) return;
   createEpic(epicName);
   vscode.window.showInformationMessage('Epic created.');
+}
+
+export function getTasksFromEpic(epicName: string): TreeItemLike[] {
+  try {
+    const tasks = getEpicTasks(epicName);
+
+    return tasks.map((t: any) => {
+      const label = path.basename(t.path || '');
+      const absPath = t.path;
+      return { 
+        label, 
+        absPath, 
+        collapsibleState: vscode.TreeItemCollapsibleState.None, 
+        path: relativePathTaskToTaskpath(t.path) 
+      };
+    });
+  } catch (e) {
+     throw new Error('No tasks found.');
+  }
 }

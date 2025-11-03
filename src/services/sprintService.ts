@@ -4,7 +4,21 @@ import * as fs from 'fs';
 import * as fileService from './fileService';
 import insertTaskLinkUnderSection from '../utils/mdUtils';
 import { PROJECT, SPRINT, UI, TASK } from '../utils/constant';
-
+import { getSprintTasks } from '../controller/sprintController';
+import { relativePathTaskToTaskpath } from '../utils/taskUtils';
+interface TreeItemLike {
+  label: string;
+  collapsibleState: vscode.TreeItemCollapsibleState;
+  // absolute path if file exists
+  path?: string;
+  // relative path as listed in backlog frontmatter or link
+  rel?: string;
+  command?: {
+    command: string;
+    title: string;
+    arguments: any[];
+  };
+}
 export function createSprint(nameParts: { d1: string; mo1: string; d2: string; mo2: string; yy: string; yyyy: string }): string {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
@@ -119,5 +133,23 @@ export async function startFeatureFromTask(item: any) {
     }
   } catch (e) {
     vscode.window.showErrorMessage('Failed to start feature from task.');
+  }
+}
+
+export function getTasksFromSprint(sprintName: string): TreeItemLike[] {
+  try {
+    const tasks = getSprintTasks(sprintName);
+    return tasks.map((t: any) => {
+      const label = path.basename(t.path || '');
+      const absPath = t.path;
+      return { 
+        label, 
+        absPath, 
+        collapsibleState: vscode.TreeItemCollapsibleState.None, 
+        path: relativePathTaskToTaskpath(t.path) 
+      };
+    });
+  } catch (e) {
+     throw new Error('No tasks found.');
   }
 }

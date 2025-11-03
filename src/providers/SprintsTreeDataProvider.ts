@@ -1,145 +1,113 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { PROJECT, UI } from '../utils/constant';
+import * as fileService from '../services/fileService';
+import * as sprintController from '../controller/sprintController';
+import * as backlogController from '../controller/backlogController';
+import * as sprintService from '../services/sprintService';
+import { UI, PROJECT } from '../utils/constant';
 import matter from 'gray-matter';
+import { getSprintsPath } from '../utils/backlogUtils';
+import { getTaskPath } from '../utils/taskUtils';
 
 export class SprintsTreeItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly children: SprintsTreeItem[] = [],
-    public readonly filePath?: string, // for sprint items, reference to the sprint file on disk
-    public readonly taskSlug?: string, // for task child items, original slug (e.g., add-status-to-product)
-    public readonly taskFilePath?: string, // for task child items, resolved file path to the task file
-    public readonly sprintFilePath?: string // for task child items, sprint file path containing the task
+    public readonly filePath?: string,
+    public readonly taskPath?: string,
+    public readonly sourceSprintPath?: string
   ) {
     super(label, collapsibleState);
 
-    if (filePath && !taskFilePath) {
-      // This is a sprint item
+    if (filePath) {
+      // Setup sprint item
       this.contextValue = 'sprint';
-      this.description = '📅 Drop tasks here';
-      this.resourceUri = vscode.Uri.file(filePath); // For drop highlighting
-      this.iconPath = new vscode.ThemeIcon('calendar');
+      this.resourceUri = vscode.Uri.file(filePath);
+
+      // Count tasks in sprint
+      try {
+        const { data } = matter.read(filePath);
+        const taskCount = data.tasks?.length;
+        this.description = `${UI.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;
+      } catch {
+        this.description = `${UI.EMOJI.COMMON.TASK_LIST} 0 tasks`;
+      }
+
+      // Add sprint icon and tooltip
+      this.iconPath = new vscode.ThemeIcon('repo');
       this.tooltip = new vscode.MarkdownString()
         .appendMarkdown(`**${label}**\n\n`)
-        .appendMarkdown(`📅 Sprint File: \`${filePath}\`\n\n`)
+        .appendMarkdown(`${UI.EMOJI.COMMON.FILE} Path: \`${filePath}\`\n\n`)
         .appendMarkdown('*Drop tasks here to add them to this sprint*');
-    } else if (taskFilePath) {
-      // This is a task item in a sprint
-      this.contextValue = 'sprintTask';
-      this.iconPath = new vscode.ThemeIcon('tasklist');
-      if (fs.existsSync(taskFilePath)) {
-        this.command = {
-          command: 'vscode.open',
-          title: 'Open Task',
-          arguments: [vscode.Uri.file(taskFilePath)]
-        };
+
+    } else if (taskPath) {
+      // Setup task item
+      this.contextValue = 'task';
+
+      try {
+
+        const { data: taskMetadata } = matter.read(taskPath);
+        const { status, priority, type } = taskMetadata;
+
+        const statusKey = (status || 'NOT_STARTED').toUpperCase() as keyof typeof UI.EMOJI.STATUS;
+        const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
+
+        // Determine priority emoji (if any)
+        const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+        const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+
+        // Use the full filename with extension for the label and include priority emoji
+        this.label = `${statusEmoji} ${path.basename(taskPath)}`;
+
+        // Keep priority emoji also as description for compact view
+        if (priorityEmoji) this.description = priorityEmoji;
+
+        // Create detailed tooltip
+        const tooltipMd = new vscode.MarkdownString();
+        tooltipMd.supportHtml = true;
+        tooltipMd
+          .appendMarkdown(`**${label}**\n\n`)
+          .appendMarkdown(`${statusEmoji} Status: ${status}\n`);
+
+        if (priority) {
+          const priorityKey = priority.toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
+          tooltipMd.appendMarkdown(`${UI.EMOJI.PRIORITY[priorityKey] || ''} Priority: ${priority}\n`);
+        }
+
+        if (type) {
+          tooltipMd.appendMarkdown(`${type.toLowerCase().includes('bug') ? '🐛' : '✨'} Type: ${type}\n`);
+        }
+
+        tooltipMd.appendMarkdown(`\n${UI.EMOJI.COMMON.FILE} Path: \`${taskPath}\``);
+        this.tooltip = tooltipMd;
+
+      } catch {
+        // Fallback if can't read task file
+        this.iconPath = new vscode.ThemeIcon('tasklist');
+        this.tooltip = `Task: ${label}\nPath: ${taskPath}`;
       }
     }
   }
 }
-
-// Helper: remove git conflict blocks like <<<<<<< ... ======= ... >>>>>>>
-function stripMergeMarkers(content: string): string {
-  return content.replace(/<<<<<<<[\s\S]*?>>>>>>>\s*.*\n?/g, '')
-    .replace(/={7,}[\s\S]*?={7,}\n?/g, '');
-}
-
-// Helper: extract YAML frontmatter block (between first pair of ---)
-function extractFrontmatter(content: string): string | null {
-  const m = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
-  return m ? m[1] : null;
-}
-
-
 
 export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsTreeItem>, vscode.TreeDragAndDropController<SprintsTreeItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<SprintsTreeItem | undefined | void> = new vscode.EventEmitter<SprintsTreeItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<SprintsTreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
+  private workspaceRoot: string;
+
   // DragAndDrop interface implementation
   readonly dropMimeTypes = [
-    'application/vnd.code.tree.sprintdesk-tasks',
+    'text/uri-list',
     'application/vnd.code.tree.sprintdesk-backlogs',
-    'application/vnd.code.tree.sprintdesk-epics'
+    'application/vnd.code.tree.sprintdesk-tasks',
+    'application/vnd.code.tree.sprintdesk-epics',
+    'application/vnd.code.tree.sprintdesk-sprints'
   ];
   readonly dragMimeTypes = ['application/vnd.code.tree.sprintdesk-sprints'];
 
-  public refresh(): void {
-    this._onDidChangeTreeData.fire(undefined);
-  }
-
-  getTreeItem(element: SprintsTreeItem): vscode.TreeItem {
-    return element;
-  }
-
-  async getChildren(element?: SprintsTreeItem): Promise<SprintsTreeItem[]> {
-    const workspaceRoot = this.getWorkspaceRoot();
-    if (!workspaceRoot) {
-      return [];
-    }
-
-    if (!element) {
-      // Root level: list all sprint files under .SprintDesk/Sprints
-      return this.getSprints(workspaceRoot);
-    }
-
-    // Child level: list tasks found under "# Tasks" in the sprint file
-    if (element.filePath) {
-      return this.getTasksFromSprintFile(element.filePath);
-    }
-
-    return [];
-  }
-
-  private getWorkspaceRoot(): string | undefined {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) return undefined;
-    return folders[0].uri.fsPath;
-  }
-
-  private async getSprints(workspaceRoot: string): Promise<SprintsTreeItem[]> {
-    const sprintsDir = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.SPRINTS_DIR);
-    if (!fs.existsSync(sprintsDir)) return [];
-
-    const entries = fs.readdirSync(sprintsDir, { withFileTypes: true });
-    const files = entries.filter(e => e.isFile()).map(e => e.name);
-
-    const items = await Promise.all(files.map(async (name) => {
-      const filePath = path.join(sprintsDir, name);
-      // Prefer parsing from filename based on the required pattern
-      const range = this.parseDateRangeFromFilename(name) || this.parseSprintDateRangeFromFile(filePath);
-      let label: string;
-      if (range) {
-        const [start, end] = range;
-        label = `📅 ${this.formatDMY(start)} ➜ ${this.formatDMY(end)}`;
-      } else {
-        // Fallback to humanized filename if no dates found
-        label = this.humanizeSprintName(name);
-      }
-      const item = new SprintsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
-      item.contextValue = 'sprint';
-      return item;
-    }));
-
-    items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
-    return items;
-  }
-  private humanizeSprintName(filename: string): string {
-    const base = filename.replace(/\.[^.]+$/, '');
-    const cleaned = base.replace(/^\[(?:Sprint|S)\]_?/i, '').replace(/[_-]+/g, ' ').trim();
-    return cleaned || base;
-  }
-  private formatDMY(d: Date): string {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    return `${dd}-${mm}-${yyyy}`;
-  }
-
-  // Helper to resolve task path from drop data
   private resolveTaskPath(handleData: any): string {
     let taskFilePath: string | undefined;
 
@@ -166,191 +134,115 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
 
     return taskFilePath;
   }
-  // Helper to parse task metadata from file
-  private getTaskMetadata(taskFilePath: string, sprintFilePath: string) {
-    const taskMatter = matter(fs.readFileSync(taskFilePath, 'utf8'));
-    const taskName = taskMatter.data.title || taskMatter.data.name ||
-      path.basename(taskFilePath, '.md').replace(/^\[Task\]_?/i, '').replace(/[-_]+/g, ' ').trim();
 
-    return {
-      name: taskName,
-      status: taskMatter.data.status || 'not-started',
-      file: path.relative(path.dirname(sprintFilePath), taskFilePath).replace(/\\/g, '/'),
-      description: taskMatter.data.description || '',
-      priority: taskMatter.data.priority || 'medium',
-      type: taskMatter.data.type || 'feature'
-    };
-  }
-  // Helper to add task to sprint file
-  private async addTaskToSprint(sprintFilePath: string, taskData: any) {
-    const sprintContent = fs.readFileSync(sprintFilePath, 'utf8');
-    const sprintMatter = matter(sprintContent);
-    if (!Array.isArray(sprintMatter.data.tasks)) sprintMatter.data.tasks = [];
-
-    const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
-    if (idx >= 0) sprintMatter.data.tasks[idx] = taskData;
-    else sprintMatter.data.tasks.push(taskData);
-
-    const marker = UI.SECTIONS.TASKS_MARKER;
-    if (!sprintMatter.content.includes(marker)) sprintMatter.content += `\n\n${marker}\n`;
-
-    const link = `- [${taskData.name}](${taskData.file})`;
-    const pos = sprintMatter.content.indexOf(marker);
-    if (pos !== -1) {
-      sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) + "\n" + link + sprintMatter.content.slice(pos + marker.length);
+  constructor() {
+    // Initialize workspace root
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) {
+      throw new Error('No workspace folder found');
     }
+    this.workspaceRoot = folders[0].uri.fsPath;
 
-    fs.writeFileSync(sprintFilePath, matter.stringify(sprintMatter.content, sprintMatter.data));
   }
-  // Source-specific handlers
+
   private async handleTaskDropFromTasks(target: SprintsTreeItem, handleData: any): Promise<void> {
-    const taskFilePath = this.resolveTaskPath(handleData);
-    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
+    let taskFilePath: string | undefined;
+    let taskName: string | undefined;
 
-    const confirmed = await vscode.window.showInformationMessage(
-      `Add task "${taskData.name}" to sprint?`,
-      { modal: true },
-      'Add'
-    );
-    if (confirmed !== 'Add') return;
+    // If legacy itemHandles exists, extract basename using split(' ')[1]
+    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+      const raw = String(handleData.itemHandles[0] || '');
+      const parts = raw.split(' ');
+      taskName = parts[1] || parts.pop() || raw;
+    }
+    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
 
-    await this.addTaskToSprint(target.filePath!, taskData);
+    await this.addTaskToSprint(target.filePath!, taskPath);
   }
-  private async handleTaskDropFromSprints(target: SprintsTreeItem, handleData: any): Promise<void> {
-    const taskFilePath = handleData.filePath;
-    if (!taskFilePath || !fs.existsSync(taskFilePath)) throw new Error('Invalid task path from sprint');
+  private async handleTaskDropFromBacklogs(target: SprintsTreeItem, handleData: any): Promise<void> {
+    // Move task from backlog to sprint
+    let taskFilePath: string | undefined;
+    let taskName: string | undefined;
+    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+      const raw = String(handleData.itemHandles[0] || '');
+      const parts = raw.split(' ');
+      taskName = parts[1] || parts.pop() || raw;
+    }
+    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
+    const backlogPath = handleData.sourceContainer?.path || handleData.backlog?.backlogName;
 
-    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
-    const confirmed = await vscode.window.showInformationMessage(
-      `Move task "${taskData.name}" to this sprint?`,
-      { modal: true },
-      'Move'
-    );
-    if (confirmed !== 'Move') return;
-
-    // Add to new sprint and remove from source sprint if provided
-    await this.addTaskToSprint(target.filePath!, taskData);
-    if (handleData.sourceContainer?.path) {
-      // TODO: Implement removal from source sprint
+    await this.addTaskToSprint(target.filePath!, taskPath);
+    try {
+      if (backlogPath) await backlogController.removeTaskFromBacklog(backlogPath, taskPath);
+    } catch (e) {
+      // ignore if can't remove from backlog
     }
   }
   private async handleTaskDropFromEpics(target: SprintsTreeItem, handleData: any): Promise<void> {
-    const taskFilePath = this.resolveTaskPath(handleData);
-    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
-
-    const confirmed = await vscode.window.showInformationMessage(
-      `Add epic task "${taskData.name}" to sprint?`,
-      { modal: true },
-      'Add'
-    );
-    if (confirmed !== 'Add') return;
-
-    await this.addTaskToSprint(target.filePath!, taskData);
-  }
-  private async handleTaskDropFromBacklogs(target: SprintsTreeItem, handleData: any): Promise<void> {
-    const taskFilePath = this.resolveTaskPath(handleData);
-    const taskData = this.getTaskMetadata(taskFilePath, target.filePath!);
-
-    const confirmed = await vscode.window.showInformationMessage(
-      `Move backlog task "${taskData.name}" to sprint?`,
-      { modal: true },
-      'Move'
-    );
-    if (confirmed !== 'Move') return;
-
-    await this.addTaskToSprint(target.filePath!, taskData);
-  }
-  async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    const taskPath = this.resolveTaskPath(handleData);
+    await this.addTaskToSprint(target.filePath!, taskPath);
     try {
-      if (!target?.filePath || target.contextValue !== 'sprint') {
-      
-        return;
+      const sourceEpic = handleData.epic?.epicName || handleData.sourceContainer?.path;
+      if (sourceEpic) {
+        // attempt to remove from epic if controller exists
+        try { const epicController = require('../controller/epicController'); epicController.removeTaskFromEpic(sourceEpic, taskPath); } catch { }
       }
-
-      const mimeTypes = {
-        tasks: 'application/vnd.code.tree.sprintdesk-tasks',
-        sprints: 'application/vnd.code.tree.sprintdesk-sprints',
-        epics: 'application/vnd.code.tree.sprintdesk-epics',
-        backlogs: 'application/vnd.code.tree.sprintdesk-backlogs'
-      };
-
-      // Get first available transfer item
-      const dt = Object.values(mimeTypes)
-        .map(m => ({ mime: m, data: dataTransfer.get(m) }))
-        .find(x => x.data !== undefined && x.data !== null);
-
-      if (!dt?.data) {
-       
-        return;
-      }
-
-      const handleData = JSON.parse(dt.data.value as string);
-      if (!handleData) {
-        return;
-      }
-
-      // Route to appropriate handler based on mime type
-      switch (dt.mime) {
-        case mimeTypes.tasks:
-          await this.handleTaskDropFromTasks(target, handleData);
-          break;
-        case mimeTypes.sprints:
-          await this.handleTaskDropFromSprints(target, handleData);
-          break;
-        case mimeTypes.epics:
-          await this.handleTaskDropFromEpics(target, handleData);
-          break;
-        case mimeTypes.backlogs:
-          await this.handleTaskDropFromBacklogs(target, handleData);
-          break;
-      }
-
-      this.refresh();
-      void vscode.window.showInformationMessage(`Task successfully added to sprint`);
-
-    } catch (err: any) {
-      console.error('Drop error:', err);
-      void vscode.window.showErrorMessage(`Failed to add task to sprint: ${err.message || err}`);
-    }
+    } catch { }
   }
-  private updateSprintTasks(sprintMatter: matter.GrayMatterFile<string>, taskData: any) {
-    const idx = sprintMatter.data.tasks.findIndex((t: any) => t.file === taskData.file);
-    if (idx >= 0) {
-      sprintMatter.data.tasks[idx] = taskData;
-    } else {
-      sprintMatter.data.tasks.push(taskData);
-    }
-
-    const marker = UI.SECTIONS.TASKS_MARKER;
-    if (!sprintMatter.content.includes(marker)) {
-      sprintMatter.content += `\n\n${marker}\n`;
-    }
-
-    // Add task link without emoji
-    const link = `- [${taskData.name}](${taskData.file})`;
-    const pos = sprintMatter.content.indexOf(marker);
-    if (pos !== -1) {
-      sprintMatter.content = sprintMatter.content.slice(0, pos + marker.length) +
-        "\n" + link + sprintMatter.content.slice(pos + marker.length);
-    }
+  private async handleTaskDropFromSprints(target: SprintsTreeItem, handleData: any): Promise<void> {
+    const taskPath = this.resolveTaskPath(handleData);
+    await this.addTaskToSprint(target.filePath!, taskPath);
+    try {
+      const sourceSprint = handleData.sprint?.sprintName || handleData.sourceContainer?.path;
+      if (sourceSprint) await sprintController.removeTaskFromSprint(sourceSprint, taskPath);
+    } catch { }
   }
-  handleDrag(source: SprintsTreeItem[], dataTransfer: vscode.DataTransfer): void {
+  private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<void> {
+
+    await sprintController.addTaskToSprint(sprintPath, taskPath);
+    this.refresh();
+    void vscode.window.showInformationMessage(`Task added to sprint`);
+
+  }
+  private async removeTaskFromSprint(sprintPath: string, taskPath: string): Promise<void> {
+    await sprintController.removeTaskFromSprint(sprintPath, taskPath);
+  }
+  private async getTasksFromSprintName(sprintName: string): Promise<SprintsTreeItem[]> {
+    const treeItemsRaw = sprintService.getTasksFromSprint(sprintName);
+    return (treeItemsRaw || []).map((item: any) => {
+      const treeItem = new SprintsTreeItem(
+        item.label,
+        item.collapsibleState || vscode.TreeItemCollapsibleState.None,
+        [],
+        undefined,
+        item.path,
+        sprintName
+      );
+      if (item.command) {
+        treeItem.command = item.command;
+      }
+      treeItem.tooltip = `Task: ${item.title || item.name || item.label}\nPath: ${item.path}\nSprint: ${sprintName}`;
+      return treeItem;
+    });
+  }
+  // handle drag and drop
+  handleDrag(source: readonly SprintsTreeItem[], dataTransfer: vscode.DataTransfer): void {
     try {
       if (source.length > 0) {
         const taskItem = source[0];
-        if (!taskItem.taskFilePath) {
-          return; // Only tasks can be dragged, not sprint items
+        if (!taskItem.taskPath) {
+          throw new Error('No task path found for drag operation');
         }
 
         // Create a consistent task data object
         const taskData = {
-          id: path.basename(taskItem.taskFilePath, '.md'),
-          label: taskItem.label,
-          filePath: taskItem.taskFilePath,
           type: 'task',
-          sourceContainer: {
+          label: taskItem.label,
+          taskName: taskItem.label,
+          path: taskItem.taskPath,
+          sprint: {
             type: 'sprint',
-            path: taskItem.sprintFilePath
+            sprintName: taskItem.sourceSprintPath || taskItem.filePath
           }
         };
 
@@ -361,209 +253,103 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
         void vscode.window.showInformationMessage(`Dragging task: ${taskItem.label}`);
       }
     } catch (error) {
-      console.error('Drag error:', error);
       void vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
     }
   }
-
-  private parseSprintDateRangeFromFile(filePath: string): [Date, Date] | null {
+  async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     try {
-      let content = fs.readFileSync(filePath, 'utf8');
-      // Remove any git merge conflict markers which may break parsing
-      content = stripMergeMarkers(content);
-      // If there's a YAML frontmatter with start_date/end_date, prefer that
-      const fm = extractFrontmatter(content);
-      if (fm) {
-        const sd = fm.match(/start_date:\s*(\d{4}-\d{2}-\d{2})/i) || fm.match(/start:\s*(\d{4}-\d{2}-\d{2})/i);
-        const ed = fm.match(/end_date:\s*(\d{4}-\d{2}-\d{2})/i) || fm.match(/end:\s*(\d{4}-\d{2}-\d{2})/i);
-        if (sd && ed) {
-          const a = new Date(sd[1]);
-          const b = new Date(ed[1]);
-          return a <= b ? [a, b] : [b, a];
-        }
+      if (!target?.filePath || target.contextValue !== 'sprint') {
+        throw new Error('Invalid drop target: must be a sprint');
       }
-      const contentToParse = content;
-      const isoRegex = /(\d{4})-(\d{2})-(\d{2})/g; // yyyy-mm-dd
-      const dmyRegex = /(\d{2})-(\d{2})-(\d{4})/g; // dd-mm-yyyy
-      const dates: Date[] = [];
-      let m: RegExpExecArray | null;
-      while ((m = isoRegex.exec(content)) && dates.length < 2) {
-        const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
-        dates.push(d);
-      }
-      if (dates.length < 2) {
-        while ((m = dmyRegex.exec(contentToParse)) && dates.length < 2) {
-          const d = new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
-          dates.push(d);
-        }
-      }
-      if (dates.length >= 2) {
-        const [a, b] = dates;
-        return a <= b ? [a, b] as [Date, Date] : [b, a] as [Date, Date];
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-  private parseDateRangeFromFilename(name: string): [Date, Date] | null {
-    // Expected filename pattern (without extension): [Sprint]_dd-mm_dd-mm_yyyy or [Sprint]_dd-mm_dd-mm_yy
-    const base = name.replace(/\.[^.]+$/, '');
-    const re = /^\[(?:Sprint|S)\]_(\d{2})-(\d{2})_(\d{2})-(\d{2})_(\d{2,4})$/i;
-    const m = base.match(re);
-    if (!m) return null;
-    const d1 = parseInt(m[1], 10);
-    const m1 = parseInt(m[2], 10) - 1;
-    const d2 = parseInt(m[3], 10);
-    const m2 = parseInt(m[4], 10) - 1;
-    let y = parseInt(m[5], 10);
-    if (m[5].length === 2) {
-      y = 2000 + y; // assume 20xx for two-digit years
-    }
-    const start = new Date(y, m1, d1);
-    const end = new Date(y, m2, d2);
-    return start <= end ? [start, end] : [end, start];
-  }
-  private getStatusEmojiFromText(text: string): string {
-    const m = text.match(/\{[^}]*status\s*:\s*([a-z]+)[^}]*\}/i);
-    const status = m ? m[1].toLowerCase() : '';
-    switch (status) {
-      case 'waiting':
-        return '🟡';
-      case 'started':
-        return '🔵';
-      case 'finished':
-        return '🟢';
-      case 'reopened':
-        return '🟠';
-      case 'closed':
-        return '⚫';
-      default:
-        return '';
-    }
-  }
-  private async getTasksFromSprintFile(filePath: string): Promise<SprintsTreeItem[]> {
-    try {
-      let content = fs.readFileSync(filePath, 'utf8');
-      content = stripMergeMarkers(content);
 
-      // First try YAML frontmatter 'tasks:' entries which may contain file: fields
-      const fm = extractFrontmatter(content);
-      const items: SprintsTreeItem[] = [];
-      const seen = new Set<string>();
+      const taskSources = {
+        tasks: 'application/vnd.code.tree.sprintdesk-tasks',
+        backlogs: 'application/vnd.code.tree.sprintdesk-backlogs',
+        epics: 'application/vnd.code.tree.sprintdesk-epics',
+        sprints: 'application/vnd.code.tree.sprintdesk-sprints'
+      };
 
-      if (fm && /\btasks\s*:/i.test(fm)) {
-        // grab file: ../path/to/file.md occurrences inside the frontmatter
-        const fileRegex = /file:\s*([^\n\r]+)/gi;
-        let m: RegExpExecArray | null;
-        while ((m = fileRegex.exec(fm)) !== null) {
-          const rel = m[1].trim().replace(/['"]+/g, '');
-          const abs = path.resolve(path.dirname(filePath), rel);
-          const prettyLabel = path.basename(rel).replace(/\.[^.]+$/, '').replace(/^[^_]*_?/, '').replace(/[_-]+/g, ' ').trim();
-            // If the task file exists, compute status/priority and show formatted label: {statusEmoji} {basename} {priorityEmoji}
-            let displayLabel = prettyLabel;
-            if (fs.existsSync(abs)) {
-              try {
-                const meta = this.getTaskMetadata(abs, filePath);
-                const statusKey = (meta.status || 'not-started').toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
-                const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
-                const priorityKey = (meta.priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
-                const priorityEmoji = meta.priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
-                displayLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
-              } catch {
-                displayLabel = prettyLabel;
-              }
-            }
-            const treeItem = new SprintsTreeItem(displayLabel, vscode.TreeItemCollapsibleState.None, [], undefined, prettyLabel, abs, filePath);
-          treeItem.contextValue = 'sprintTask';
-          if (fs.existsSync(abs)) {
-            Object.assign(treeItem, {
-              command: {
-                command: 'vscode.open',
-                title: 'Open Task',
-                arguments: [vscode.Uri.file(abs)]
-              }
-            });
-            const key = `${prettyLabel}|${abs}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              items.push(treeItem);
-            }
-          } else {
-            // still include item even if file missing (avoid data loss)
-            const key = prettyLabel;
-            if (!seen.has(key)) {
-              seen.add(key);
-              items.push(treeItem);
-            }
+      for (const [source, mimeType] of Object.entries(taskSources)) {
+        const dataItem = dataTransfer.get(mimeType);
+        if (dataItem) {
+          const handleData = JSON.parse(dataItem.value as string);
+          switch (source) {
+            case 'tasks':
+              await this.handleTaskDropFromTasks(target, handleData);
+              break;
+            case 'backlogs':
+              await this.handleTaskDropFromBacklogs(target, handleData);
+              break;
+            case 'epics':
+              await this.handleTaskDropFromEpics(target, handleData);
+              break;
+            case 'sprints':
+              await this.handleTaskDropFromSprints(target, handleData);
+              break;
           }
-        }
-        if (items.length) return items;
-      }
-
-      // Fallback to Markdown '## Tasks' parsing
-      const sectionMatch = content.match(/(^|\r?\n)#{1,6}\s*Tasks\b[^\n]*\r?\n([\s\S]*?)(?=\r?\n#{1,6}\s+\S|\s*$)/i);
-      if (!sectionMatch) return [];
-      const section = sectionMatch[2] ?? '';
-
-      const rawItems: string[] = [];
-      const ulRegex = /^\s*[-*]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
-      let mm: RegExpExecArray | null;
-      while ((mm = ulRegex.exec(section)) !== null) {
-        rawItems.push(mm[1].trim());
-      }
-      const olRegex = /^\s*\d+[\.)]\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$/gm;
-      while ((mm = olRegex.exec(section)) !== null) {
-        rawItems.push(mm[1].trim());
-      }
-
-      for (const itemText of rawItems) {
-        const linkMatch = itemText.match(/\[([^\]]+)\]\(([^)]+)\)/);
-        let labelSlug = linkMatch ? linkMatch[1] : itemText.replace(/^📌\s*/, '').trim();
-        const prettyLabel = labelSlug.replace(/[_-]+/g, ' ').trim();
-        let displayLabel = prettyLabel;
-        const relPath = linkMatch ? linkMatch[2] : undefined;
-        const absPath = relPath ? path.resolve(path.dirname(filePath), relPath) : undefined;
-        if (absPath && fs.existsSync(absPath)) {
-          try {
-            const meta = this.getTaskMetadata(absPath, filePath);
-            const statusKey = (meta.status || 'not-started').toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
-            const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
-            const priorityKey = (meta.priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
-            const priorityEmoji = meta.priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
-            displayLabel = `${statusEmoji} ${path.basename(absPath)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
-          } catch {
-            displayLabel = prettyLabel;
-          }
-        } else {
-          // fallback to any inline emoji parsing
-          const emoji = this.getStatusEmojiFromText(itemText);
-          displayLabel = (emoji ? `${emoji} ` : '') + prettyLabel;
-        }
-        let key = prettyLabel;
-        const rel = linkMatch ? linkMatch[2] : undefined;
-        const abs = rel ? path.resolve(path.dirname(filePath), rel) : undefined;
-        const treeItem = new SprintsTreeItem(displayLabel, vscode.TreeItemCollapsibleState.None, [], undefined, labelSlug, abs, filePath);
-        treeItem.contextValue = 'sprintTask';
-        if (abs) {
-          Object.assign(treeItem, {
-            command: {
-              command: 'vscode.open',
-              title: 'Open Task',
-              arguments: [vscode.Uri.file(abs)]
-            }
-          });
-          key = `${prettyLabel}|${abs}`;
-        }
-        if (!seen.has(key)) {
-          seen.add(key);
-          items.push(treeItem);
+          return;
         }
       }
 
-      return items;
-    } catch (e) {
-      return [];
+      throw new Error('No valid task data found in drop');
+    } catch (error: unknown) {
+      console.error('Drop error:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(`Failed to move task: ${errorMessage}`);
     }
+  }
+  private humanizeSprintName(filename: string): string {
+    const base = filename.replace(/\.[^.]+$/, '');
+
+    const cleaned = base
+      .replace(/^\[(?:sprint|sp)\]_?/i, '')
+      .trim();
+
+    // date range transform
+    const dateRange = cleaned.replace(
+      /^(\d{2}-\d{2}-\d{4})_(\d{2}-\d{2}-\d{4})$/,
+      '$1 -> $2'
+    );
+
+    return dateRange;
+  }
+
+  // tree visualization methods
+  private async getSprintsTree(workspaceRoot: string): Promise<SprintsTreeItem[]> {
+    const sprintsDir = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.SPRINTS_DIR);
+    const files = fileService.listMdFiles(sprintsDir);
+
+    const items = files.map(name => {
+      const filePath = path.join(sprintsDir, name);
+      const label = this.humanizeSprintName(name);
+      return new SprintsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
+    });
+
+    items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
+
+    return items;
+  }
+  getTreeItem(element: SprintsTreeItem): vscode.TreeItem {
+    return element;
+  }
+  async getChildren(element?: SprintsTreeItem): Promise<SprintsTreeItem[]> {
+    const workspaceRoot = this.getWorkspaceRoot();
+    if (!workspaceRoot) return [];
+
+    if (!element) {
+      return this.getSprintsTree(workspaceRoot);
+    }
+
+    if (element.filePath) {
+      return this.getTasksFromSprintName(path.basename(element.filePath));
+    }
+
+    return [];
+  }
+  private getWorkspaceRoot(): string {
+    return this.workspaceRoot;
+  }
+  public refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
   }
 }
