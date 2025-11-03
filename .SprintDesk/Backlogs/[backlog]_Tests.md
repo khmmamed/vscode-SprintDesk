@@ -1,22 +1,17 @@
 ---
 _id: backlog_tests
-name: bugs Backlog
+name: tests Backlog
 status: planned
 priority: high
-type: bugs_backlog
-created_at: 2025-10-28
-updated_at: 2025-10-28
+type: tests
+created_at: 2025-10-28T00:00:00.000Z
+updated_at: 2025-10-28T00:00:00.000Z
 owner: Khmamid Meddd
+epics: null
+sprints: null
+tasks: null
 
-# Related Epics (many-to-many)
-epics:
-  
-sprints:
-  
-tasks:
-  
-related_backlogs:
-  
+related_backlogs: null
 ---
 
 # 🧱 Backlog: Tests
@@ -37,6 +32,7 @@ related_backlogs:
 
 
 ## Tasks
+
 
 
 ## Related Backlogs
