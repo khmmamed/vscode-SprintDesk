@@ -16,34 +16,11 @@ epic:
   title: Extensions Management
   file: ../epics/[Epic]_extensions-management.md
 sprints:
-  - _id: sprint_pdp_core_01
-    title: pdp-core-01
-    file: ../sprints/[Sprint]_pdp-core-01_2025-08-17_to_2025-08-21_🔘70%.md
-    progress: 70%
-  - _id: sprint_pdp_core_02
-    title: pdp-core-02
-    file: ../sprints/[Sprint]_pdp-core-02_2025-08-22_to_2025-08-28_⚪0%.md
-    progress: 0%
+
 backlogs:
-  - _id: backlog_features
-    title: Features
-    file: ../backlogs/[backlog]_Features.md
-  - _id: backlog_ux
-    title: UX
-    file: ../backlogs/[backlog]_UX.md
+
 related_tasks:
-  - _id: tsk_extension_list_view
-    title: extension-list-view
-    relation: complements
-    file: ../tasks/[Task]_extension-list-view.md
-  - _id: tsk_extension_install_flow
-    title: extension-install-flow
-    relation: extends
-    file: ../tasks/[Task]_extension-install-flow.md
-  - _id: tsk_e2e_testing_extension_ui
-    title: e2e-testing-extension-ui
-    relation: verifies
-    file: ../tasks/[Task]_e2e-testing-extension-ui.md
+
 tags:
   - vscode
   - ui
@@ -102,17 +79,14 @@ Maintains UI consistency with the global VSCode theme and UX guidelines.
 - [Extensions Management](../epics/[Epic]_extensions-management.md)
 
 ## Sprints
-- [pdp-core-01](../sprints/[Sprint]_pdp-core-01_2025-08-17_to_2025-08-21_🔘70%.md)  
-- [pdp-core-02](../sprints/[Sprint]_pdp-core-02_2025-08-22_to_2025-08-28_⚪0%.md)
+
 
 ## Backlogs
 - [Features](../backlogs/[backlog]_Features.md)  
 - [UX](../backlogs/[backlog]_UX.md)
 
 ## Related Tasks
-- [extension-list-view](../tasks/[Task]_extension-list-view.md) — complements  
-- [extension-install-flow](../tasks/[Task]_extension-install-flow.md) — extends  
-- [e2e-testing-extension-ui](../tasks/[Task]_e2e-testing-extension-ui.md) — verifies  
+ 
 
 ---
 

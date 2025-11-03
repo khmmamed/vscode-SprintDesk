@@ -1,14 +1,17 @@
 ---
-# 📦 Backlog Metadata
-_id: backlog_001
-epic_id: epic_pdp-core-01
-sprint_id: sprint_pdp-core-01_2025-10-28_to_2025-11-04
+# 📦 Epic Metadata
+_id: epic_001
+title: epic_pdp-core-01
 status: ⏳ Planned
 priority: 🟡 Medium
 type: Feature Backlog
 created_at: 2025-10-28
 updated_at: 2025-10-28
 owner: Khmamid Meddd
+backlogs: null
+sprints: null
+related_epics: null
+tasks: null
 ---
 
 # 🧱 Backlog Title
@@ -36,7 +39,11 @@ This backlog focuses on:
 - Consider integrating caching for better performance.
 - Use centralized error handler middleware from Redux Toolkit.
 
-## 🔗 Related Backlogs
-- backlog_002 (PDP Layout System)
-- backlog_003 (PDP Image Carousel)
-- backlog_004 (PDP Add to Cart Logic)
+## Backlogs
+
+## Sprints
+
+## tasks
+
+### Related Epics
+
