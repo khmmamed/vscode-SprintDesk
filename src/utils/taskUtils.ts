@@ -59,7 +59,7 @@ export function parseTaskFile(filePath: string): TaskRow | null {
 
 export function getAllTaskRows(rootPath: string): TaskRow[] {
     const taskRows: TaskRow[] = [];
-    const mdFiles = taskService.listTasks(rootPath);
+    const mdFiles = taskService.readTasks(rootPath);
 
     for (const file of mdFiles) {
         const taskRow = parseTaskFile(file);

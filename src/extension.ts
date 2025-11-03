@@ -16,7 +16,7 @@ import { TasksTreeDataProvider } from './providers/TasksTreeDataProvider';
 import { BacklogsTreeDataProvider } from './providers/BacklogsTreeDataProvider';
 import { EpicsTreeDataProvider } from './providers/EpicsTreeDataProvider';
 import { createSprintInteractive } from './services/sprintService';
-import { createTaskInteractive } from './services/taskService';
+import { writeTask } from './services/taskService';
 import { createEpicInteractive } from './services/epicService';
 import { addTaskToBacklogInteractive, addExistingTasksToBacklog } from './services/backlogService';
 import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
@@ -81,7 +81,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Add Task: view title button on Tasks
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addTask', async () => {
-    await createTaskInteractive();
+    await writeTask();
     tasksProvider?.refresh(); // Refresh task tree view
     sprintsProvider.refresh(); // Refresh sprints if task was added to a sprint
   }));

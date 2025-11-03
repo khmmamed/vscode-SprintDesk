@@ -3,33 +3,19 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from './fileService';
 import { createEpicFromMetadata, addTaskToEpic, listEpics } from './epicService';
-import { PROJECT, TASK, UI } from '../utils/constant';
+import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 
 import { 
   generateTaskContent, 
-  generateTaskFileName, 
-  parseTaskMetadataFromFilename 
+  generateTaskFileName,  
 } from '../utils/templateUtils';
-import { TaskMetadata, EpicMetadata, TaskType, Priority, EpicStatus } from '../types/types';
 
-export function listTasks(ws: string): string[] {
-  const tasksDirs = fileService.getExistingTasksDirs(ws);
-  const files: string[] = [];
-  for (const d of tasksDirs) {
-    const entries = fileService.listMdFiles(d);
-    files.push(...entries.map(f => path.join(d, f)));
-  }
-  return files;
-}
 
-export function readTask(filePath: string): string {
-  return fileService.readFileSyncSafe(filePath);
-}
 
-export function createTask(metadata: TaskMetadata): { filePath: string; fileName: string } {
+export function createTask(metadata: SprintDesk.TaskMetadata): { filePath: string; fileName: string } {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
-  const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
+  const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
   fs.mkdirSync(tasksDir, { recursive: true });
 
   const fileName = generateTaskFileName(metadata.title, metadata.epicName);
@@ -51,8 +37,18 @@ export function deleteTask(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
+export function readTasks(ws: string): string[] {
+  // Collect markdown files from existing task directories
+  const tasksDirs = fileService.getExistingTasksDirs(ws);
+  const files: string[] = [];
+  for (const d of tasksDirs) {
+    const entries = fileService.listMdFiles(d);
+    files.push(...entries.map(f => path.join(d, f)));
+  }
+  return files;
+}
 
-export async function createTaskInteractive() {
+export async function writeTask() {
   // Get workspace
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) {
@@ -61,19 +57,19 @@ export async function createTaskInteractive() {
   }
 
   // Get task metadata
-  const taskName = await vscode.window.showInputBox({
+  const taskTitle = await vscode.window.showInputBox({
     prompt: 'Enter task title',
-    placeHolder: UI.QUICK_PICK.TASK_TITLE
+    placeHolder: UI_CONSTANTS.QUICK_PICK.TASK_TITLE
   });
-  if (!taskName) return;
+  if (!taskTitle) return;
 
   // Get task type
   const type = await vscode.window.showQuickPick([
-    { label: TASK.TYPE.FEATURE, description: 'New functionality', value: 'feature' as TaskType },
-    { label: TASK.TYPE.BUG, description: 'Fix an issue', value: 'bug' as TaskType },
-    { label: TASK.TYPE.IMPROVEMENT, description: 'Enhancement to existing feature', value: 'improvement' as TaskType },
-    { label: TASK.TYPE.DOCUMENTATION, description: 'Documentation updates', value: 'documentation' as TaskType },
-    { label: TASK.TYPE.TEST, description: 'Test implementation', value: 'test' as TaskType }
+  { label: TASK_CONSTANTS.TYPE.FEATURE, description: 'New functionality', value: 'feature' as SprintDesk.TaskType },
+  { label: TASK_CONSTANTS.TYPE.BUG, description: 'Fix an issue', value: 'bug' as SprintDesk.TaskType },
+  { label: TASK_CONSTANTS.TYPE.IMPROVEMENT, description: 'Enhancement to existing feature', value: 'improvement' as SprintDesk.TaskType },
+  { label: TASK_CONSTANTS.TYPE.DOCUMENTATION, description: 'Documentation updates', value: 'documentation' as SprintDesk.TaskType },
+  { label: TASK_CONSTANTS.TYPE.TEST, description: 'Test implementation', value: 'test' as SprintDesk.TaskType }
   ], {
     placeHolder: 'Select task type'
   });
@@ -81,9 +77,9 @@ export async function createTaskInteractive() {
 
   // Get priority
   const priority = await vscode.window.showQuickPick([
-    { label: `${UI.EMOJI.PRIORITY.HIGH} High`, description: 'Critical or urgent', value: 'high' as Priority },
-    { label: `${UI.EMOJI.PRIORITY.MEDIUM} Medium`, description: 'Important but not urgent', value: 'medium' as Priority },
-    { label: `${UI.EMOJI.PRIORITY.LOW} Low`, description: 'Nice to have', value: 'low' as Priority }
+  { label: `${UI_CONSTANTS.EMOJI.PRIORITY.HIGH} High`, description: 'Critical or urgent', value: 'high' as SprintDesk.Priority },
+  { label: `${UI_CONSTANTS.EMOJI.PRIORITY.MEDIUM} Medium`, description: 'Important but not urgent', value: 'medium' as SprintDesk.Priority },
+  { label: `${UI_CONSTANTS.EMOJI.PRIORITY.LOW} Low`, description: 'Nice to have', value: 'low' as SprintDesk.Priority }
   ], {
     placeHolder: 'Select priority'
   });
@@ -92,25 +88,25 @@ export async function createTaskInteractive() {
   // Get category
   const category = await vscode.window.showInputBox({
     prompt: 'Enter category (optional)',
-    placeHolder: UI.QUICK_PICK.CATEGORY
+    placeHolder: UI_CONSTANTS.QUICK_PICK.CATEGORY
   });
 
   // Get component
   const component = await vscode.window.showInputBox({
     prompt: 'Enter component (optional)',
-    placeHolder: UI.QUICK_PICK.COMPONENT
+    placeHolder: UI_CONSTANTS.QUICK_PICK.COMPONENT
   });
 
   // Get duration estimate
   const duration = await vscode.window.showInputBox({
     prompt: 'Enter duration estimate (optional)',
-    placeHolder: UI.QUICK_PICK.DURATION
+    placeHolder: UI_CONSTANTS.QUICK_PICK.DURATION
   });
 
   // Get assignee
   const assignee = await vscode.window.showInputBox({
     prompt: 'Enter assignee (optional)',
-    placeHolder: UI.QUICK_PICK.ASSIGNEE
+    placeHolder: UI_CONSTANTS.QUICK_PICK.ASSIGNEE
   });
 
   // Get epic list and show quickpick
@@ -134,14 +130,14 @@ export async function createTaskInteractive() {
     // Create new epic
     const newEpicName = await vscode.window.showInputBox({ 
       prompt: 'New epic name',
-      placeHolder: UI.QUICK_PICK.EPIC_NAME
+      placeHolder: UI_CONSTANTS.QUICK_PICK.EPIC_NAME
     });
     if (!newEpicName) return;
     
     const epicPriority = await vscode.window.showQuickPick([
-      { label: `${UI.EMOJI.PRIORITY.HIGH} High`, value: 'high' as Priority },
-      { label: `${UI.EMOJI.PRIORITY.MEDIUM} Medium`, value: 'medium' as Priority },
-      { label: `${UI.EMOJI.PRIORITY.LOW} Low`, value: 'low' as Priority }
+      { label: `${UI_CONSTANTS.EMOJI.PRIORITY.HIGH} High`, value: 'high' as SprintDesk.Priority },
+      { label: `${UI_CONSTANTS.EMOJI.PRIORITY.MEDIUM} Medium`, value: 'medium' as SprintDesk.Priority },
+      { label: `${UI_CONSTANTS.EMOJI.PRIORITY.LOW} Low`, value: 'low' as SprintDesk.Priority }
     ], {
       placeHolder: 'Select epic priority'
     });
@@ -149,34 +145,34 @@ export async function createTaskInteractive() {
 
     const owner = await vscode.window.showInputBox({
       prompt: 'Epic owner (optional)',
-      placeHolder: UI.QUICK_PICK.EPIC_OWNER
+      placeHolder: UI_CONSTANTS.QUICK_PICK.EPIC_OWNER
     });
 
     epicName = newEpicName;
-    epicId = `${PROJECT.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
+    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
     
-    const epicMetadata: EpicMetadata = {
+    const epicMetadata: SprintDesk.EpicMetadata = {
       title: newEpicName,
       priority: epicPriority.value,
       owner: owner || undefined,
       type: type.value,
-      status: '⏳ Planned' as EpicStatus
+      status: '⏳ Planned' as SprintDesk.EpicStatus
     };
     createEpicFromMetadata(epicMetadata);
   } else if (epicName) {
-    epicId = `${PROJECT.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
+    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
   }
 
   try {
     const task = createTask({
-      title: taskName,
+      title: taskTitle,
       type: type.value,
       priority: priority.value,
       category,
       component,
       duration,
       assignee,
-      status: 'not-started',
+      status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
       epicName: epicName || undefined,
       epicId
     });

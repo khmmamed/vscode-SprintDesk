@@ -10,7 +10,7 @@
  * ================
  * Base directory and subdirectory configuration
  */
-export const PROJECT = {
+export const PROJECT_CONSTANTS = {
     SPRINTDESK_DIR: ".SprintDesk",
     BACKLOGS_DIR: "Backlogs",
     EPICS_DIR: "Epics",
@@ -38,30 +38,29 @@ export const PROJECT = {
  * Task Management
  * ==============
  */
-export const TASK = {
+export const TASK_CONSTANTS = {
     // Status
     STATUS: {
-        NOT_STARTED: "not-started",
-        IN_PROGRESS: "in-progress",
+        WAITING: "waiting",
+        STARTED: "started",
         DONE: "done",
         COMPLETED: "completed",
         BLOCKED: "blocked",
-        WAITING: "✅ [waiting]",
-        IN_PROGRESS_STATUS: "✅ [in progress]",
+        CANCELED: "canceled"
     },
 
     // Types
     TYPE: {
-        FEATURE: "$(tools) Feature",
-        BUG: "$(bug) Bug",
-        IMPROVEMENT: "$(arrow-up) Improvement",
-        DOCUMENTATION: "$(book) Documentation",
-        TEST: "$(beaker) Test",
+        FEATURE: "feature",
+        BUG: "bug",
+        IMPROVEMENT: "improvement",
+        DOCUMENTATION: "documentation",
+        TEST: "test",
     },
 
     // File & Template
     FILE_PREFIX: "[Task]_",
-    TASKS_SECTION: "## 📋 Tasks",
+    TASKS_SECTION: "## Tasks",
     TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
     TEMPLATE: (title: string) => `# 🧩 Task: ${title}\n\n## 📋 Description\n`,
 
@@ -73,7 +72,7 @@ export const TASK = {
  * Epic Management
  * ================
  */
-export const EPIC = {
+export const EPIC_CONSTANTS = {
     STATUS: {
         PLANNED: "⏳ Planned",
         IN_PROGRESS: "🔄 In Progress",
@@ -91,7 +90,7 @@ export const EPIC = {
  * Backlog Management
  * ================
  */
-export const BACKLOG = {
+export const BACKLOG_CONSTANTS = {
     STATUS: {
         ACTIVE: "active",
         ARCHIVED: "archived"
@@ -107,7 +106,7 @@ export const BACKLOG = {
  * Sprint Management
  * ===============
  */
-export const SPRINT = {
+export const SPRINT_CONSTANTS = {
     STATUS: {
         UPCOMING: "upcoming",
         IN_PROGRESS: "in-progress",
@@ -128,7 +127,7 @@ export const SPRINT = {
  * UI Colors and Themes
  * ==================
  */
-export const UI = {
+export const UI_CONSTANTS = {
     // Sprint Colors
     COLORS: {
         SPRINT: {
@@ -208,7 +207,7 @@ export const UI = {
  * Sample/Demo Data
  * ==============
  */
-export const SAMPLE = {
+export const SAMPLE_CONSTANTS = {
     BACKLOG_1: "Sample Backlog 1",
     BACKLOG_2: "Sample Backlog 2",
     EPIC_1: "Sample Epic 1",
@@ -220,7 +219,7 @@ export const SAMPLE = {
  * Git Integration
  * =============
  */
-export const GIT = {
+export const GIT_CONSTANTS = {
     DEFAULT_COMMIT: "Initial",
     LAST_UPDATE: {
         TODAY: "today",
@@ -233,7 +232,7 @@ export const GIT = {
  * WebView Configuration
  * ===================
  */
-export const WEBVIEW = {
+export const WEBVIEW_CONSTANTS = {
     APP_TITLE: "Sprint Desk v0.2.4",
     EXTENSION_NAME: "sprintdesk",
     PANEL: {

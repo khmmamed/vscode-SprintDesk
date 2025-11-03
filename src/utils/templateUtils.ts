@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { PROJECT } from './constant';
+import { EPIC_CONSTANTS, PROJECT_CONSTANTS } from './constant';
 
 function getPriorityEmoji(priority?: Priority): string {
   switch (priority?.toLowerCase()) {
@@ -57,7 +57,7 @@ export function generateEpicId(title: string): string {
   return `epic_${slug}`;
 }
 
-export function generateTaskContent(metadata: TaskMetadata): string {
+export function generateTaskContent(metadata: SprintDesk.TaskMetadata): string {
   const taskId = generateTaskId(metadata.title);
   const taskName = metadata.title.replace(/[^\w\s-]/g, '');
   const now = new Date().toISOString();
@@ -142,7 +142,7 @@ Add implementation notes here...
 `;
 }
 
-export function generateEpicContent(metadata: EpicMetadata): string {
+export function generateEpicContent(metadata: SprintDesk.EpicMetadata): string {
   const epicId = generateEpicId(metadata.title);
   const epicName = metadata.title.replace(/[^\w\s-]/g, '');
   const now = new Date().toISOString();
@@ -157,8 +157,11 @@ description: ${metadata.description || 'Add epic description here...'}
 status: ${metadata.status || '⏳ Planned'}
 created_at: ${startDate}
 updated_at: ${now}
-total_tasks: 0
-completed_tasks: 0
+totalTasks: 0
+completedTasks: 0
+waitingTasks: 0
+startedTasks: 0
+doneTasks: 0
 progress: 0%
 
 # Related Backlogs (many-to-one)
@@ -189,7 +192,7 @@ ${metadata.description || 'Add detailed epic description here...'}
 - 🕓 **Created At:** ${startDate}
 - 🔄 **Updated At:** ${now}
 - 📌 **Total Tasks:** ${metadata.totalTasks || 0}
-- 📈 **Status:** ${metadata.status || '⏳ Planned'} [${metadata.completedTasks || 0}/${metadata.totalTasks || 0} Complete]
+- 📈 **Status:** ${metadata.status || EPIC_CONSTANTS.STATUS.PLANNED} [${metadata.completedTasks || 0}/${metadata.totalTasks || 0} Complete]
 - 🎨 **Color:** ${metadata.color || '#0b2cc2'}
 
 ## Backlogs
@@ -219,19 +222,19 @@ export function generateTaskFileName(title: string, epicName?: string): string {
   const taskSlug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   if (epicName) {
     const epicSlug = epicName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    return `${PROJECT.FILE_PREFIX.TASK}${taskId}_${taskSlug}_${PROJECT.FILE_PREFIX.EPIC}${epicSlug}.md`;
+    return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskId}_${taskSlug}_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicSlug}.md`;
   }
-  return `${PROJECT.FILE_PREFIX.TASK}${taskId}_${taskSlug}.md`;
+  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskId}_${taskSlug}.md`;
 }
 
 export function generateEpicFileName(title: string): string {
   const epicSlug = title.replace(/\s+/g, '-');
-  return `${PROJECT.FILE_PREFIX.EPIC}${epicSlug}.md`;
+  return `${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicSlug}.md`;
 }
 
 export function parseTaskMetadataFromFilename(filename: string): { taskName: string; epicName?: string } {
-  const taskPrefix = PROJECT.FILE_PREFIX.TASK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const epicPrefix = PROJECT.FILE_PREFIX.EPIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const taskPrefix = PROJECT_CONSTANTS.FILE_PREFIX.TASK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const epicPrefix = PROJECT_CONSTANTS.FILE_PREFIX.EPIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`${taskPrefix}(.+?)(?:_${epicPrefix}(.+?))?\.md$`);
   const match = filename.match(pattern);
   if (!match) throw new Error('Invalid task filename format');
@@ -243,7 +246,7 @@ export function parseTaskMetadataFromFilename(filename: string): { taskName: str
 }
 
 export function parseEpicMetadataFromFilename(filename: string): { epicName: string } {
-  const epicPrefix = PROJECT.FILE_PREFIX.EPIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const epicPrefix = PROJECT_CONSTANTS.FILE_PREFIX.EPIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`${epicPrefix}(.+?)\.md$`);
   const match = filename.match(pattern);
   if (!match) throw new Error('Invalid epic filename format');
