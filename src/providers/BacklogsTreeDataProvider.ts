@@ -7,7 +7,7 @@ import * as backlogController from '../controller/backlogController';
 import { UI_CONSTANTS, PROJECT_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import { getBacklogPath, getTasksPath } from '../utils/backlogUtils';
-import { getTaskPath } from '../utils/taskUtils';
+import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
 
 
 export class BacklogsTreeItem extends vscode.TreeItem {
@@ -181,9 +181,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     const { taskName, backlog } = handleData;
 
     const taskPath = getTaskPath(taskName);
-    const backlogPath = getBacklogPath(backlog.backlogName)
-
-    console.log('Moving task:', taskPath, 'to backlog:', target.filePath);
+    const backlogPath = getBacklogPath(backlog.backlogName);
 
     await this.addTaskToBacklog(target.filePath!, taskPath);
     await this.removeTaskFromBacklog(backlogPath, taskPath);
@@ -230,7 +228,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
         const taskData = {
           type: 'task',
           label: taskItem.label,
-          taskName: taskItem.label,
+          taskName: removeEmojiFromTaskLabel(taskItem.label),
           path: taskItem.taskPath,
           backlog: {
             type: 'backlog',

@@ -7,7 +7,8 @@ import * as backlogController from '../controller/backlogController';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import * as epicService from '../services/epicService';
-import { getTaskPath } from '../utils/taskUtils';
+import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
+import { getEpicPath } from '../utils/backlogUtils';
 
 
 export class EpicsTreeItem extends vscode.TreeItem {
@@ -20,7 +21,7 @@ export class EpicsTreeItem extends vscode.TreeItem {
     public readonly sourceEpicPath?: string
   ) {
     super(label, collapsibleState);
-   
+
     if (filePath) {
       // Setup epic item
       this.contextValue = 'epic';
@@ -110,32 +111,6 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
   ];
   readonly dragMimeTypes = ['application/vnd.code.tree.sprintdesk-epics'];
 
-  private resolveTaskPath(handleData: any): string {
-    let taskFilePath: string | undefined;
-
-    // Prefer explicit path-like fields first
-    if (handleData.path) taskFilePath = handleData.path;
-    else if (handleData.filePath) taskFilePath = handleData.filePath;
-    else if (handleData.taskPath) taskFilePath = handleData.taskPath;
-
-    // If legacy itemHandles exists, extract basename using split(' ')[1]
-    if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
-      const raw = String(handleData.itemHandles[0] || '');
-      const parts = raw.split(' ');
-      const maybeBasename = parts[1] || parts.pop() || raw;
-      let base = path.basename(maybeBasename).trim();
-      if (!base.toLowerCase().endsWith('.md')) base = `${base}.md`;
-
-      const ws = this.getWorkspaceRoot();
-      if (!ws) throw new Error('No workspace root found');
-      taskFilePath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, base);
-    }
-
-    if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
-    if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
-
-    return taskFilePath;
-  }
 
   constructor() {
     // Initialize workspace root
@@ -151,7 +126,6 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     let taskFilePath: string | undefined;
     let taskName: string | undefined;
 
-    // If legacy itemHandles exists, extract basename using split(' ')[1]
     if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
       const raw = String(handleData.itemHandles[0] || '');
       const parts = raw.split(' ');
@@ -162,7 +136,6 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     await this.addTaskToEpic(target.filePath!, taskPath);
   }
   private async handleTaskDropFromBacklogs(target: EpicsTreeItem, handleData: any): Promise<void> {
-    // Move task from backlog to epic
     let taskFilePath: string | undefined;
     let taskName: string | undefined;
     if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
@@ -171,29 +144,24 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
       taskName = parts[1] || parts.pop() || raw;
     }
     const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
-    const backlogPath = handleData.sourceContainer?.path || handleData.backlog?.backlogName;
-
+ 
     await this.addTaskToEpic(target.filePath!, taskPath);
-    try {
-      if (backlogPath) await backlogController.removeTaskFromBacklog(backlogPath, taskPath);
-    } catch (e) {
-      // ignore if can't remove from backlog
-    }
+    this.refresh();
   }
   private async handleTaskDropFromEpics(target: EpicsTreeItem, handleData: any): Promise<void> {
     // Move between epics
-    const taskPath = this.resolveTaskPath(handleData);
+    const { taskName, epic } = handleData;
+
+    const taskPath = getTaskPath(taskName);
+    const backlogPath = getEpicPath(epic.epicName);
+
     await this.addTaskToEpic(target.filePath!, taskPath);
-    // remove from source epic if provided
-    try {
-      const sourceEpic = handleData.epic?.epicName || handleData.sourceContainer?.path;
-      if (sourceEpic) await epicController.removeTaskFromEpic(sourceEpic, taskPath);
-    } catch { }
+    await this.removeTaskFromEpic(backlogPath, taskPath);
+    await this.refresh();
   }
   private async handleTaskDropFromSprints(target: EpicsTreeItem, handleData: any): Promise<void> {
     let taskFilePath: string | undefined;
     let taskName: string | undefined;
-    console.log('handleTaskDropFromSprints handleData:', handleData);
     if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
       const raw = String(handleData.itemHandles[0] || '');
       const parts = raw.split(' ');
@@ -202,6 +170,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
 
     await this.addTaskToEpic(target.filePath!, taskPath);
+    this.refresh();
   }
   private async addTaskToEpic(epicPath: string, taskPath: string): Promise<void> {
 
@@ -209,6 +178,9 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     this.refresh();
     void vscode.window.showInformationMessage(`Task added to epic`);
 
+  }
+  private async removeTaskFromEpic(epicName: string, taskPath: string): Promise<void> {
+    await epicController.removeTaskFromEpic(epicName, taskPath);
   }
   private async getTasksFromEpicName(epicName: string): Promise<EpicsTreeItem[]> {
     const treeItemsRaw = epicService.getTasksFromEpic(epicName);
@@ -234,6 +206,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     try {
       if (source.length > 0) {
         const taskItem = source[0];
+        console.log('Dragging task item:', taskItem);
         if (!taskItem.taskPath) {
           throw new Error('No task path found for drag operation');
         }
@@ -242,7 +215,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
         const taskData = {
           type: 'task',
           label: taskItem.label,
-          taskName: taskItem.label,
+          taskName: removeEmojiFromTaskLabel(taskItem.label),
           path: taskItem.taskPath,
           epic: {
             type: 'epic',

@@ -22,8 +22,9 @@ export const relativePathTaskToTaskpath = (rel: string): string => {
     const ProjectDir = path.join(ws!, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
     return path.resolve(ProjectDir, rel);
 };
-
-
+export const removeEmojiFromTaskLabel = (label: string): string => {
+    return label.replace(/\p{Extended_Pictographic}/gu, '').trim();
+}
 export interface TaskRow {
     task: string;
     epic: string;

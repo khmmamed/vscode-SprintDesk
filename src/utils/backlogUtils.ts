@@ -24,6 +24,10 @@ export const getEpicsPath = (): string => {
     const SPRINTDESK_PATH = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR);
     return path.join(SPRINTDESK_PATH, PROJECT_CONSTANTS.EPICS_DIR);
 };
+export const getEpicPath = (epicName: string): string => {
+    const epicsPath = getEpicsPath();
+    return path.join(epicsPath, `${epicName}`);
+}
 export const getSprintsPath = (): string => {
     const wsFolders = vscode.workspace.workspaceFolders;
     if (!wsFolders || wsFolders.length === 0) {

@@ -8,7 +8,7 @@ import * as sprintService from '../services/sprintService';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import { getSprintsPath } from '../utils/backlogUtils';
-import { getTaskPath } from '../utils/taskUtils';
+import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
 
 export class SprintsTreeItem extends vscode.TreeItem {
   constructor(
@@ -158,36 +158,38 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
 
     await this.addTaskToSprint(target.filePath!, taskPath);
+    this.refresh();
   }
   private async handleTaskDropFromBacklogs(target: SprintsTreeItem, handleData: any): Promise<void> {
-    // Move task from backlog to sprint
     let taskFilePath: string | undefined;
     let taskName: string | undefined;
+
+    // If legacy itemHandles exists, extract basename using split(' ')[1]
     if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
       const raw = String(handleData.itemHandles[0] || '');
       const parts = raw.split(' ');
       taskName = parts[1] || parts.pop() || raw;
     }
     const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
-    const backlogPath = handleData.sourceContainer?.path || handleData.backlog?.backlogName;
 
     await this.addTaskToSprint(target.filePath!, taskPath);
-    try {
-      if (backlogPath) await backlogController.removeTaskFromBacklog(backlogPath, taskPath);
-    } catch (e) {
-      // ignore if can't remove from backlog
-    }
+
+    this.refresh();
   }
   private async handleTaskDropFromEpics(target: SprintsTreeItem, handleData: any): Promise<void> {
-    const taskPath = this.resolveTaskPath(handleData);
+    let taskFilePath: string | undefined;
+    let taskName: string | undefined;
+
+    // If legacy itemHandles exists, extract basename using split(' ')[1]
+    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+      const raw = String(handleData.itemHandles[0] || '');
+      const parts = raw.split(' ');
+      taskName = parts[1] || parts.pop() || raw;
+    }
+    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
+
     await this.addTaskToSprint(target.filePath!, taskPath);
-    try {
-      const sourceEpic = handleData.epic?.epicName || handleData.sourceContainer?.path;
-      if (sourceEpic) {
-        // attempt to remove from epic if controller exists
-        try { const epicController = require('../controller/epicController'); epicController.removeTaskFromEpic(sourceEpic, taskPath); } catch { }
-      }
-    } catch { }
+    this.refresh();
   }
   private async handleTaskDropFromSprints(target: SprintsTreeItem, handleData: any): Promise<void> {
     const taskPath = this.resolveTaskPath(handleData);
@@ -238,7 +240,7 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
         const taskData = {
           type: 'task',
           label: taskItem.label,
-          taskName: taskItem.label,
+          taskName: removeEmojiFromTaskLabel(taskItem.label),
           path: taskItem.taskPath,
           sprint: {
             type: 'sprint',
@@ -313,8 +315,6 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
 
     return dateRange;
   }
-
-  // tree visualization methods
   private async getSprintsTree(workspaceRoot: string): Promise<SprintsTreeItem[]> {
     const sprintsDir = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.SPRINTS_DIR);
     const files = fileService.listMdFiles(sprintsDir);
