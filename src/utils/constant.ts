@@ -5,6 +5,8 @@
  * Centralized configuration for the SprintDesk extension
  */
 
+import { CANCELLED, FILE } from "dns";
+
 /**
  * Project Structure
  * ================
@@ -177,13 +179,20 @@ export const UI_CONSTANTS = {
             PROGRESS: "📊",
             SUMMARY: "📝",
             TASK_LIST: "📋",
-            TASKS_SECTION: "🧱"
+            TASKS_SECTION: "🧱",
+            PRIORITY: "⚡",
+            TYPE: "🏷️",
+            ASSIGNEE: "👤",
+            FOLDER: "📁",
+            OPEN_FILE: "📂",
+            CHECKMARK: "✔️",
         },
         STATUS: {
-            NOT_STARTED: "⏳",
+            WAITING: "⏳",
             IN_PROGRESS: "🔄",
             DONE: "✅",
-            BLOCKED: "⛔"
+            BLOCKED: "⛔",
+            CANCELLED: "❌"
         },
         PRIORITY: {
             HIGH: "🔴",

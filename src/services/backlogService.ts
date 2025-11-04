@@ -103,7 +103,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
           const status = (tm.data.status || 'not-started') as string;
           const priority = (tm.data.priority || '') as string;
           const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
-          const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+          const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.WAITING;
           const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
           const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
           computedLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
@@ -113,7 +113,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
         }
       } else {
         // Task file missing — show default status emoji + basename
-        const statusEmoji = UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+        const statusEmoji = UI_CONSTANTS.EMOJI.STATUS.WAITING;
         computedLabel = `${statusEmoji} ${path.basename(rel)}`;
       }
       const key = `${prettyLabel}|${abs}`;
@@ -160,7 +160,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
             const status = (tm.data.status || 'not-started') as string;
             const priority = (tm.data.priority || '') as string;
             const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
-            const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+            const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.WAITING;
             const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
             const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
             computedLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
@@ -168,7 +168,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
             computedLabel = path.basename(rel);
           }
         } else {
-          computedLabel = `${UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED} ${path.basename(rel)}`;
+          computedLabel = `${UI_CONSTANTS.EMOJI.STATUS.WAITING} ${path.basename(rel)}`;
         }
         tasks.push({ label: computedLabel, abs: fileService.fileExists(abs) ? abs : undefined, rel });
       }
@@ -176,7 +176,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
       if (!seen.has(key)) {
         seen.add(key);
         // no linked file — show default status and the pretty label
-        tasks.push({ label: `${UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED} ${prettyLabel}` });
+        tasks.push({ label: `${UI_CONSTANTS.EMOJI.STATUS.WAITING} ${prettyLabel}` });
       }
     }
   }

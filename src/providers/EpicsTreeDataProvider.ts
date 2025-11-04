@@ -4,9 +4,9 @@ import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as epicController from '../controller/epicController';
 import * as backlogController from '../controller/backlogController';
-import { UI_CONSTANTS, PROJECT_CONSTANTS } from '../utils/constant';
+import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
-import { getEpicsPath } from '../utils/backlogUtils';
+import * as epicService from '../services/epicService';
 import { getTaskPath } from '../utils/taskUtils';
 
 
@@ -20,7 +20,7 @@ export class EpicsTreeItem extends vscode.TreeItem {
     public readonly sourceEpicPath?: string
   ) {
     super(label, collapsibleState);
-    console.log('filePath:', filePath, 'taskPath:', taskPath);
+   
     if (filePath) {
       // Setup epic item
       this.contextValue = 'epic';
@@ -29,17 +29,18 @@ export class EpicsTreeItem extends vscode.TreeItem {
       // Count tasks in epic
       try {
         const { data } = matter.read(filePath);
-  const taskCount = data.tasks?.length;
-  this.description = `${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;
+        const taskCount = data.tasks?.length;
+        this.iconPath = new vscode.ThemeIcon('milestone');
+        this.description = `${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;
       } catch {
-  this.description = `${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} 0 tasks`;
+        this.description = `${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} 0 tasks`;
       }
 
       // Add epic icon and tooltip
-      this.iconPath = new vscode.ThemeIcon('repo');
+      this.iconPath = new vscode.ThemeIcon('milestone');
       this.tooltip = new vscode.MarkdownString()
         .appendMarkdown(`**${label}**\n\n`)
-  .appendMarkdown(`${UI_CONSTANTS.EMOJI.COMMON.FILE} Path: \`${filePath}\`\n\n`)
+        .appendMarkdown(`${UI_CONSTANTS.EMOJI.COMMON.FILE} Path: \`${filePath}\`\n\n`)
         .appendMarkdown('*Drop tasks here to add them to this epic*');
 
     } else if (taskPath) {
@@ -50,13 +51,13 @@ export class EpicsTreeItem extends vscode.TreeItem {
 
         const { data: taskMetadata } = matter.read(taskPath);
         const { status, priority, type } = taskMetadata;
-
-  const statusKey = (status || 'NOT_STARTED').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
-  const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+        console.log('Task status:', status);
+        const statusKey = (status || TASK_CONSTANTS.STATUS.WAITING).toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
+        const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.WAITING;
 
         // Determine priority emoji (if any)
-  const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
-  const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
+        const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
+        const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
 
         console.log('Task metadata:', taskMetadata);
         // Use the full filename with extension for the label and include priority emoji
@@ -81,12 +82,12 @@ export class EpicsTreeItem extends vscode.TreeItem {
           tooltipMd.appendMarkdown(`${type.toLowerCase().includes('bug') ? '🐛' : '✨'} Type: ${type}\n`);
         }
 
-  tooltipMd.appendMarkdown(`\n${UI_CONSTANTS.EMOJI.COMMON.FILE} Path: \`${taskPath}\``);
+        tooltipMd.appendMarkdown(`\n${UI_CONSTANTS.EMOJI.COMMON.FILE} Path: \`${taskPath}\``);
         this.tooltip = tooltipMd;
 
       } catch {
         // Fallback if can't read task file
-        this.iconPath = new vscode.ThemeIcon('tasklist');
+        this.iconPath = new vscode.ThemeIcon('repo');
         this.tooltip = `Task: ${label}\nPath: ${taskPath}`;
       }
     }
@@ -118,7 +119,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     else if (handleData.taskPath) taskFilePath = handleData.taskPath;
 
     // If legacy itemHandles exists, extract basename using split(' ')[1]
-  if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+    if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
       const raw = String(handleData.itemHandles[0] || '');
       const parts = raw.split(' ');
       const maybeBasename = parts[1] || parts.pop() || raw;
@@ -127,10 +128,10 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
 
       const ws = this.getWorkspaceRoot();
       if (!ws) throw new Error('No workspace root found');
-  taskFilePath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, base);
+      taskFilePath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, base);
     }
 
-      if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
+    if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
     if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
 
     return taskFilePath;
@@ -187,7 +188,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     try {
       const sourceEpic = handleData.epic?.epicName || handleData.sourceContainer?.path;
       if (sourceEpic) await epicController.removeTaskFromEpic(sourceEpic, taskPath);
-    } catch {}
+    } catch { }
   }
   private async handleTaskDropFromSprints(target: EpicsTreeItem, handleData: any): Promise<void> {
     let taskFilePath: string | undefined;
@@ -210,7 +211,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
 
   }
   private async getTasksFromEpicName(epicName: string): Promise<EpicsTreeItem[]> {
-    const treeItemsRaw = epicController.getEpicTasks(epicName);
+    const treeItemsRaw = epicService.getTasksFromEpic(epicName);
     return (treeItemsRaw || []).map((item: any) => {
       const label = path.basename(item.path || '');
       const treeItem = new EpicsTreeItem(
@@ -311,7 +312,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
   }
   // tree visualization methods
   private async getEpicsTree(workspaceRoot: string): Promise<EpicsTreeItem[]> {
-  const epicsDir = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
+    const epicsDir = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
     const files = fileService.listMdFiles(epicsDir);
 
     const items = files.map(name => {

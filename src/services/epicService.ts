@@ -122,12 +122,12 @@ export function addTaskToEpic(epicTitle: string, taskName: string) {
   // Create task table
   function getStatusEmoji(status: string): string {
     switch (status?.toLowerCase()) {
-      case TASK_CONSTANTS.STATUS.WAITING: return UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+      case TASK_CONSTANTS.STATUS.WAITING: return UI_CONSTANTS.EMOJI.STATUS.WAITING;
       case TASK_CONSTANTS.STATUS.STARTED: return UI_CONSTANTS.EMOJI.STATUS.IN_PROGRESS;
       case TASK_CONSTANTS.STATUS.DONE:
       case TASK_CONSTANTS.STATUS.COMPLETED: return UI_CONSTANTS.EMOJI.STATUS.DONE;
       case TASK_CONSTANTS.STATUS.BLOCKED: return UI_CONSTANTS.EMOJI.STATUS.BLOCKED;
-      default: return UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+      default: return UI_CONSTANTS.EMOJI.STATUS.WAITING;
     }
   }
 
