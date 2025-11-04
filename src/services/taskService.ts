@@ -2,31 +2,32 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from './fileService';
-import { createEpicFromMetadata, addTaskToEpic, listEpics } from './epicService';
+import { createEpicFromMetadata, addTaskToEpic, listEpics, createEpic } from './epicService';
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 
 import { 
-  generateTaskContent, 
-  generateTaskFileName,  
-} from '../utils/templateUtils';
+  generateTaskName,
+  generateTaskTemplate, 
+} from '../utils/taskTemplate';
+import { generateEpicTemplate } from '../utils/epicTemplate';
 
 
 
-export function createTask(metadata: SprintDesk.TaskMetadata): { filePath: string; fileName: string } {
+export function createTask(metadata: SprintDesk.TaskMetadata): { filePath: string; taskName: string } {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
   fs.mkdirSync(tasksDir, { recursive: true });
 
-  const fileName = generateTaskFileName(metadata.title, metadata.epicName);
-  const taskPath = path.join(tasksDir, fileName);
+  const taskName = generateTaskName(metadata.title, metadata.epicTitle);
+  const taskPath = path.join(tasksDir, taskName);
   
   if (!fs.existsSync(taskPath)) {
-    const content = generateTaskContent(metadata);
+    const content = generateTaskTemplate(metadata);
     fs.writeFileSync(taskPath, content, 'utf8');
   }
   
-  return { filePath: taskPath, fileName };
+  return { filePath: taskPath, taskName };
 }
 
 export function updateTask(filePath: string, content: string) {
@@ -123,14 +124,14 @@ export async function writeTask() {
 
   if (!selected) return; // User cancelled
 
-  let epicName = selected.value;
+  let epicTitle = selected.value;
   let epicId: string | undefined;
 
-  if (epicName === '__new__') {
+  if (epicTitle === '__new__') {
     // Create new epic
     const newEpicName = await vscode.window.showInputBox({ 
-      prompt: 'New epic name',
-      placeHolder: UI_CONSTANTS.QUICK_PICK.EPIC_NAME
+      prompt: 'New epic title',
+      placeHolder: UI_CONSTANTS.QUICK_PICK.EPIC_TITLE
     });
     if (!newEpicName) return;
     
@@ -148,19 +149,19 @@ export async function writeTask() {
       placeHolder: UI_CONSTANTS.QUICK_PICK.EPIC_OWNER
     });
 
-    epicName = newEpicName;
-    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
+    epicTitle = newEpicName;
+    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicTitle.replace(/\s+/g, '_').toLowerCase()}`;
     
     const epicMetadata: SprintDesk.EpicMetadata = {
       title: newEpicName,
       priority: epicPriority.value,
       owner: owner || undefined,
       type: type.value,
-      status: '⏳ Planned' as SprintDesk.EpicStatus
+      status: 'planned' as SprintDesk.EpicStatus
     };
     createEpicFromMetadata(epicMetadata);
-  } else if (epicName) {
-    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicName.replace(/\s+/g, '_').toLowerCase()}`;
+  } else if (epicTitle) {
+    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicTitle.replace(/\s+/g, '_').toLowerCase()}`;
   }
 
   try {
@@ -173,12 +174,12 @@ export async function writeTask() {
       duration,
       assignee,
       status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
-      epicName: epicName || undefined,
+      epicTitle: epicTitle || undefined,
       epicId
     });
 
-    if (epicName) {
-      await addTaskToEpic(epicName, task.fileName);
+    if (epicTitle) {
+      await addTaskToEpic(epicTitle, task.taskName);
     }
 
     vscode.window.showInformationMessage('Task created successfully.');

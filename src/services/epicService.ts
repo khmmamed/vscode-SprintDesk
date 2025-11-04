@@ -2,16 +2,16 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import * as fileService from './fileService';
-import insertTaskLinkUnderSection from '../utils/mdUtils';
+
 import { 
-  generateEpicContent, 
-  generateEpicFileName,
-  parseEpicMetadataFromFilename 
-} from '../utils/templateUtils';
+  generateEpicContent,
+  generateEpicTemplate
+} from '../utils/epicTemplate';
 // EpicMetadata is provided globally via `src/types/global.d.ts` as SprintDesk.EpicMetadata
 import { PROJECT_CONSTANTS, UI_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import { getEpicTasks } from '../controller/epicController';
 import { relativePathTaskToTaskpath } from '../utils/taskUtils';
+import { generateEpicName } from '../utils/epicTemplate';
 
 interface TreeItemLike {
   label: string;
@@ -42,15 +42,15 @@ export function createEpicFromMetadata(metadata: SprintDesk.EpicMetadata): strin
   const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
   fs.mkdirSync(epicsDir, { recursive: true });
   
-  const fileName = generateEpicFileName(metadata.title);
-  const epicFile = path.join(epicsDir, fileName);
+  const epicName = generateEpicName(metadata.title);
+  const epicPath = path.join(epicsDir, epicName);
   
-  if (!fs.existsSync(epicFile)) {
-    const content = generateEpicContent(metadata);
-    fs.writeFileSync(epicFile, content, 'utf8');
+  if (!fs.existsSync(epicPath)) {
+    const content = generateEpicTemplate(metadata);
+    fs.writeFileSync(epicPath, content, 'utf8');
   }
   
-  return epicFile;
+  return epicPath;
 }
 
 export function createEpic(name: string): string {
@@ -74,16 +74,16 @@ export function deleteEpic(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
-export function addTaskToEpic(epicName: string, taskFileName: string) {
+export function addTaskToEpic(epicTitle: string, taskName: string) {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
-  const epicFile = path.join(epicsDir, generateEpicFileName(epicName));
+  const epicPath = path.join(epicsDir, generateEpicName(epicTitle));
   
   // Read epic and task files
-  const epicContent = fileService.readFileSyncSafe(epicFile);
+  const epicContent = fileService.readFileSyncSafe(epicPath);
   if (!epicContent) throw new Error('Epic file not found');
-  const taskPath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, taskFileName);
+  const taskPath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, taskName);
   const taskContent = fileService.readFileSyncSafe(taskPath);
   if (!taskContent) throw new Error('Task file not found');
 
@@ -100,10 +100,10 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
   // Create task data object
   const taskData = {
     _id: taskMatter.data._id,
-    name: taskMatter.data.name || taskMatter.data.title,
-    status: taskMatter.data.status || 'not-started',
-    priority: taskMatter.data.priority || 'medium',
-    file: `../tasks/${taskFileName}`
+    title: taskMatter.data.title,
+    status: taskMatter.data.status || TASK_CONSTANTS.STATUS.WAITING,
+    priority: taskMatter.data.priority || TASK_CONSTANTS.PRIORITY.MEDIUM,
+    path: `../${PROJECT_CONSTANTS.TASKS_DIR}/${taskName}`
   };
 
   // Add task to the tasks array if not already present
@@ -115,9 +115,9 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
   }
 
   // Update task counts
-  epicMatter.data.total_tasks = epicMatter.data.tasks.length;
-  epicMatter.data.completed_tasks = epicMatter.data.tasks.filter((t: any) => t.status === 'done' || t.status === 'completed').length;
-  epicMatter.data.progress = Math.round((epicMatter.data.completed_tasks / epicMatter.data.total_tasks) * 100) + '%';
+  epicMatter.data.totalTasks = epicMatter.data.tasks.length;
+  epicMatter.data.completedTasks = epicMatter.data.tasks.filter((t: any) => t.status === 'done' || t.status === 'completed').length;
+  epicMatter.data.progress = Math.round((epicMatter.data.completedTasks / epicMatter.data.totalTasks) * 100) + '%';
 
   // Create task table
   function getStatusEmoji(status: string): string {
@@ -133,8 +133,8 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
 
   function getPriorityEmoji(priority: string): string {
     switch (priority?.toLowerCase()) {
-      case 'high': return UI_CONSTANTS.EMOJI.PRIORITY.HIGH;
-      case 'low': return UI_CONSTANTS.EMOJI.PRIORITY.LOW;
+      case TASK_CONSTANTS.PRIORITY.HIGH: return UI_CONSTANTS.EMOJI.PRIORITY.HIGH;
+      case TASK_CONSTANTS.PRIORITY.LOW: return UI_CONSTANTS.EMOJI.PRIORITY.LOW;
       default: return UI_CONSTANTS.EMOJI.PRIORITY.MEDIUM;
     }
   }
@@ -143,7 +143,7 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
     .map((task: any, index: number) => {
       const statusEmoji = getStatusEmoji(task.status);
       const priorityEmoji = getPriorityEmoji(task.priority);
-      return `| ${index + 1} | [${task.name}](${task.file}) | ${statusEmoji} ${task.status} | ${priorityEmoji} ${task.priority} | \`${task._id}\` |`;
+      return `| ${index + 1} | [${task.title}](${task.path}) | ${statusEmoji} ${task.status} | ${priorityEmoji} ${task.priority} | \`${task._id}\` |`;
     })
     .join('\n');
 
@@ -157,12 +157,12 @@ export function addTaskToEpic(epicName: string, taskFileName: string) {
     
     epicMatter.content = 
       epicMatter.content.slice(0, tasksSectionStart) +
-      `${UI_CONSTANTS.SECTIONS.TASKS_MARKER}\n\n| # | Task | Status | Priority | ID |\n|:--|:-----|:------:|:--------:|:-----|${taskTable}\n${UI_CONSTANTS.SECTIONS.AUTO_COMMENT}\n\n` +
+      `${UI_CONSTANTS.SECTIONS.TASKS_MARKER}\n\n| # | Task | Status | Priority | ID |\n|:--|:-----|:------:|:--------:|:-----|\n${taskTable}\n${UI_CONSTANTS.SECTIONS.AUTO_COMMENT}\n\n` +
       epicMatter.content.slice(tasksSectionEnd);
   }
 
   // Write the updated epic file
-  fs.writeFileSync(epicFile, matter.stringify(epicMatter.content, epicMatter.data));
+  fs.writeFileSync(epicPath, matter.stringify(epicMatter.content, epicMatter.data));
 }
 
 export async function createEpicInteractive() {

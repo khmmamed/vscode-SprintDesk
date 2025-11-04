@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as backlogService from '../services/backlogService';
 import * as backlogController from '../controller/backlogController';
-import { UI, PROJECT } from '../utils/constant';
+import { UI_CONSTANTS, PROJECT_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import { getBacklogPath, getTasksPath } from '../utils/backlogUtils';
 import { getTaskPath } from '../utils/taskUtils';
@@ -29,17 +29,17 @@ export class BacklogsTreeItem extends vscode.TreeItem {
       // Count tasks in backlog
       try {
         const { data } = matter.read(filePath);
-        const taskCount = data.tasks?.length;
-        this.description = `${UI.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;
+  const taskCount = data.tasks?.length;
+  this.description = `${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;
       } catch {
-        this.description = `${UI.EMOJI.COMMON.TASK_LIST} 0 tasks`;
+  this.description = `${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} 0 tasks`;
       }
 
       // Add backlog icon and tooltip
       this.iconPath = new vscode.ThemeIcon('repo');
       this.tooltip = new vscode.MarkdownString()
         .appendMarkdown(`**${label}**\n\n`)
-        .appendMarkdown(`${UI.EMOJI.COMMON.FILE} Path: \`${filePath}\`\n\n`)
+  .appendMarkdown(`${UI_CONSTANTS.EMOJI.COMMON.FILE} Path: \`${filePath}\`\n\n`)
         .appendMarkdown('*Drop tasks here to add them to this backlog*');
 
     } else if (taskPath) {
@@ -51,12 +51,12 @@ export class BacklogsTreeItem extends vscode.TreeItem {
         const { data: taskMetadata } = matter.read(taskPath);
         const { status, priority, type } = taskMetadata;
 
-        const statusKey = (status || 'NOT_STARTED').toUpperCase() as keyof typeof UI.EMOJI.STATUS;
-        const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
+  const statusKey = (status || 'NOT_STARTED').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
+  const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
 
         // Determine priority emoji (if any)
-        const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
-        const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+  const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
+  const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
 
         console.log('this.label before:', this.label);
         // Use the full filename with extension for the label and include priority emoji
@@ -73,15 +73,15 @@ export class BacklogsTreeItem extends vscode.TreeItem {
           .appendMarkdown(`${statusEmoji} Status: ${status}\n`);
 
         if (priority) {
-          const priorityKey = priority.toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
-          tooltipMd.appendMarkdown(`${UI.EMOJI.PRIORITY[priorityKey] || ''} Priority: ${priority}\n`);
+          const priorityKey = priority.toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
+          tooltipMd.appendMarkdown(`${UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || ''} Priority: ${priority}\n`);
         }
 
         if (type) {
           tooltipMd.appendMarkdown(`${type.toLowerCase().includes('bug') ? '🐛' : '✨'} Type: ${type}\n`);
         }
 
-        tooltipMd.appendMarkdown(`\n${UI.EMOJI.COMMON.FILE} Path: \`${taskPath}\``);
+  tooltipMd.appendMarkdown(`\n${UI_CONSTANTS.EMOJI.COMMON.FILE} Path: \`${taskPath}\``);
         this.tooltip = tooltipMd;
 
       } catch {
@@ -118,7 +118,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     else if (handleData.taskPath) taskFilePath = handleData.taskPath;
 
     // If legacy itemHandles exists, extract basename using split(' ')[1]
-    if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
+  if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
       const raw = String(handleData.itemHandles[0] || '');
       const parts = raw.split(' ');
       const maybeBasename = parts[1] || parts.pop() || raw;
@@ -127,10 +127,10 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
 
       const ws = this.getWorkspaceRoot();
       if (!ws) throw new Error('No workspace root found');
-      taskFilePath = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR, base);
+  taskFilePath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, base);
     }
 
-    if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
+      if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
     if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
 
     return taskFilePath;
@@ -148,7 +148,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
 
   private async handleTaskDropFromTasks(target: BacklogsTreeItem, handleData: any): Promise<void> {
     let taskFilePath: string | undefined;
-    let taskName: string | undefined;
+  let taskName: string | undefined;
 
     // If legacy itemHandles exists, extract basename using split(' ')[1]
     if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
@@ -156,7 +156,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
       const parts = raw.split(' ');
       taskName = parts[1] || parts.pop() || raw;
     }
-    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
+  const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
 
     await this.addTaskToBacklog(target.filePath!, taskPath);
   }
@@ -303,7 +303,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
 
   // tree visualization methods
   private async getBacklogsTree(workspaceRoot: string): Promise<BacklogsTreeItem[]> {
-    const backlogsDir = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
+  const backlogsDir = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.BACKLOGS_DIR);
     const files = fileService.listMdFiles(backlogsDir);
 
     const items = files.map(name => {

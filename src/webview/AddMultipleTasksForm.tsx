@@ -3,8 +3,8 @@ import React, { useState } from "react";
 import { BacklogsList } from "./BacklogsList";
 import { acquireVsCodeApiOnce } from "./vscodeApi";
 
-import { PROJECT } from '../utils/constant';
-import { parseTaskMetadataFromFilename } from '../utils/templateUtils';
+import { PROJECT_CONSTANTS } from '../utils/constant';
+import { parseTaskMetadataFromFilename } from '../utils/taskTemplate';
 
 // Helper: Extract Epic name from filename
 function extractEpic(task: string): string {
@@ -58,14 +58,14 @@ export const AddMultipleTasksForm: React.FC = () => {
     <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
       <h2>➕ Add Multiple Tasks</h2>
       <p>
-        Enter one task per line (e.g., <code>{PROJECT.FILE_PREFIX.TASK}name_{PROJECT.FILE_PREFIX.EPIC}parent.md</code>):
+        Enter one task per line (e.g., <code>{PROJECT_CONSTANTS.FILE_PREFIX.TASK}name_{PROJECT_CONSTANTS.FILE_PREFIX.EPIC}parent.md</code>):
       </p>
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder={`${PROJECT.FILE_PREFIX.TASK}add-title_${PROJECT.FILE_PREFIX.EPIC}product.md
-${PROJECT.FILE_PREFIX.TASK}add-description_${PROJECT.FILE_PREFIX.EPIC}product.md
-${PROJECT.FILE_PREFIX.TASK}fix-login_${PROJECT.FILE_PREFIX.EPIC}auth.md`}
+        placeholder={`${PROJECT_CONSTANTS.FILE_PREFIX.TASK}add-title_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}product.md
+${PROJECT_CONSTANTS.FILE_PREFIX.TASK}add-description_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}product.md
+${PROJECT_CONSTANTS.FILE_PREFIX.TASK}fix-login_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}auth.md`}
         style={{
           width: "100%",
           height: "180px",

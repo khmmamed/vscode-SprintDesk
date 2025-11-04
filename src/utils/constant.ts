@@ -57,7 +57,11 @@ export const TASK_CONSTANTS = {
         DOCUMENTATION: "documentation",
         TEST: "test",
     },
-
+    PRIORITY: {
+        HIGH: "high",
+        MEDIUM: "medium",
+        LOW: "low"
+    },
     // File & Template
     FILE_PREFIX: "[Task]_",
     TASKS_SECTION: "## Tasks",
@@ -198,7 +202,8 @@ export const UI_CONSTANTS = {
         COMPONENT: "e.g., authentication, database, ui",
         DURATION: "e.g., 2d, 4h, 1w",
         ASSIGNEE: "e.g., John Doe",
-        EPIC_NAME: "e.g., User Authentication",
+        EPIC_NAME: "e.g., Epic File Name",
+        EPIC_TITLE: "e.g., User Authentication",
         EPIC_OWNER: "e.g., Team Lead"
     }
 };

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { PROJECT, UI } from '../utils/constant';
+import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 
 interface TaskData {
@@ -148,13 +148,13 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
 
     if (!element) {
       // Root level: list all tasks under .SprintDesk/Tasks
-      const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
+  const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
       if (!fs.existsSync(tasksDir)) {
         return [];
       }
 
       const taskFiles = fs.readdirSync(tasksDir).filter(file => 
-        file.startsWith(PROJECT.FILE_PREFIX.TASK) && file.endsWith(PROJECT.MD_FILE_EXTENSION)
+  file.startsWith(PROJECT_CONSTANTS.FILE_PREFIX.TASK) && file.endsWith(PROJECT_CONSTANTS.MD_FILE_EXTENSION)
       );
 
       return taskFiles.map(file => {

@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getEpicsPath } from '../utils/backlogUtils';
 import matter from 'gray-matter';
-import { UI } from '../utils/constant';
+import { UI_CONSTANTS } from '../utils/constant';
 import { getTaskPath } from '../utils/taskUtils';
 
 interface ITask {
@@ -66,7 +66,7 @@ export function addTaskToEpic(epicPath: string, taskPath: string): void {
     epicMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
   if (existingTaskIndex === -1) {
     // Add task to markdown section
-    const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
+    const tasksSectionMarker = UI_CONSTANTS.SECTIONS.TASKS_MARKER;
     let content = epicContent;
     if (!content.includes(tasksSectionMarker)) {
       content += `\n\n${tasksSectionMarker}\n`;

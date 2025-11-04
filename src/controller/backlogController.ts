@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getBacklogPath, getBacklogsPath } from '../utils/backlogUtils';
 import matter from 'gray-matter';
-import { UI } from '../utils/constant';
+import { UI_CONSTANTS } from '../utils/constant';
 import { getTaskPath } from '../utils/taskUtils';
 
 interface ITask {
@@ -55,12 +55,12 @@ export function addTaskToBacklog(backlogPath: string, taskPath: string): void {
     backlogMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
   if (existingTaskIndex === -1) {
     // Add task to markdown section
-    const tasksSectionMarker = UI.SECTIONS.TASKS_MARKER;
+  const tasksSectionMarker = UI_CONSTANTS.SECTIONS.TASKS_MARKER;
     let content = backlogContent;
     if (!content.includes(tasksSectionMarker)) {
       content += `\n\n${tasksSectionMarker}\n`;
     }
-    const taskPathFormatted = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
+  const taskPathFormatted = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
     const taskLink = `- [${taskMetadata.title}](${taskPathFormatted})`;
     const tasksIndex = content.indexOf(tasksSectionMarker);
 

@@ -20,6 +20,8 @@ declare global {
             assignee?: string;
             epicId?: string;
             epicName?: string;
+            epicTitle?: string;
+            objective?: string;
         }
 
         interface EpicMetadata {

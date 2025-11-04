@@ -3,8 +3,8 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "../webview/getWebviewContent";
 import * as epicService from '../services/epicService';
 import * as taskService from '../services/taskService';
-import { parseTaskMetadataFromFilename } from '../utils/templateUtils';
-import { PROJECT, UI } from '../utils/constant';
+import { parseTaskMetadataFromFilename } from '../utils/taskTemplate';
+import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 
 export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
   const command = vscode.commands.registerCommand(
@@ -112,14 +112,14 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
             const now = new Date().toISOString();
 
             for (const [epic, taskFiles] of Object.entries(epicTasks) as [string, string[]][]) {
-              const epicFileName = `${PROJECT.FILE_PREFIX.EPIC}${epic}.md`;
+              const epicFileName = `${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epic}.md`;
               const epicFileUri = vscode.Uri.joinPath(epicsDir, epicFileName);
 
               // Generate content
               const taskLinks = taskFiles
                 .map((taskFile) => {
                   const { taskName } = parseTaskMetadataFromFilename(taskFile);
-                  return `- ${UI.EMOJI.COMMON.TASK} [${taskName}](../tasks/${taskFile})`;
+                  return `- ${UI_CONSTANTS.EMOJI.COMMON.TASK} [${taskName}](../tasks/${taskFile})`;
                 })
                 .join("\n");
 

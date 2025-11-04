@@ -4,9 +4,9 @@ import * as vscode from 'vscode';
 import * as fileService from './fileService';
 import insertTaskLinkUnderSection from '../utils/mdUtils';
 import {
-  PROJECT,
-  TASK,
-  UI,
+  PROJECT_CONSTANTS,
+  TASK_CONSTANTS,
+  UI_CONSTANTS,
 } from '../utils/constant';
 import matter from 'gray-matter';
 import { getBacklogTasks } from '../controller/backlogController';
@@ -102,10 +102,10 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
           const tm = matter(fs.readFileSync(abs, 'utf8'));
           const status = (tm.data.status || 'not-started') as string;
           const priority = (tm.data.priority || '') as string;
-          const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
-          const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
-          const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
-          const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+          const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
+          const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+          const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
+          const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
           computedLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
         } catch {
           // fallback to basename if parsing fails
@@ -113,7 +113,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
         }
       } else {
         // Task file missing — show default status emoji + basename
-        const statusEmoji = UI.EMOJI.STATUS.NOT_STARTED;
+        const statusEmoji = UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
         computedLabel = `${statusEmoji} ${path.basename(rel)}`;
       }
       const key = `${prettyLabel}|${abs}`;
@@ -159,16 +159,16 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
             const tm = matter(fs.readFileSync(abs, 'utf8'));
             const status = (tm.data.status || 'not-started') as string;
             const priority = (tm.data.priority || '') as string;
-            const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI.EMOJI.STATUS;
-            const statusEmoji = UI.EMOJI.STATUS[statusKey] || UI.EMOJI.STATUS.NOT_STARTED;
-            const priorityKey = (priority || '').toUpperCase() as keyof typeof UI.EMOJI.PRIORITY;
-            const priorityEmoji = priority ? (UI.EMOJI.PRIORITY[priorityKey] || '') : '';
+            const statusKey = status.toUpperCase().replace(/-/g, '_') as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
+            const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED;
+            const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
+            const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
             computedLabel = `${statusEmoji} ${path.basename(abs)}${priorityEmoji ? ' ' + priorityEmoji : ''}`;
           } catch {
             computedLabel = path.basename(rel);
           }
         } else {
-          computedLabel = `${UI.EMOJI.STATUS.NOT_STARTED} ${path.basename(rel)}`;
+          computedLabel = `${UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED} ${path.basename(rel)}`;
         }
         tasks.push({ label: computedLabel, abs: fileService.fileExists(abs) ? abs : undefined, rel });
       }
@@ -176,7 +176,7 @@ export function parseBacklogFile(filePath: string): { title: string; tasks: { la
       if (!seen.has(key)) {
         seen.add(key);
         // no linked file — show default status and the pretty label
-        tasks.push({ label: `${UI.EMOJI.STATUS.NOT_STARTED} ${prettyLabel}` });
+        tasks.push({ label: `${UI_CONSTANTS.EMOJI.STATUS.NOT_STARTED} ${prettyLabel}` });
       }
     }
   }
@@ -191,7 +191,7 @@ export function listBacklogsSummary(ws: string): { filePath: string; title: stri
   });
 }
 export function listBacklogs(ws: string): string[] {
-  const backlogsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.BACKLOGS_DIR);
+  const backlogsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.BACKLOGS_DIR);
 
   console.log('returned fileservice: ', fileService.listMdFiles(backlogsDir));
   return fileService.listMdFiles(backlogsDir).map(f => path.join(backlogsDir, f));
@@ -220,8 +220,8 @@ export async function addExistingTasksToBacklog(item: any) {
   if (!fileEntries.length) { vscode.window.showInformationMessage('No tasks found.'); return; }
 
   const itemsQP = fileEntries.map(({dir, file}) => {
-    const titleMatch = file.match(new RegExp(`^${PROJECT.FILE_PREFIX.TASK}(.+?)(?:_${PROJECT.FILE_PREFIX.EPIC}.+)?${PROJECT.MD_FILE_EXTENSION}$`, 'i'));
-    const title = titleMatch ? titleMatch[1].replace(/[_-]+/g, ' ') : file.replace(new RegExp(PROJECT.MD_FILE_EXTENSION + '$', 'i'), '');
+    const titleMatch = file.match(new RegExp(`^${PROJECT_CONSTANTS.FILE_PREFIX.TASK}(.+?)(?:_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}.+)?${PROJECT_CONSTANTS.MD_FILE_EXTENSION}$`, 'i'));
+    const title = titleMatch ? titleMatch[1].replace(/[_-]+/g, ' ') : file.replace(new RegExp(PROJECT_CONSTANTS.MD_FILE_EXTENSION + '$', 'i'), '');
     return {
       label: title,
       description: dir,
@@ -238,9 +238,9 @@ export async function addExistingTasksToBacklog(item: any) {
     let content = fs.readFileSync(backlogFile, 'utf8');
     for (const p of picked) {
       const linkTitle = p.label.trim().replace(/\s+/g, '-').toLowerCase();
-      const tasksFolder = path.basename((p as any).data.dir || path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR));
-      const link = `- ${TASK.LINK_MARKER} [${linkTitle}](../${tasksFolder}/${(p as any).data.file}) ${TASK.STATUS.WAITING}`;
-      content = insertTaskLinkUnderSection(content, UI.SECTIONS.TASKS, link);
+      const tasksFolder = path.basename((p as any).data.dir || path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR));
+      const link = `- ${TASK_CONSTANTS.LINK_MARKER} [${linkTitle}](../${tasksFolder}/${(p as any).data.file}) ${TASK_CONSTANTS.STATUS.WAITING}`;
+      content = insertTaskLinkUnderSection(content, UI_CONSTANTS.SECTIONS.TASKS, link);
     }
     fs.writeFileSync(backlogFile, content, 'utf8');
     vscode.window.showInformationMessage('Tasks added to backlog.');
@@ -257,33 +257,33 @@ export async function addTaskToBacklogInteractive(item: any) {
   if (!taskName) return;
   const epicName = await vscode.window.showInputBox({ prompt: 'Epic name (optional)' });
 
-  const tasksDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
-  const epicsDir = path.join(ws, PROJECT.SPRINTDESK_DIR, PROJECT.EPICS_DIR);
+  const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
+  const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
   fs.mkdirSync(tasksDir, { recursive: true });
   fs.mkdirSync(epicsDir, { recursive: true });
 
-  let fileName = `${PROJECT.FILE_PREFIX.TASK}${taskName.replace(/\s+/g, '-')}`;
-  if (epicName) fileName += `_${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}`;
-  fileName += PROJECT.MD_FILE_EXTENSION;
+  let fileName = `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskName.replace(/\s+/g, '-')}`;
+  if (epicName) fileName += `_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}`;
+  fileName += PROJECT_CONSTANTS.MD_FILE_EXTENSION;
 
   const taskPath = path.join(tasksDir, fileName);
   if (!fs.existsSync(taskPath)) {
-    const template = `---\n_id: ${PROJECT.ID_PREFIX.TASK}${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
+    const template = `---\n_id: ${PROJECT_CONSTANTS.ID_PREFIX.TASK}${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
     fs.writeFileSync(taskPath, template, 'utf8');
   }
 
   if (epicName) {
-    const epicFile = path.join(epicsDir, `${PROJECT.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}${PROJECT.MD_FILE_EXTENSION}`);
+    const epicFile = path.join(epicsDir, `${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`);
     let epicContent = fileService.readFileSyncSafe(epicFile) || `# Epic: ${epicName}\n`;
-      const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
-    epicContent = insertTaskLinkUnderSection(epicContent, UI.SECTIONS.TASKS.toLowerCase(), taskLink);
+      const taskLink = `- ${TASK_CONSTANTS.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT_CONSTANTS.TASKS_DIR}/${fileName})`;
+    epicContent = insertTaskLinkUnderSection(epicContent, UI_CONSTANTS.SECTIONS.TASKS.toLowerCase(), taskLink);
     fs.writeFileSync(epicFile, epicContent, 'utf8');
   }
 
   try {
     let backlogContent = fs.readFileSync(backlogFile, 'utf8');
-    const taskLink = `- ${TASK.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT.TASKS_DIR}/${fileName})`;
-    backlogContent = insertTaskLinkUnderSection(backlogContent, UI.SECTIONS.TASKS, taskLink);
+    const taskLink = `- ${TASK_CONSTANTS.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT_CONSTANTS.TASKS_DIR}/${fileName})`;
+    backlogContent = insertTaskLinkUnderSection(backlogContent, UI_CONSTANTS.SECTIONS.TASKS, taskLink);
     fs.writeFileSync(backlogFile, backlogContent, 'utf8');
     vscode.window.showInformationMessage('Task added to backlog.');
   } catch (e) {

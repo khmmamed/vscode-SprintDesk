@@ -4,6 +4,7 @@ import * as taskService from '../services/taskService';
 import * as epicService from '../services/epicService';
 import * as backlogService from '../services/backlogService';
 import insertTaskLinkUnderSection from '../utils/mdUtils';
+import { TASK_CONSTANTS } from '../utils/constant';
 
 export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand('sprintdesk.addQuickly', async () => {
@@ -19,11 +20,11 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
     const taskMatch = input.match(/@task ([^@]+)/);
     const epicMatch = input.match(/@epic ([^@]+)/);
     const backlogMatch = input.match(/@backlog ([^@]+)/);
-    const taskName = taskMatch ? taskMatch[1].trim() : undefined;
-    const epicName = epicMatch ? epicMatch[1].trim() : undefined;
+    const taskTitle = taskMatch ? taskMatch[1].trim() : undefined;
+    const epicTitle = epicMatch ? epicMatch[1].trim() : undefined;
     const backlogName = backlogMatch ? backlogMatch[1].trim() : undefined;
 
-    if (!taskName) {
+    if (!taskTitle) {
       vscode.window.showErrorMessage('Task name (@task) is required.');
       return;
     }
@@ -37,29 +38,29 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
     const root = workspaceFolders[0].uri.fsPath;
 
     // Create task via TaskService (creates folders/files as needed)
-    let fileName: string;
+    let taskPath: string;
     try {
       const res = taskService.createTask({
-        title: taskName,
+        title: taskTitle,
         type: 'feature',
         priority: 'medium',
-        status: 'not-started',
-        epicName: epicName,
-        epicId: epicName ? `epic_${epicName.replace(/\s+/g, '_').toLowerCase()}` : undefined
+        status: 'waiting',
+        epicName: epicTitle,
+        epicId: epicTitle ? `epic_${epicTitle.replace(/\s+/g, '_').toLowerCase()}` : undefined
       });
-      fileName = res.fileName;
+      taskPath = res.taskName;
     } catch (e) {
       vscode.window.showErrorMessage('Failed to create task.');
       return;
     }
 
     // Link to epic using EpicService
-    if (epicName) {
+    if (epicTitle) {
       try {
-        await epicService.addTaskToEpic(epicName, fileName as any);
+        await epicService.addTaskToEpic(epicTitle, taskPath as string);
       } catch (e) {
         // fallback: ensure epic file exists
-        epicService.createEpic(epicName);
+        epicService.createEpic(epicTitle);
       }
     }
 
@@ -71,7 +72,7 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`No backlog file found matching '${backlogName}'.`);
       } else {
         const backlogContent = backlogService.readBacklog(match);
-        const taskLink = `- 📌 [${taskName.replace(/\s+/g, '-').toLowerCase()}](../tasks/${fileName})`;
+        const taskLink = `- [${taskTitle.replace(/\s+/g, '-').toLowerCase()}](../tasks/${taskPath})`;
         const newContent = insertTaskLinkUnderSection(backlogContent, 'tasks', taskLink);
         backlogService.updateBacklog(match, newContent);
       }

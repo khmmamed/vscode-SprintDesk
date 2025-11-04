@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as taskService from '../services/taskService';
-import { PROJECT } from './constant';
+import { PROJECT_CONSTANTS } from './constant';
 
 
 export const getTasksPath = (): string => {
@@ -10,8 +10,8 @@ export const getTasksPath = (): string => {
         throw new Error("No workspace folder is open.");
     }
     const workspaceRoot = wsFolders[0].uri.fsPath;
-    const SPRINTDESK_PATH = path.join(workspaceRoot, PROJECT.SPRINTDESK_DIR);
-    return path.join(SPRINTDESK_PATH, PROJECT.TASKS_DIR);
+const SPRINTDESK_PATH = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR);
+    return path.join(SPRINTDESK_PATH, PROJECT_CONSTANTS.TASKS_DIR);
 };
 export const getTaskPath = (taskName: string): string => {
     const tasksPath = getTasksPath();
@@ -19,7 +19,7 @@ export const getTaskPath = (taskName: string): string => {
 }
 export const relativePathTaskToTaskpath = (rel: string): string => {
     const ws = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
-    const ProjectDir = path.join(ws!, PROJECT.SPRINTDESK_DIR, PROJECT.TASKS_DIR);
+    const ProjectDir = path.join(ws!, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
     return path.resolve(ProjectDir, rel);
 };
 
