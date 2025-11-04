@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as epicController from '../controller/epicController';
+import * as taskController from '../controller/taskController';
 import * as backlogController from '../controller/backlogController';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
@@ -157,6 +158,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
 
     await this.addTaskToEpic(target.filePath!, taskPath);
     await this.removeTaskFromEpic(backlogPath, taskPath);
+    await this.updateTaskEpic(taskName, path.basename(target.filePath!));
     await this.refresh();
   }
   private async handleTaskDropFromSprints(target: EpicsTreeItem, handleData: any): Promise<void> {
@@ -200,6 +202,9 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
       treeItem.tooltip = `Task: ${item.title || item.name || item.label}\nPath: ${item.path}\nEpic: ${epicName}`;
       return treeItem;
     });
+  }
+  private async updateTaskEpic (taskPath: string, epicName: string): Promise<void>{
+    await taskController.updateTaskEpic(taskPath, epicName);
   }
   // handle drag and drop
   handleDrag(source: readonly EpicsTreeItem[], dataTransfer: vscode.DataTransfer): void {

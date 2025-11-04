@@ -28,14 +28,14 @@ export class TaskTreeItem extends vscode.TreeItem {
     // Create base TreeItem with initial label
     super(taskData.name, collapsibleState);
     this.taskData = taskData;
-    
+
     // Set task context and make draggable
     this.contextValue = 'task';
     this.resourceUri = vscode.Uri.file(taskData.path);
-    
+
     // Set up visual elements
     this.setupVisuals();
-    
+
     // Make clickable to open
     this.command = {
       command: 'vscode.open',
@@ -106,13 +106,15 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
   public readonly dropMimeTypes: string[] = [];
   public readonly dragMimeTypes: string[] = ['application/vnd.code.tree.sprintdesk-tasks'];
 
-  constructor(private workspaceRoot?: string) {}
+  constructor(private workspaceRoot?: string) { }
 
-  public handleDrop(): void {}
-  
+  // Any task dropped from epic sprint backlog should be removed from there,
+  // and returned to the main tasks list.
+  public handleDrop(): void { }
+
   public handleDrag(source: readonly TaskTreeItem[], dataTransfer: vscode.DataTransfer): void {
     if (!source[0]) return;
-    
+
     const taskItem = source[0];
     const taskData = taskItem.taskData;
 
@@ -126,8 +128,8 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
       epic: taskData.epic,
       path: taskData.path
     };
-    
-    dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks', 
+
+    dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks',
       new vscode.DataTransferItem(JSON.stringify(transferData))
     );
   }
@@ -148,13 +150,13 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
 
     if (!element) {
       // Root level: list all tasks under .SprintDesk/Tasks
-  const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
+      const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
       if (!fs.existsSync(tasksDir)) {
         return [];
       }
 
-      const taskFiles = fs.readdirSync(tasksDir).filter(file => 
-  file.startsWith(PROJECT_CONSTANTS.FILE_PREFIX.TASK) && file.endsWith(PROJECT_CONSTANTS.MD_FILE_EXTENSION)
+      const taskFiles = fs.readdirSync(tasksDir).filter(file =>
+        file.startsWith(PROJECT_CONSTANTS.FILE_PREFIX.TASK) && file.endsWith(PROJECT_CONSTANTS.MD_FILE_EXTENSION)
       );
 
       return taskFiles.map(file => {
@@ -182,7 +184,7 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
             } : undefined,
             path: filePath
           };
-          
+
           // Create TreeItem with taskData
           const item = new TaskTreeItem(taskData);
 
@@ -197,33 +199,4 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
     return [];
   }
 
-  private getStatusEmoji(status: string): string {
-    switch (status.toLowerCase()) {
-      case 'not-started': return '⏳';
-      case 'in-progress': return '🔄';
-      case 'done': return '✅';
-      case 'blocked': return '⛔';
-      default: return '⏳';
-    }
-  }
-
-  private getPriorityEmoji(priority: string): string {
-    switch (priority.toLowerCase()) {
-      case 'high': return '🔴';
-      case 'medium': return '🟡';
-      case 'low': return '🟢';
-      default: return '⚪';
-    }
-  }
-
-  private getTypeIcon(type: string): string {
-    switch (type?.toLowerCase()) {
-      case 'bug': return '🐛';
-      case 'feature': return '✨';
-      case 'chore': return '🔧';
-      case 'doc': return '📝';
-      case 'test': return '🧪';
-      default: return '✨';
-    }
-  }
 }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as taskService from '../services/taskService';
 import { PROJECT_CONSTANTS } from './constant';
+import matter from 'gray-matter';
 
 
 export const getTasksPath = (): string => {
@@ -25,6 +26,40 @@ export const relativePathTaskToTaskpath = (rel: string): string => {
 export const removeEmojiFromTaskLabel = (label: string): string => {
     return label.replace(/\p{Extended_Pictographic}/gu, '').trim();
 }
+/** Read a markdown file and return its parsed content and lines */
+export const readMarkdownFile = (path: string) => {
+  const parsed = matter.read(path);
+  const lines = parsed.content.split('\n');
+  return { parsed, lines };
+};
+
+/** Find the start and end line indexes of a slug section */
+export const findSlugRange = (lines: string[], slug: string) => {
+  const start = lines.findIndex(line => line.trim() === `## ${slug}`);
+  if (start === -1) return null;
+  const end = lines.findIndex(
+    line => line.trim().startsWith('## '),
+    start + 1
+  );
+  return { start, end: end === -1 ? lines.length : end };
+};
+/** Build updated lines array by inserting new content into a slug section */
+export const insertIntoSlugSection = (
+  lines: string[],
+  range: { start: number; end: number },
+  partToInsert: string
+) => [
+  ...lines.slice(0, range.start + 1),
+  ...lines.slice(range.start + 1, range.end),
+  partToInsert,
+  ...lines.slice(range.end)
+];
+
+
+
+
+
+
 export interface TaskRow {
     task: string;
     epic: string;

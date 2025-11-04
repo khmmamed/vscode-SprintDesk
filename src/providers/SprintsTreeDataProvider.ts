@@ -3,12 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as sprintController from '../controller/sprintController';
-import * as backlogController from '../controller/backlogController';
 import * as sprintService from '../services/sprintService';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
-import { getSprintsPath } from '../utils/backlogUtils';
 import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
+import { getSprintPath } from '../controller/sprintController';
 
 export class SprintsTreeItem extends vscode.TreeItem {
   constructor(
@@ -192,12 +191,14 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     this.refresh();
   }
   private async handleTaskDropFromSprints(target: SprintsTreeItem, handleData: any): Promise<void> {
-    const taskPath = this.resolveTaskPath(handleData);
+    const { taskName, sprint } = handleData;
+
+    const taskPath = getTaskPath(taskName);
+    const backlogPath = getSprintPath(sprint.sprintName);
+
     await this.addTaskToSprint(target.filePath!, taskPath);
-    try {
-      const sourceSprint = handleData.sprint?.sprintName || handleData.sourceContainer?.path;
-      if (sourceSprint) await sprintController.removeTaskFromSprint(sourceSprint, taskPath);
-    } catch { }
+    await this.removeTaskFromSprint(backlogPath, taskPath);
+    await this.refresh();
   }
   private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<void> {
 
