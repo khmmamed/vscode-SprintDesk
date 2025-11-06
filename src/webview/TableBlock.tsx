@@ -56,8 +56,35 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     tasks: [{ name: 'README.md', lastCommit: 'explain tasks', lastUpdate: 'today' }]
   };
 
-  // Enhanced folder structure with nested folders (demo fallback)
-  const activeProjects = projects || [defaultProject];
+  // Local projects state: initialize from prop, fallback to VS Code webview state or demo default
+  const [localProjects, setLocalProjects] = useState<SprintDeskProject[]>(() => (projects && projects.length > 0 ? projects : [defaultProject]));
+
+  // Keep activeProjects coming from localProjects. This makes the component resilient
+  // when `projects` prop is undefined, null, or an empty array.
+  const activeProjects = localProjects;
+
+  useEffect(() => {
+    // If parent passes projects prop with items, use it.
+    if (projects && projects.length > 0) {
+      setLocalProjects(projects);
+      return;
+    }
+
+    // Otherwise try to read persisted state from the webview API (if available).
+    try {
+      const vscode = acquireVsCodeApiOnce();
+      const state = (vscode && typeof vscode.getState === 'function') ? vscode.getState() : null;
+      if (state && state.projects && Array.isArray(state.projects) && state.projects.length > 0) {
+        setLocalProjects(state.projects as SprintDeskProject[]);
+        return;
+      }
+    } catch (e) {
+      // ignore errors reading webview state
+    }
+
+    // Final fallback: demo project
+    setLocalProjects([defaultProject]);
+  }, [projects]);
 
   const getIcon = (category: string): string => {
     switch (category) {
@@ -381,7 +408,7 @@ const TableBlock: React.FC<TableProps> = ({ projects }) => {
     project: SprintDeskProject,
     category: 'backlogs' | 'epics' | 'sprints' | 'tasks'
   ): ReactElement => {
-    const items = project[category];
+  const items = project[category] || [];
     const categoryKey = `${project.name}-${category}`;
     const isExpanded = expandedItems[categoryKey];
   const folderName = category === 'backlogs' ? 'Backlogs' : category === 'epics' ? 'Epics' : category === 'sprints' ? 'Sprints' : 'tasks/🚀_tasks';

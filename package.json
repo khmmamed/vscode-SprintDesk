@@ -143,6 +143,10 @@
     "views": {
       "sprintdesk": [
         {
+          "id": "sprintdesk-repositories",
+          "name": "Repositories"
+        },
+        {
           "id": "sprintdesk-sprints",
           "name": "Sprints"
         },

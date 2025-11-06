@@ -22,12 +22,12 @@ export function generateTaskName(title: string, epicTitle?: string): string {
   return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskSlug}.md`;
 }
 
-export const generateTaskMetadata = (metadata: SprintDesk.TaskMetadata): string =>  {
+export const generateTaskMetadata = (metadata: SprintDesk.TaskMetadata): string => {
   const now = new Date().toISOString();
   const taskId = generateTaskId(metadata.title);
-  const epicName = metadata.epicTitle ? `${generateEpicName(metadata.epicTitle)}`:'';
-  const taskName = metadata.epicTitle ? 
-    `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}_${generateEpicName(metadata.epicTitle)}`:
+  const epicName = metadata.epicTitle ? `${generateEpicName(metadata.epicTitle)}` : '';
+  const taskName = metadata.epicTitle ?
+    `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}_${generateEpicName(metadata.epicTitle)}` :
     `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}.md`
   console.log('Generating task metadata for ID:', taskId);
   return `---
@@ -104,12 +104,46 @@ ${metadata.epicTitle ? `
 > Related tasks will be linked here automatically
  `};
 export function generateTaskTemplate(metadata: SprintDesk.TaskMetadata): string {
-  
+
   return `${generateTaskMetadata(metadata)}
 
 ${generateTaskContent(metadata)}
 `;
 }
+
+// Update epic line after task header
+export const updateEpicHeaderLine = (ls: string[], epicMeta: SprintDesk.EpicMetadata): string[] => {
+  const taskHeaderIdx = ls.findIndex(l => l.trim().startsWith('# 🧩 Task'));
+  if (taskHeaderIdx === -1) return [`📘 Epic: \`${epicMeta.title}\``, ...ls];
+
+  const afterTask = taskHeaderIdx + 1;
+  return ls.map((line, i) =>
+    i === afterTask && line.trim().startsWith('📘 Epic:')
+      ? `📘 Epic: \`${epicMeta.title}\``
+      : i === afterTask && !line.trim().startsWith('📘 Epic:')
+        ? [line, `📘 Epic: \`${epicMeta.title}\``]
+        : line
+  ).flat();
+};
+
+// Update epic section
+export const updateEpicSection = (ls: string[], epicMeta: SprintDesk.EpicMetadata): string[] => {
+  const secIdx = ls.findIndex(l => l.trim() === '## Epic');
+  const link = `- [${epicMeta.title}](${epicMeta.path})`;
+
+  if (secIdx === -1) {
+    // If no "## Epic" section, append it at the end
+    return [...ls, '## Epic', link];
+  }
+
+  // Keep lines before the section, replace everything after with the new link
+  const before = ls.slice(0, secIdx + 1); // include the '## Epic' line
+  return [...before, link];
+};
+
+
+
+
 
 export function parseTaskMetadataFromFilename(filename: string): { taskName: string; epicName?: string } {
   const taskPrefix = PROJECT_CONSTANTS.FILE_PREFIX.TASK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -117,7 +151,7 @@ export function parseTaskMetadataFromFilename(filename: string): { taskName: str
   const pattern = new RegExp(`${taskPrefix}(.+?)(?:_${epicPrefix}(.+?))?\.md$`);
   const match = filename.match(pattern);
   if (!match) throw new Error('Invalid task filename format');
-  
+
   return {
     taskName: match[1].replace(/-/g, ' '),
     epicName: match[2]?.replace(/-/g, ' ')

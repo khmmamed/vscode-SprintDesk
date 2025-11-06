@@ -5,6 +5,7 @@ import { getTasksPath } from "../utils/backlogUtils";
 import * as fileService from "../services/fileService";
 import { getEpicPath } from "./epicController";
 import { getTaskPath } from "../utils/taskUtils";
+import { updateEpicHeaderLine, updateEpicSection } from "../utils/taskTemplate";
 
 export function readTasksNames(): string[] {
   const tasksPath = getTasksPath();
@@ -96,44 +97,24 @@ export const updateTaskEpic = (taskName: string, epicName: string): void => {
   const taskFile = matter.read(getTaskPath(taskName));
   const epicFile = matter.read(getEpicPath(epicName));
 
+  // Safely extract epic metadata
   const epicMeta = {
-    _id: epicFile.data._id,
-    title: epicFile.data.title,
-    path: epicFile.data.path
+    _id: epicFile.data._id ?? null,
+    title: epicFile.data.title ?? 'Untitled Epic',
+    path: epicFile.data.path ?? ''
   };
 
   const lines = taskFile.content.split('\n');
 
-  const updateEpicHeaderLine = (ls: string[]): string[] => {
-    const taskHeaderIdx = ls.findIndex(l => l.trim().startsWith('# 🧩 Task'));
-    if (taskHeaderIdx === -1) return [`📘 Epic: \`${epicMeta.title}\``, ...ls];
 
-    const afterTask = taskHeaderIdx + 1;
-    return ls.map((line, i) =>
-      i === afterTask && line.trim().startsWith('📘 Epic:')
-        ? `📘 Epic: \`${epicMeta.title}\``
-        : i === afterTask && !line.trim().startsWith('📘 Epic:')
-        ? [line, `📘 Epic: \`${epicMeta.title}\``]
-        : line
-    ).flat();
-  };
+  const updatedLines = updateEpicSection(updateEpicHeaderLine(lines, epicMeta), epicMeta);
 
-  const updateEpicSection = (ls: string[]): string[] => {
-    const secIdx = ls.findIndex(l => l.trim() === '## Epic');
-    const link = `- [${epicMeta.title}](${epicMeta.path})`;
+  // Sanitize task metadata to avoid undefined values
+  const updatedMeta = Object.fromEntries(
+    Object.entries({ ...taskFile.data, epic: epicMeta }).map(([k, v]) => [k, v ?? null])
+  );
 
-    if (secIdx === -1) return [...ls, '## Epic', link];
-
-    const nextIdx = secIdx + 1;
-    return ls.map((line, i) =>
-      i === nextIdx ? link : line
-    );
-  };
-
-  const updatedLines = updateEpicSection(updateEpicHeaderLine(lines));
-
-  const updatedMeta = { ...taskFile.data, epic: epicMeta };
-
+  // Write updated task file
   fs.writeFileSync(
     getTaskPath(taskName),
     matter.stringify(updatedLines.join('\n'), updatedMeta),

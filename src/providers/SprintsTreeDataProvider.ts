@@ -197,7 +197,6 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     const backlogPath = getSprintPath(sprint.sprintName);
 
     await this.addTaskToSprint(target.filePath!, taskPath);
-    await this.removeTaskFromSprint(backlogPath, taskPath);
     await this.refresh();
   }
   private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<void> {

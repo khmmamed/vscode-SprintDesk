@@ -154,11 +154,12 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     const { taskName, epic } = handleData;
 
     const taskPath = getTaskPath(taskName);
-    const backlogPath = getEpicPath(epic.epicName);
-
+    const epicPath = getEpicPath(epic.epicName);
+    console.log(path.basename(target.filePath!))
     await this.addTaskToEpic(target.filePath!, taskPath);
-    await this.removeTaskFromEpic(backlogPath, taskPath);
+    await this.removeTaskFromEpic(epicPath, taskPath);
     await this.updateTaskEpic(taskName, path.basename(target.filePath!));
+
     await this.refresh();
   }
   private async handleTaskDropFromSprints(target: EpicsTreeItem, handleData: any): Promise<void> {
@@ -203,8 +204,8 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
       return treeItem;
     });
   }
-  private async updateTaskEpic (taskPath: string, epicName: string): Promise<void>{
-    await taskController.updateTaskEpic(taskPath, epicName);
+  private async updateTaskEpic (taskName: string, epicName: string): Promise<void>{
+    await taskController.updateTaskEpic(taskName, epicName);
   }
   // handle drag and drop
   handleDrag(source: readonly EpicsTreeItem[], dataTransfer: vscode.DataTransfer): void {

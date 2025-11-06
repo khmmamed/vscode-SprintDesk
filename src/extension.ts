@@ -15,6 +15,7 @@ import { SprintsTreeDataProvider } from './providers/SprintsTreeDataProvider';
 import { TasksTreeDataProvider } from './providers/TasksTreeDataProvider';
 import { BacklogsTreeDataProvider } from './providers/BacklogsTreeDataProvider';
 import { EpicsTreeDataProvider } from './providers/EpicsTreeDataProvider';
+import { RepositoriesTreeDataProvider } from './providers/RepositoriesTreeDataProvider';
 import { createSprintInteractive } from './services/sprintService';
 import { writeTask } from './services/taskService';
 import { createEpicInteractive } from './services/epicService';
@@ -231,7 +232,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   // Register WebviewViewProviders for non-tree views
-  const treeViewIds = ['sprintdesk-epics', 'sprintdesk-tasks', 'sprintdesk-sprints', 'sprintdesk-backlogs'];
+  const treeViewIds = ['sprintdesk-repositories', 'sprintdesk-epics', 'sprintdesk-tasks', 'sprintdesk-sprints', 'sprintdesk-backlogs'];
   const webviewIds = SIDEBAR_VIEW_IDS.filter(id => !treeViewIds.includes(id));
 
   for (const viewId of webviewIds) {
@@ -246,6 +247,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Tree providers
   const sprintsProvider = new SprintsTreeDataProvider();
   const backlogsProvider = new BacklogsTreeDataProvider();
+  const repositoriesProvider = new RepositoriesTreeDataProvider();
 
   const tasksProvider = new TasksTreeDataProvider();
   const epicsProvider = new EpicsTreeDataProvider();
@@ -275,11 +277,17 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(tasksTreeView);
 
+  const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositories', {
+    treeDataProvider: repositoriesProvider
+  });
+  context.subscriptions.push(repositoriesTreeView);
+
 
   // Refresh command for sidebar trees
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.refresh', async () => {
     sprintsProvider.refresh();
     backlogsProvider?.refresh();
+    repositoriesProvider?.refresh();
     tasksProvider?.refresh();
     vscode.window.showInformationMessage('SprintDesk refreshed.');
   }));

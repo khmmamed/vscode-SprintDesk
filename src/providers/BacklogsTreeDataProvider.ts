@@ -184,7 +184,6 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     const backlogPath = getBacklogPath(backlog.backlogName);
 
     await this.addTaskToBacklog(target.filePath!, taskPath);
-    await this.removeTaskFromBacklog(backlogPath, taskPath);
     await this.refresh();
   }
   private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<void> {

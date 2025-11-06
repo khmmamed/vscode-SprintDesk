@@ -40,6 +40,7 @@ declare global {
             startedTasks?: number;
             doneTasks?: number;
             progress?: string;
+            path?: string
         }
 
         interface TaskRow {
