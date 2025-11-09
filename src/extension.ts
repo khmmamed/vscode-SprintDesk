@@ -282,6 +282,27 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(repositoriesTreeView);
 
+  // When user selects a repository in the repositories tree, switch the Tasks provider to read from that repo
+  repositoriesTreeView.onDidChangeSelection(e => {
+    try {
+      const sel = (e.selection && e.selection[0]) as any;
+      // Try to read our repo path from the selection -- either 'fullPath' (our custom item) or resourceUri
+      const repoPath = sel?.fullPath ?? sel?.resourceUri?.fsPath;
+      if (repoPath) {
+        // Set tasks provider to use this repository root
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tasksProvider as any).setWorkspaceRoot(repoPath);
+        tasksProvider.refresh();
+        // Optionally refresh other views that should be repo-scoped
+        backlogsProvider?.refresh();
+        epicsProvider?.refresh();
+        sprintsProvider.refresh();
+      }
+    } catch (err) {
+      console.error('Failed to switch tasks provider workspace root on repo selection', err);
+    }
+  });
+
 
   // Refresh command for sidebar trees
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.refresh', async () => {

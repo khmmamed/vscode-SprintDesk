@@ -1,7 +1,7 @@
 import matter, { test } from "gray-matter";
 import path from "path";
 import fs from "fs";
-import { getTasksPath } from "../utils/backlogUtils";
+import { getBacklogPath, getTasksPath } from "../utils/backlogUtils";
 import * as fileService from "../services/fileService";
 import { getEpicPath } from "./epicController";
 import { getTaskPath } from "../utils/taskUtils";
@@ -105,9 +105,8 @@ export const updateTaskEpic = (taskName: string, epicName: string): void => {
   };
 
   const lines = taskFile.content.split('\n');
-
-
-  const updatedLines = updateEpicSection(updateEpicHeaderLine(lines, epicMeta), epicMeta);
+  const epicMetaLines = updateEpicHeaderLine(lines, epicMeta);
+  const updatedLines = updateEpicSection(epicMetaLines, epicMeta);
 
   // Sanitize task metadata to avoid undefined values
   const updatedMeta = Object.fromEntries(
@@ -120,4 +119,30 @@ export const updateTaskEpic = (taskName: string, epicName: string): void => {
     matter.stringify(updatedLines.join('\n'), updatedMeta),
     'utf-8'
   );
+};
+
+export const updateTaskBacklogs = (taskName: string, backlogName: string): void => {
+  const taskPath = getTaskPath(taskName);
+  const backlogPath = getBacklogPath(backlogName);
+  const {data: taskMetadata, content: taskContent} = matter.read(taskPath);
+  const {data: backlogMetadata, content: backlogContent} = matter.read(backlogPath);
+
+  // find backlogs 
+  const backlogs = taskMetadata.backlogs || [];
+  const backlogIndex = backlogs.findIndex((b: SprintDesk.ITaskBacklog) => b.title === backlogName);
+  if (backlogIndex === -1) return;
+
+  // push new backlog info if exist return if not add it
+  backlogs[backlogIndex] = {
+    _id: backlogMetadata._id || '',
+    title: backlogMetadata.title || backlogName,
+    path: backlogMetadata.path || ''
+  };
+
+  const updatedTaskMetadata = {
+    ...taskMetadata,
+    backlogs
+  };
+  const updatedContent = matter.stringify(taskContent, updatedTaskMetadata);
+  fs.writeFileSync(taskPath, updatedContent, 'utf-8');
 };

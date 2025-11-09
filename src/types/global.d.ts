@@ -8,7 +8,8 @@ declare global {
         type TaskStatus = 'waiting' | 'started' | 'done' | 'blocked' | 'canceled';
         type Priority = 'high' | 'medium' | 'low';
         type EpicStatus = 'planned' | 'started' | 'completed' | 'blocked';
-
+        type ITaskBacklog = { _id: string; title: string; path: string; };
+        type ITaskSprint = { _id: string; title: string; path: string; };
         interface TaskMetadata {
             title: string;
             type?: TaskType;
@@ -22,6 +23,8 @@ declare global {
             epicName?: string;
             epicTitle?: string;
             objective?: string;
+            backlogs?: ITaskBacklog[];
+            sprints?: ITaskSprint[];
         }
 
         interface EpicMetadata {

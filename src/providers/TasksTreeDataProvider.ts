@@ -108,6 +108,15 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
 
   constructor(private workspaceRoot?: string) { }
 
+  /**
+   * Update the workspace root (repository root) where tasks are read from.
+   * Pass `undefined` to reset to the default workspace folder.
+   */
+  public setWorkspaceRoot(root?: string) {
+    this.workspaceRoot = root;
+    this.refresh();
+  }
+
   // Any task dropped from epic sprint backlog should be removed from there,
   // and returned to the main tasks list.
   public handleDrop(): void { }
