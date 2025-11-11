@@ -37,7 +37,11 @@ export function readTaskContent(filePath: string): string {
   return content;
 }
 
-/* update operations */
+export function writeTask(taskDir: string, newTask: SprintDesk.ITaskMetadata): void {
+  // generate file name from title
+  const fileName = `${newTask.title.replace(/\s+/g, '-').toLowerCase()}.md`;
+}
+
 export function updateTaskMetadata(taskPath: string, newData: Partial<SprintDesk.ITaskMetadata>): void {
   const parsed = matter(taskPath);
   const updatedData = { ...parsed.data, ...newData };

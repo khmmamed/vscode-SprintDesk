@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { PROJECT_CONSTANTS, UI_CONSTANTS } from './constant';
 import { generateEpicName } from './epicTemplate';
+import { get } from 'http';
 
 export function generateTaskId(title: string): string {
   const slug = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
@@ -13,13 +14,12 @@ export function generateEpicId(title: string): string {
   return `epic_${slug}`;
 }
 
-export function generateTaskName(title: string, epicTitle?: string): string {
+export function getTaskName(title: string): string {
   const taskSlug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  if (epicTitle) {
-    const epicSlug = epicTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskSlug}_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicSlug}.md`;
-  }
-  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskSlug}.md`;
+  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskSlug}`;
+}
+export function generateTaskFile(title: string, epicTitle?: string): string {
+  return `${getTaskName(title)}.md`;
 }
 
 export const generateTaskMetadata = (metadata: SprintDesk.TaskMetadata): string => {
@@ -143,8 +143,9 @@ export const updateEpicSection = (ls: string[], epicMeta: SprintDesk.EpicMetadat
 
 
 
-
-
+/* 
+ * Old code for reference:
+*/
 export function parseTaskMetadataFromFilename(filename: string): { taskName: string; epicName?: string } {
   const taskPrefix = PROJECT_CONSTANTS.FILE_PREFIX.TASK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const epicPrefix = PROJECT_CONSTANTS.FILE_PREFIX.EPIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

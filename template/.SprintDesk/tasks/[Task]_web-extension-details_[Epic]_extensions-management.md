@@ -14,7 +14,7 @@ objective: Display and manage the extension details page
 epic:
   _id: epic_extensions_management
   title: Extensions Management
-  file: ../epics/[Epic]_extensions-management.md
+  path: ../epics/[Epic]_extensions-management.md
 sprints:
 
 backlogs:

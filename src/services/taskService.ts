@@ -6,7 +6,7 @@ import { createEpicFromMetadata, addTaskToEpic, listEpics, createEpic } from './
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 
 import { 
-  generateTaskName,
+  generateTaskFile,
   generateTaskTemplate, 
 } from '../utils/taskTemplate';
 import { generateEpicTemplate } from '../utils/epicTemplate';
@@ -19,7 +19,7 @@ export function createTask(metadata: SprintDesk.TaskMetadata): { filePath: strin
   const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
   fs.mkdirSync(tasksDir, { recursive: true });
 
-  const taskName = generateTaskName(metadata.title, metadata.epicTitle);
+  const taskName = generateTaskFile(metadata.title, metadata.epicTitle);
   const taskPath = path.join(tasksDir, taskName);
   
   if (!fs.existsSync(taskPath)) {
