@@ -1,11 +1,49 @@
 /**
-
  * SprintDesk Constants
  * ===================
- * Centralized configuration for the SprintDesk extension
+ * v0.0.1 - Initial version
  */
 
-import { CANCELLED, FILE } from "dns";
+// [vNext]: refactor constants
+
+// [COMMIT]: Global Emoji Constants
+export const COMMON_EMOJI = {
+    BACKLOG: "📒",
+    EPIC: "🚩",
+    SPRINT: "🏃",
+    TASK: "✅",
+    GOAL: '🎯',
+    HOT: '🔥',
+    PROJECT: "📂",
+    FILE: "📄",
+    CALENDAR: "📅",
+    LAST_UPDATE: "🗓",
+    TOTAL_TASKS: "🛠",
+    PROGRESS: "📊",
+    SUMMARY: "📝",
+    TASK_LIST: "📋",
+    TASKS_SECTION: "🧱",
+    PRIORITY: "⚡",
+    TYPE: "🏷️",
+    ASSIGNEE: "👤",
+    FOLDER: "📁",
+    OPEN_FILE: "📂",
+    CHECKMARK: "✔️",
+}
+
+export const STATUS_EMOJI = {
+    WAITING: "⏳",
+    STARTEd: "🔄",
+    DONE: "✅",
+    BLOCKED: "⛔",
+    CANCELLED: "❌"
+}
+export const PRIORITY_EMOJI = {
+    HIGH: "🔴",
+    MEDIUM: "🟡",
+    LOW: "🟢"
+}
+
 
 /**
  * Project Structure
@@ -27,12 +65,15 @@ export const PROJECT_CONSTANTS = {
         EPIC: "[Epic]_",
         SPRINT: "[Sprint]_",
         TASK_LINK: "../Tasks/",
+        EPIC_LINK: "../Epics/",
+        BACKLOG_LINK: "../Backlogs/",
+        SPRINT_LINK: "../Sprints/"
     },
-
-    // IDs
     ID_PREFIX: {
-        TASK: "tsk_",
-        EPIC: "epic_"
+        EPIC: "epic_",
+        BACKLOG: "backlog_",
+        SPRINT: "sprint_",
+        TASK: "task_"
     }
 };
 
@@ -69,6 +110,19 @@ export const TASK_CONSTANTS = {
     TASKS_SECTION: "## Tasks",
     TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
     TEMPLATE: (title: string) => `# 🧩 Task: ${title}\n\n## 📋 Description\n`,
+    CONTENT: {
+        OVERVIEW: `## 🗂️ Overview\n`,
+        OVERVIEW_TABLE_HEADER: `| Field | Value |\n|:--|:--|\n`,
+        OVERVIEW_TABEL_ROW: (field: string, value: string) => `| ${field} | ${value} |\n`,
+        DESCRIPTION: `## 📜 Description\n`,
+        ACCEPTANCE_CRITERIA: `## ✅ Acceptance Criteria\n`,
+        CHECKLIST: `## 📝 Checklist\n`,
+        NOTES: `## 🧠 Notes\n`,
+        RELATED_TASKS: `## 🔗 Related Tasks\n`,
+        EPIC: `## 🧱 Epic\n`,
+        SPRINTS: `## ⏱️ Sprints\n`,
+        BACKLOGS: `## 📋 Backlogs\n`,
+    },
 
     // Markers
     LINK_MARKER: "📌"
@@ -168,9 +222,11 @@ export const UI_CONSTANTS = {
     EMOJI: {
         COMMON: {
             BACKLOG: "📌",
-            EPIC: "🧩",
+            EPIC: "🚩",
             SPRINT: "⏱️",
             TASK: "✅",
+
+
             PROJECT: "📂",
             FILE: "📄",
             CALENDAR: "📅",

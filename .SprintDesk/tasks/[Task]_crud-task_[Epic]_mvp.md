@@ -10,7 +10,9 @@ status: done
 assignee: unassigned
 created_at: 2025-07-22T09:15:12.000Z
 updated_at: 2025-07-23T12:47:34.549Z
-objective: Display and manage the extension details page
+desciption: Display and manage the extension details page
+acceptance_criteria:
+checklist:
 epic:
   _id: epic_extensions_management
   title: Extensions Management
@@ -47,12 +49,9 @@ tags:
 | 🔄 **Updated At** | 2025-07-23T12:47:34.549Z |
 | 🎯 **Objective** | Display and manage the extension details page |
 
----
 
 ## 🧱 Description
 
-
----
 
 ## ✅ Acceptance Criteria
 
@@ -60,6 +59,7 @@ tags:
 ## 📋 Checklist
 
 
+## 🧠 Notes
 
 ## Epic
 - [Extensions Management](../epics/[Epic]_extensions-management.md)
@@ -74,5 +74,4 @@ tags:
  
 
 
-## 🧠 Notes
 
