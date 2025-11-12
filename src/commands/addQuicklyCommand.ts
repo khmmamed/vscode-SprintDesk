@@ -5,9 +5,12 @@ import * as epicService from '../services/epicService';
 import * as backlogService from '../services/backlogService';
 import insertTaskLinkUnderSection from '../utils/mdUtils';
 import { TASK_CONSTANTS } from '../utils/constant';
+import * as taskController from '../controller/taskController';
 
 export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand('sprintdesk.addQuickly', async () => {
+
+    
     const input = await vscode.window.showInputBox({
       prompt: "Enter: '@task task name @epic epic name @backlog backlog name'",
       placeHolder: "@task My Task @epic My Epic @backlog My Backlog"

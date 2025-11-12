@@ -1,5 +1,5 @@
 import * as path from 'path';
-
+import * as taskController from '../controller/taskController';
 import { PROJECT_CONSTANTS, UI_CONSTANTS } from './constant';
 import { generateEpicName } from './epicTemplate';
 import { get } from 'http';
@@ -16,7 +16,8 @@ export function generateEpicId(title: string): string {
 
 export function getTaskName(title: string): string {
   const taskSlug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskSlug}`;
+  const totalTasks = taskController.readTasksTotal();
+  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASKPATTERN(totalTasks)}${taskSlug}`;
 }
 export function generateTaskFile(title: string, epicTitle?: string): string {
   return `${getTaskName(title)}.md`;

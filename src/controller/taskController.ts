@@ -1,14 +1,37 @@
+/**
+ * Controller: taskController.ts
+ * Description: This controller handles operations related to tasks in the SprintDesk application.
+ * v0.0.1 
+ **/
 import matter, { test } from "gray-matter";
 import path from "path";
 import fs from "fs";
-import { getBacklogPath, getTasksPath } from "../utils/backlogUtils";
+import { getBacklogPath } from "../utils/backlogUtils";
 import * as fileService from "../services/fileService";
 import { getEpicPath } from "./epicController";
 import { getTaskPath } from "../utils/taskUtils";
 import { updateEpicHeaderLine, updateEpicSection } from "../utils/taskTemplate";
+import { PROJECT_CONSTANTS } from "../utils/constant";
 
+export function readTasksIds(): string[] {
+  const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
+  const tasksNames = fileService.getTasksNames(tasksDir)
+  // map tasks names and read their metadata to get ids
+  const tasksIds = tasksNames.map(taskName => {
+    const taskPath = path.join(tasksDir, `${taskName}`);
+    const { data } = matter.read(taskPath);
+    return data._id || '';
+  }).filter(_id => _id !== '');
+  return tasksIds;
+}
+export function readTasksTotal(): number {
+  const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
+  if (!fs.existsSync(tasksDir)) return 0;
+  const files = fs.readdirSync(tasksDir);
+  return files.length;
+}
 export function readTasksNames(): string[] {
-  const tasksPath = getTasksPath();
+  const tasksPath = fileService.getTasksDir(fileService.getWorkspaceRoot());
   if (!fs.existsSync(tasksPath)) return [];
 
   const files = fs.readdirSync(tasksPath);

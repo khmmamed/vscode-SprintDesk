@@ -61,6 +61,7 @@ export const PROJECT_CONSTANTS = {
     // File Naming Patterns
     FILE_PREFIX: {
         TASK: "[Task]_",
+        TASKPATTERN: (index: number) => `[Task-${index}]_`,
         BACKLOG: "[Backlog]_",
         EPIC: "[Epic]_",
         SPRINT: "[Sprint]_",

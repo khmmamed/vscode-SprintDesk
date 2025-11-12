@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as fileService from './fileService';
 import { createEpicFromMetadata, addTaskToEpic, listEpics, createEpic } from './epicService';
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
+import * as taskController from '../controller/taskController';
 
 import { 
   generateTaskFile,
@@ -56,7 +57,7 @@ export async function writeTask() {
     vscode.window.showErrorMessage('No workspace open');
     return;
   }
-
+  
   // Get task metadata
   const taskTitle = await vscode.window.showInputBox({
     prompt: 'Enter task title',
