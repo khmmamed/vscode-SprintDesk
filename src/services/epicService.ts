@@ -1,18 +1,76 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { promptInput, promptPick } from '../utils/helpers';
 import * as fileService from './fileService';
-
+import * as epicService from './epicService';
+import { getPriorityOptions, getTaskTypeOptions } from '../utils/helpers';
+import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
+import * as taskController from '../controller/taskController';
 import { 
   generateEpicContent,
   generateEpicTemplate
 } from '../utils/epicTemplate';
-// EpicMetadata is provided globally via `src/types/global.d.ts` as SprintDesk.EpicMetadata
-import { PROJECT_CONSTANTS, UI_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import { getEpicTasks } from '../controller/epicController';
 import { relativePathTaskToTaskpath } from '../utils/taskUtils';
 import { generateEpicName } from '../utils/epicTemplate';
 
+// [vNext] : next file version v0.0.2
+export async function handleEpicSelection(ws: string, type: string): Promise<string | undefined> {
+  const epics = epicService.listEpics(ws).map((epicPath: string) =>
+    path.basename(epicPath).replace(/^\[Epic\]_/, '').replace(/\.md$/, '')
+  );
+
+  const epicOptions = [
+    { label: '$(add) Create new epic...', value: '__new__' },
+    { label: '$(circle-slash) No epic', value: '' },
+    ...epics.map((epic) => ({ label: `$(bookmark) ${epic}`, value: epic }))
+  ];
+
+  const selected = await promptPick('Select or create an epic', epicOptions);
+  if (!selected) return undefined;
+
+  if (selected.value === '__new__') {
+    return await createNewEpic(type);
+  }
+
+  return selected.value || undefined;
+}
+
+async function createNewEpic(type: string): Promise<string | undefined> {
+  const newEpicName = await promptInput('New epic title', UI_CONSTANTS.QUICK_PICK.EPIC_TITLE);
+  if (!newEpicName) return;
+
+  const epicPriority = await promptPick('Select epic priority', getPriorityOptions());
+  if (!epicPriority?.value) return;
+
+  const owner = await promptInput('Epic owner (optional)', UI_CONSTANTS.QUICK_PICK.EPIC_OWNER);
+  const epicPriorityValue = epicPriority.value as SprintDesk.Priority;
+
+  const epicMetadata: SprintDesk.EpicMetadata = {
+    title: newEpicName,
+    priority: epicPriorityValue || 'medium' ,
+    owner: owner || undefined,
+    type,
+    status: 'planned'
+  };
+
+  epicService.createEpicFromMetadata(epicMetadata);
+  return newEpicName;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+// [vPrevious]
 interface TreeItemLike {
   label: string;
   collapsibleState: vscode.TreeItemCollapsibleState;
@@ -34,7 +92,6 @@ export function listEpics(ws: string): string[] {
   }
   return fileService.listMdFiles(epicsDir).map(f => path.join(epicsDir, f));
 }
-
 export function createEpicFromMetadata(metadata: SprintDesk.EpicMetadata): string {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
@@ -52,7 +109,6 @@ export function createEpicFromMetadata(metadata: SprintDesk.EpicMetadata): strin
   
   return epicPath;
 }
-
 export function createEpic(name: string): string {
   return createEpicFromMetadata({
     title: name,
@@ -61,19 +117,15 @@ export function createEpic(name: string): string {
     priority: 'medium'
   });
 }
-
 export function readEpic(filePath: string): string {
   return fs.readFileSync(filePath, 'utf8');
 }
-
 export function updateEpic(filePath: string, content: string) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
-
 export function deleteEpic(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
-
 export function addTaskToEpic(epicTitle: string, taskName: string) {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
@@ -164,14 +216,12 @@ export function addTaskToEpic(epicTitle: string, taskName: string) {
   // Write the updated epic file
   fs.writeFileSync(epicPath, matter.stringify(epicMatter.content, epicMatter.data));
 }
-
 export async function createEpicInteractive() {
   const epicName = await (vscode.window.showInputBox as any)({ prompt: 'Epic title' });
   if (!epicName) return;
   createEpic(epicName);
   vscode.window.showInformationMessage('Epic created.');
 }
-
 export function getTasksFromEpic(epicName: string): TreeItemLike[] {
   try {
     const tasks = getEpicTasks(epicName);

@@ -11,8 +11,70 @@ import * as fileService from "../services/fileService";
 import { getEpicPath } from "./epicController";
 import { getTaskPath } from "../utils/taskUtils";
 import { updateEpicHeaderLine, updateEpicSection } from "../utils/taskTemplate";
-import { PROJECT_CONSTANTS } from "../utils/constant";
+import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from "../utils/constant";
+import * as vscode from "vscode";
+import * as epicService from "../services/epicService";
+import * as taskService from "../services/taskService";
+import { promptInput, promptPick, getPriorityOptions, getTaskTypeOptions } from "../utils/helpers";
 
+// [vNext]
+
+
+export async function createTask() {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return vscode.window.showErrorMessage('No workspace open');
+
+  try {
+    const taskTitle = await promptInput('Enter task title', UI_CONSTANTS.QUICK_PICK.TASK_TITLE);
+    if (!taskTitle) return;
+
+    const type = await promptPick('Select task type', getTaskTypeOptions());
+    if (!type) return;
+
+    const priority = await promptPick('Select priority', getPriorityOptions());
+    if (!priority) return;
+
+    const category = await promptInput('Enter category (optional)', UI_CONSTANTS.QUICK_PICK.CATEGORY);
+    const component = await promptInput('Enter component (optional)', UI_CONSTANTS.QUICK_PICK.COMPONENT);
+    const duration = await promptInput('Enter duration estimate (optional)', UI_CONSTANTS.QUICK_PICK.DURATION);
+    const assignee = await promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
+
+    const epicTitle = await epicService.handleEpicSelection(ws, type.value);
+    if (epicTitle === undefined) return;
+
+    const epicId = epicTitle
+      ? `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicTitle.replace(/\s+/g, '_').toLowerCase()}`
+      : 1;
+
+    const priorityValue = (priority?.value ?? 'medium') as SprintDesk.Priority;
+    const typeValue = (type?.value ?? 'feature') as SprintDesk.TaskType;
+    const statusValue = TASK_CONSTANTS.STATUS.WAITING  as SprintDesk.TaskStatus;
+    const task = taskService.createTask({
+      title: taskTitle,
+      type: typeValue,
+      priority: priorityValue,
+      category: category || '',
+      component: component || '',
+      duration: duration || '',
+      assignee: assignee || '',
+      status: statusValue,
+      epicTitle: epicTitle || '',
+      _id: epicId as number
+    });
+
+    if (epicTitle) {
+      await epicService.addTaskToEpic(epicTitle, task.taskName);
+    }
+
+    vscode.window.showInformationMessage('Task created successfully.');
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to create task: ${(err as Error).message}`);
+  }
+}
+
+
+
+// [vPrevious]
 export function readTasksIds(): string[] {
   const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
   const tasksNames = fileService.getTasksNames(tasksDir)
@@ -59,19 +121,12 @@ export function readTaskContent(filePath: string): string {
   const { content } = matter(filePath);
   return content;
 }
-
-export function writeTask(taskDir: string, newTask: SprintDesk.ITaskMetadata): void {
-  // generate file name from title
-  const fileName = `${newTask.title.replace(/\s+/g, '-').toLowerCase()}.md`;
-}
-
 export function updateTaskMetadata(taskPath: string, newData: Partial<SprintDesk.ITaskMetadata>): void {
   const parsed = matter(taskPath);
   const updatedData = { ...parsed.data, ...newData };
   const updatedContent = matter.stringify(parsed.content, updatedData);
   fs.writeFileSync(taskPath, updatedContent, 'utf-8');
 }
-
 /** Update the content of a markdown file while preserving front-matter */
 export const updateTaskContent = (taskPath: string, newContent: string): void => {
   // Read file and parse front-matter
@@ -83,7 +138,6 @@ export const updateTaskContent = (taskPath: string, newContent: string): void =>
   // Write back to file
   fs.writeFileSync(taskPath, updatedContent, 'utf-8');
 };
-
 export const updateTaskSlugContent = (
   taskPath: string,
   slug: string,
@@ -119,7 +173,6 @@ export const updateTaskSlugContent = (
   const updatedContent = matter.stringify(newLines.join('\n'), parsed.data);
   fs.writeFileSync(taskPath, updatedContent, 'utf-8');
 };
-
 export const updateTaskEpic = (taskName: string, epicName: string): void => {
   const taskFile = matter.read(getTaskPath(taskName));
   const epicFile = matter.read(getEpicPath(epicName));
@@ -147,7 +200,6 @@ export const updateTaskEpic = (taskName: string, epicName: string): void => {
     'utf-8'
   );
 };
-
 export const updateTaskBacklogs = (taskName: string, backlogName: string): void => {
   const taskPath = getTaskPath(taskName);
   const backlogPath = getBacklogPath(backlogName);

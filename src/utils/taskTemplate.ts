@@ -1,8 +1,6 @@
-import * as path from 'path';
 import * as taskController from '../controller/taskController';
 import { PROJECT_CONSTANTS, UI_CONSTANTS } from './constant';
 import { generateEpicName } from './epicTemplate';
-import { get } from 'http';
 
 export function generateTaskId(title: string): string {
   const slug = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();

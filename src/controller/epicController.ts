@@ -7,6 +7,33 @@ import { getTaskPath } from '../utils/taskUtils';
 import * as vscode from 'vscode';
 import * as fileService from '../services/fileService';
 
+//  [vNext]: next file version v0.0.2
+
+
+// create epic if __new__ is selected
+
+
+// return epic metadata if existing epic is selected
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// [vPrevious]: version v0.0.1
 interface ITask {
   _id: string;
   name: string;

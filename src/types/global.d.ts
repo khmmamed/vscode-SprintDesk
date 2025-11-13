@@ -11,6 +11,7 @@ declare global {
         type ITaskBacklog = { _id: string; title: string; path: string; };
         type ITaskSprint = { _id: string; title: string; path: string; };
         interface TaskMetadata {
+            _id?: number;
             title: string;
             type?: TaskType;
             category?: string;
