@@ -8,7 +8,7 @@ import path from "path";
 import fs from "fs";
 import { getBacklogPath } from "../utils/backlogUtils";
 import * as fileService from "../services/fileService";
-import { getEpicPath } from "./epicController";
+import { getEpicPath, handleEpicInputsController } from "./epicController";
 import { getTaskPath } from "../utils/taskUtils";
 import { updateEpicHeaderLine, updateEpicSection } from "../utils/taskTemplate";
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from "../utils/constant";
@@ -18,9 +18,7 @@ import * as taskService from "../services/taskService";
 import { promptInput, promptPick, getPriorityOptions, getTaskTypeOptions } from "../utils/helpers";
 
 // [vNext]
-
-
-export async function createTask() {
+export async function handleTaskInputsController() {
   const ws = fileService.getWorkspaceRoot();
   if (!ws) return vscode.window.showErrorMessage('No workspace open');
 
@@ -39,31 +37,10 @@ export async function createTask() {
     const duration = await promptInput('Enter duration estimate (optional)', UI_CONSTANTS.QUICK_PICK.DURATION);
     const assignee = await promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
 
-    const epicTitle = await epicService.handleEpicSelection(ws, type.value);
-    if (epicTitle === undefined) return;
+    const epic = await handleEpicInputsController(ws);
 
-    const epicId = epicTitle
-      ? `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicTitle.replace(/\s+/g, '_').toLowerCase()}`
-      : 1;
-
-    const priorityValue = (priority?.value ?? 'medium') as SprintDesk.Priority;
-    const typeValue = (type?.value ?? 'feature') as SprintDesk.TaskType;
-    const statusValue = TASK_CONSTANTS.STATUS.WAITING  as SprintDesk.TaskStatus;
-    const task = taskService.createTask({
-      title: taskTitle,
-      type: typeValue,
-      priority: priorityValue,
-      category: category || '',
-      component: component || '',
-      duration: duration || '',
-      assignee: assignee || '',
-      status: statusValue,
-      epicTitle: epicTitle || '',
-      _id: epicId as number
-    });
-
-    if (epicTitle) {
-      await epicService.addTaskToEpic(epicTitle, task.taskName);
+    if (epic?.title) {
+      await epicService.addTaskToEpic(epic.title, taskTitle);
     }
 
     vscode.window.showInformationMessage('Task created successfully.');
@@ -71,9 +48,9 @@ export async function createTask() {
     vscode.window.showErrorMessage(`Failed to create task: ${(err as Error).message}`);
   }
 }
-
-
-
+export async function createTask() {
+  return handleTaskInputsController();
+}
 // [vPrevious]
 export function readTasksIds(): string[] {
   const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
@@ -203,8 +180,8 @@ export const updateTaskEpic = (taskName: string, epicName: string): void => {
 export const updateTaskBacklogs = (taskName: string, backlogName: string): void => {
   const taskPath = getTaskPath(taskName);
   const backlogPath = getBacklogPath(backlogName);
-  const {data: taskMetadata, content: taskContent} = matter.read(taskPath);
-  const {data: backlogMetadata, content: backlogContent} = matter.read(backlogPath);
+  const { data: taskMetadata, content: taskContent } = matter.read(taskPath);
+  const { data: backlogMetadata, content: backlogContent } = matter.read(backlogPath);
 
   // find backlogs 
   const backlogs = taskMetadata.backlogs || [];

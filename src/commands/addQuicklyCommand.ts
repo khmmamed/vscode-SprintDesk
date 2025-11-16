@@ -48,8 +48,11 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
         type: 'feature',
         priority: 'medium',
         status: 'waiting',
-        epicName: epicTitle,
-        epicId: epicTitle ? `epic_${epicTitle.replace(/\s+/g, '_').toLowerCase()}` : undefined
+        epic: {
+          _id: 1,
+          title: epicTitle || '',
+          path: ''
+        }
       });
       taskPath = res.taskName;
     } catch (e) {

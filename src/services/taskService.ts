@@ -2,9 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from './fileService';
-import { createEpicFromMetadata, addTaskToEpic, listEpics, createEpic } from './epicService';
+import { addTaskToEpic } from './epicService';
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
-import * as taskController from '../controller/taskController';
+import * as epicController from '../controller/epicController';
 
 import { 
   generateTaskFile,
@@ -12,13 +12,13 @@ import {
 } from '../utils/taskTemplate';
 
 
-export function createTask(metadata: SprintDesk.TaskMetadata): { filePath: string; taskName: string } {
+export async function createTask(metadata: SprintDesk.TaskMetadata): Promise<{ filePath: string; taskName: string }> {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
   fs.mkdirSync(tasksDir, { recursive: true });
 
-  const taskName = generateTaskFile(metadata.title, metadata.epicTitle);
+  const taskName = generateTaskFile(metadata.title, metadata.epic?.title);
   const taskPath = path.join(tasksDir, taskName);
   
   if (!fs.existsSync(taskPath)) {
@@ -132,63 +132,8 @@ export async function writeTask() {
     prompt: 'Enter assignee (optional)',
     placeHolder: UI_CONSTANTS.QUICK_PICK.ASSIGNEE
   });
-
-  // Get epic list and show quickpick
-  const epics = listEpics(ws).map((epicPath: string) => path.basename(epicPath).replace(/^\[Epic\]_/, '').replace(/\.md$/, ''));
-  const epicOptions = [
-    { label: '$(add) Create new epic...', value: '__new__' },
-    { label: '$(circle-slash) No epic', value: '' },
-    ...epics.map((epic: string) => ({ label: `$(bookmark) ${epic}`, value: epic }))
-  ];
-
-  const selected = await vscode.window.showQuickPick(epicOptions, {
-    placeHolder: 'Select or create an epic'
-  });
-
-  if (!selected) return; // User cancelled
-
-  let epicTitle = selected.value;
-  let epicId: string | undefined;
-
-  if (epicTitle === '__new__') {
-    // Create new epic
-    const newEpicName = await vscode.window.showInputBox({ 
-      prompt: 'New epic title',
-      placeHolder: UI_CONSTANTS.QUICK_PICK.EPIC_TITLE
-    });
-    if (!newEpicName) return;
-    
-    const epicPriority = await vscode.window.showQuickPick([
-      { label: `${UI_CONSTANTS.EMOJI.PRIORITY.HIGH} High`, value: 'high' as SprintDesk.Priority },
-      { label: `${UI_CONSTANTS.EMOJI.PRIORITY.MEDIUM} Medium`, value: 'medium' as SprintDesk.Priority },
-      { label: `${UI_CONSTANTS.EMOJI.PRIORITY.LOW} Low`, value: 'low' as SprintDesk.Priority }
-    ], {
-      placeHolder: 'Select epic priority'
-    });
-    if (!epicPriority) return;
-
-    const owner = await vscode.window.showInputBox({
-      prompt: 'Epic owner (optional)',
-      placeHolder: UI_CONSTANTS.QUICK_PICK.EPIC_OWNER
-    });
-
-    epicTitle = newEpicName;
-    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicTitle.replace(/\s+/g, '_').toLowerCase()}`;
-    
-    const epicMetadata: SprintDesk.EpicMetadata = {
-      title: newEpicName,
-      priority: epicPriority.value,
-      owner: owner || undefined,
-      type: type.value,
-      status: 'planned' as SprintDesk.EpicStatus
-    };
-    createEpicFromMetadata(epicMetadata);
-  } else if (epicTitle) {
-    epicId = `${PROJECT_CONSTANTS.ID_PREFIX.EPIC}${epicTitle.replace(/\s+/g, '_').toLowerCase()}`;
-  }
-
-  try {
-    const task = createTask({
+  // create task and get metadata
+  const task = await createTask({
       title: taskTitle,
       type: type.value,
       priority: priority.value,
@@ -197,16 +142,40 @@ export async function writeTask() {
       duration,
       assignee,
       status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
-      epicTitle: epicTitle || undefined,
-      epicId
     });
 
-    if (epicTitle) {
-      await addTaskToEpic(epicTitle, task.taskName);
-    }
+  console.log('Created task: ', task);
+  // Get epic
+  const epic = await epicController.handleEpicInputsController(ws);
 
-    vscode.window.showInformationMessage('Task created successfully.');
-  } catch (e) {
-    vscode.window.showErrorMessage('Failed to create task.');
-  }
+  console.log('Selected epic: ', epic);
+
+  // when create task add it to epic
+  // when epic created add it to task
+
+  // try {
+  //   const task = createTask({
+  //     title: taskTitle,
+  //     type: type.value,
+  //     priority: priority.value,
+  //     category,
+  //     component,
+  //     duration,
+  //     assignee,
+  //     status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
+  //     epic: {
+  //       _id: epic?._id,
+  //       title: epic?.title || '',
+  //       path: epic?.path
+  //     }
+  //   });
+
+  //   if (epic?._id && epic.title) {
+  //     await addTaskToEpic(epic.title, task.taskName);
+  //   }
+
+  //   vscode.window.showInformationMessage('Task created successfully.');
+  // } catch (e) {
+  //   vscode.window.showErrorMessage('Failed to create task.');
+  // }
 }

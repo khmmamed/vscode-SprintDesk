@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { PROJECT_CONSTANTS } from '../utils/constant';
+import { PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import * as vscode from "vscode";
 
 export function readFileSyncSafe(filePath: string): string {
@@ -123,6 +123,7 @@ export function getTasksNames(tasksDir: string): string[] {
 export function getEpicsNames(epicsDir: string): string[] {
   if (!fs.existsSync(epicsDir)) return [];
   const files = fs.readdirSync(epicsDir);
+  console.log('[getEpicsNames]: Epics files found:', files);
   return files.filter(f => f.toLowerCase().endsWith('.md'));
 }
 export function getBacklogsNames(backlogsDir: string): string[] {
@@ -174,4 +175,24 @@ export function getBacklogName(filePath: string): string {
 }
 export function getSprintName(filePath: string): string {
   return path.basename(filePath);
+}
+
+// [COMMIT]: create files functions
+export function createTaskBaseName(title: string, _id : number): string {
+  const safeTitle = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASKPATTERN(_id)}${safeTitle || 'untitled-task'}`;
+}
+
+// [COMMIT]: create 
+export function createTaskRelativePath(basename: string): string {
+  return `../Task/${basename}.md`;
+}
+export function createEpicRelativePath(basename: string): string {
+  return `../Epic/${basename}.md`;
+}
+export function createBacklogRelativePath(basename: string): string {
+  return `../Backlog/${basename}.md`;
+}
+export function createSprintRelativePath(basename: string): string {
+  return `../Sprint/${basename}.md`;
 }

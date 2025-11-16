@@ -20,17 +20,20 @@ declare global {
             priority?: Priority;
             status?: TaskStatus;
             assignee?: string;
-            epicId?: string;
-            epicName?: string;
-            epicTitle?: string;
             objective?: string;
+
+            epic?: {
+                _id?: number;
+                title: string;
+                path?: string;
+            };
             backlogs?: ITaskBacklog[];
             sprints?: ITaskSprint[];
         }
 
         interface EpicMetadata {
+            _id?: number;
             title: string;
-            type?: string;
             description?: string;
             priority?: Priority;
             status?: EpicStatus;
@@ -45,6 +48,14 @@ declare global {
             doneTasks?: number;
             progress?: string;
             path?: string
+            createdAt?: string;
+            updatedAt?: string;
+
+            // components fields
+            tasks?: any[];
+            backlogs?: any[];
+            sprints?: any[];
+            related_epics?: any[];
         }
 
         interface TaskRow {

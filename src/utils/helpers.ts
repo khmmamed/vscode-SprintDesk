@@ -25,7 +25,7 @@ export function getTaskTypeOptions() {
   ];
 }
 
-export function getPriorityOptions() {
+export function getPriorityOptions() : { label: string; description: string; value: string }[] {
   const emoji = UI_CONSTANTS.EMOJI.PRIORITY;
   return [
     { label: `${emoji.HIGH} High`, description: 'Critical or urgent', value: 'high' },

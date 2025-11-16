@@ -1,3 +1,10 @@
+/**
+ * Epic Controller Functions
+ * @description: controller functions for manipulation epics output and inputs
+ * @version: v0.0.2
+ * @author: khmamed
+ * @copyright: iTTyni.com
+ */
 import * as fs from 'fs';
 import * as path from 'path';
 import { getEpicsPath } from '../utils/backlogUtils';
@@ -6,15 +13,75 @@ import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/consta
 import { getTaskPath } from '../utils/taskUtils';
 import * as vscode from 'vscode';
 import * as fileService from '../services/fileService';
+import { getPriorityOptions, promptInput, promptPick } from '../utils/helpers';
+import * as epicService from '../services/epicService';
 
 //  [vNext]: next file version v0.0.2
+export function readEpicMetadataById(_id: number): SprintDesk.EpicMetadata | undefined {
+  return readEpicsMetadata().find(epic => epic._id === _id);
+}
+export function readEpicsMetadata(): SprintDesk.EpicMetadata[] {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return [];
+  const epicsDir = fileService.getEpicsDir(ws);
+  const epicsNames = fileService.getEpicsNames(epicsDir);
+  const epicsMetadata: SprintDesk.EpicMetadata[] = epicsNames.map((epicName: string) => {
+    const epicPath = path.join(epicsDir, `${epicName}`);
+    const { data } = matter.read(epicPath);
+    return data as SprintDesk.EpicMetadata;
+  });
+  return epicsMetadata;
+}
+export function readEpicsTitles(): string[] {
+  return readEpicsMetadata().map((metadata: any) => metadata.title || '');
+}
+export const handleEpicInputsController = async (ws: string): Promise<SprintDesk.EpicMetadata | undefined> => {
+  // Get Existing epics
+  const epics = readEpicsMetadata();
+  const epicOptions = [
+    { label: '$(add) Create new epic...', value: '__new__' },
+    { label: '$(circle-slash) No epic', value: '' },
+    ...epics.map((epic: SprintDesk.EpicMetadata) => ({ label: `$(bookmark) ${epic.title}`, value: epic._id }))
+  ];
+  // 
+  const selected = await vscode.window.showQuickPick(epicOptions, {
+    placeHolder: 'Select or create an epic'
+  });
 
+  if (!selected) return; // User cancelled
+
+
+  let epicSelected = selected.value;
+  let epic = {} as SprintDesk.EpicMetadata;
+
+  if (epicSelected === '__new__') {
+
+    const newEpicTitle = await promptInput('New epic title', UI_CONSTANTS.QUICK_PICK.EPIC_TITLE);
+    if (!newEpicTitle) return;
+
+    const epicPriority = await promptPick('Select epic priority (optional)', getPriorityOptions());
+
+    const owner = await promptInput('Epic owner (optional)', UI_CONSTANTS.QUICK_PICK.EPIC_OWNER);
+    
+    const epicMetadata: SprintDesk.EpicMetadata = {
+      title: newEpicTitle,
+      priority: epicPriority?.value as SprintDesk.Priority,
+      owner: owner,
+      status: 'planned' as SprintDesk.EpicStatus
+    };
+
+    epic = await epicService.createNewEpic(epicMetadata);
+  } else if (epicSelected) {
+    epic = readEpicMetadataById(epicSelected! as number)!;
+  }
+
+  return epic as SprintDesk.EpicMetadata;
+}
 
 // create epic if __new__ is selected
 
 
 // return epic metadata if existing epic is selected
-
 
 
 
@@ -157,91 +224,91 @@ export function removeTaskFromEpic(epicPath: string, taskPath: string): void {
 
 export function updateEpicTasks(epicName: string, taskName: string): void {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!ws) throw new Error('No workspace');
-    const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
-    const epicPath = path.join(epicsDir, epicName);
-    
-    // Read epic and task files
-    const epicContent = fileService.readFileSyncSafe(epicPath);
-    if (!epicContent) throw new Error('Epic file not found');
-    const taskPath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, taskName);
-    const taskContent = fileService.readFileSyncSafe(taskPath);
-    if (!taskContent) throw new Error('Task file not found');
-  
-    // Parse both files with gray-matter
-    const matter = require('gray-matter');
-    const epicMatter = matter(epicContent);
-    const taskMatter = matter(taskContent);
-  
-    // Initialize tasks array if needed
-    if (!Array.isArray(epicMatter.data.tasks)) {
-      epicMatter.data.tasks = [];
+  if (!ws) throw new Error('No workspace');
+  const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
+  const epicPath = path.join(epicsDir, epicName);
+
+  // Read epic and task files
+  const epicContent = fileService.readFileSyncSafe(epicPath);
+  if (!epicContent) throw new Error('Epic file not found');
+  const taskPath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, taskName);
+  const taskContent = fileService.readFileSyncSafe(taskPath);
+  if (!taskContent) throw new Error('Task file not found');
+
+  // Parse both files with gray-matter
+  const matter = require('gray-matter');
+  const epicMatter = matter(epicContent);
+  const taskMatter = matter(taskContent);
+
+  // Initialize tasks array if needed
+  if (!Array.isArray(epicMatter.data.tasks)) {
+    epicMatter.data.tasks = [];
+  }
+
+  // Create task data object
+  const taskData = {
+    _id: taskMatter.data._id,
+    title: taskMatter.data.title,
+    status: taskMatter.data.status || TASK_CONSTANTS.STATUS.WAITING,
+    priority: taskMatter.data.priority || TASK_CONSTANTS.PRIORITY.MEDIUM,
+    path: `../${PROJECT_CONSTANTS.TASKS_DIR}/${taskName}`
+  };
+
+  // Add task to the tasks array if not already present
+  const existingTaskIndex = epicMatter.data.tasks.findIndex((t: any) => t._id === taskData._id);
+  if (existingTaskIndex >= 0) {
+    epicMatter.data.tasks[existingTaskIndex] = taskData;
+  } else {
+    epicMatter.data.tasks.push(taskData);
+  }
+
+  // Update task counts
+  epicMatter.data.totalTasks = epicMatter.data.tasks.length;
+  epicMatter.data.completedTasks = epicMatter.data.tasks.filter((t: any) => t.status === 'done' || t.status === 'completed').length;
+  epicMatter.data.progress = Math.round((epicMatter.data.completedTasks / epicMatter.data.totalTasks) * 100) + '%';
+
+  // Create task table
+  function getStatusEmoji(status: string): string {
+    switch (status?.toLowerCase()) {
+      case TASK_CONSTANTS.STATUS.WAITING: return UI_CONSTANTS.EMOJI.STATUS.WAITING;
+      case TASK_CONSTANTS.STATUS.STARTED: return UI_CONSTANTS.EMOJI.STATUS.IN_PROGRESS;
+      case TASK_CONSTANTS.STATUS.DONE:
+      case TASK_CONSTANTS.STATUS.COMPLETED: return UI_CONSTANTS.EMOJI.STATUS.DONE;
+      case TASK_CONSTANTS.STATUS.BLOCKED: return UI_CONSTANTS.EMOJI.STATUS.BLOCKED;
+      default: return UI_CONSTANTS.EMOJI.STATUS.WAITING;
     }
-  
-    // Create task data object
-    const taskData = {
-      _id: taskMatter.data._id,
-      title: taskMatter.data.title,
-      status: taskMatter.data.status || TASK_CONSTANTS.STATUS.WAITING,
-      priority: taskMatter.data.priority || TASK_CONSTANTS.PRIORITY.MEDIUM,
-      path: `../${PROJECT_CONSTANTS.TASKS_DIR}/${taskName}`
-    };
-  
-    // Add task to the tasks array if not already present
-    const existingTaskIndex = epicMatter.data.tasks.findIndex((t: any) => t._id === taskData._id);
-    if (existingTaskIndex >= 0) {
-      epicMatter.data.tasks[existingTaskIndex] = taskData;
-    } else {
-      epicMatter.data.tasks.push(taskData);
+  }
+
+  function getPriorityEmoji(priority: string): string {
+    switch (priority?.toLowerCase()) {
+      case TASK_CONSTANTS.PRIORITY.HIGH: return UI_CONSTANTS.EMOJI.PRIORITY.HIGH;
+      case TASK_CONSTANTS.PRIORITY.LOW: return UI_CONSTANTS.EMOJI.PRIORITY.LOW;
+      default: return UI_CONSTANTS.EMOJI.PRIORITY.MEDIUM;
     }
-  
-    // Update task counts
-    epicMatter.data.totalTasks = epicMatter.data.tasks.length;
-    epicMatter.data.completedTasks = epicMatter.data.tasks.filter((t: any) => t.status === 'done' || t.status === 'completed').length;
-    epicMatter.data.progress = Math.round((epicMatter.data.completedTasks / epicMatter.data.totalTasks) * 100) + '%';
-  
-    // Create task table
-    function getStatusEmoji(status: string): string {
-      switch (status?.toLowerCase()) {
-        case TASK_CONSTANTS.STATUS.WAITING: return UI_CONSTANTS.EMOJI.STATUS.WAITING;
-        case TASK_CONSTANTS.STATUS.STARTED: return UI_CONSTANTS.EMOJI.STATUS.IN_PROGRESS;
-        case TASK_CONSTANTS.STATUS.DONE:
-        case TASK_CONSTANTS.STATUS.COMPLETED: return UI_CONSTANTS.EMOJI.STATUS.DONE;
-        case TASK_CONSTANTS.STATUS.BLOCKED: return UI_CONSTANTS.EMOJI.STATUS.BLOCKED;
-        default: return UI_CONSTANTS.EMOJI.STATUS.WAITING;
-      }
-    }
-  
-    function getPriorityEmoji(priority: string): string {
-      switch (priority?.toLowerCase()) {
-        case TASK_CONSTANTS.PRIORITY.HIGH: return UI_CONSTANTS.EMOJI.PRIORITY.HIGH;
-        case TASK_CONSTANTS.PRIORITY.LOW: return UI_CONSTANTS.EMOJI.PRIORITY.LOW;
-        default: return UI_CONSTANTS.EMOJI.PRIORITY.MEDIUM;
-      }
-    }
-  
-    const taskTable = epicMatter.data.tasks
-      .map((task: any, index: number) => {
-        const statusEmoji = getStatusEmoji(task.status);
-        const priorityEmoji = getPriorityEmoji(task.priority);
-        return `| ${index + 1} | [${task.title}](${task.path}) | ${statusEmoji} ${task.status} | ${priorityEmoji} ${task.priority} | \`${task._id}\` |`;
-      })
-      .join('\n');
-  
-    // Replace tasks table in the content
-    const tasksSectionStart = epicMatter.content.indexOf(UI_CONSTANTS.SECTIONS.TASKS_MARKER);
-    if (tasksSectionStart !== -1) {
-      const nextSectionMatch = epicMatter.content.slice(tasksSectionStart).match(/\n##\s/);
-      const tasksSectionEnd = nextSectionMatch
-        ? tasksSectionStart + nextSectionMatch.index
-        : epicMatter.content.length;
-      
-      epicMatter.content = 
-        epicMatter.content.slice(0, tasksSectionStart) +
-        `${UI_CONSTANTS.SECTIONS.TASKS_MARKER}\n\n| # | Task | Status | Priority | ID |\n|:--|:-----|:------:|:--------:|:-----|\n${taskTable}\n${UI_CONSTANTS.SECTIONS.AUTO_COMMENT}\n\n` +
-        epicMatter.content.slice(tasksSectionEnd);
-    }
-  
-    // Write the updated epic file
-    fs.writeFileSync(epicPath, matter.stringify(epicMatter.content, epicMatter.data));
+  }
+
+  const taskTable = epicMatter.data.tasks
+    .map((task: any, index: number) => {
+      const statusEmoji = getStatusEmoji(task.status);
+      const priorityEmoji = getPriorityEmoji(task.priority);
+      return `| ${index + 1} | [${task.title}](${task.path}) | ${statusEmoji} ${task.status} | ${priorityEmoji} ${task.priority} | \`${task._id}\` |`;
+    })
+    .join('\n');
+
+  // Replace tasks table in the content
+  const tasksSectionStart = epicMatter.content.indexOf(UI_CONSTANTS.SECTIONS.TASKS_MARKER);
+  if (tasksSectionStart !== -1) {
+    const nextSectionMatch = epicMatter.content.slice(tasksSectionStart).match(/\n##\s/);
+    const tasksSectionEnd = nextSectionMatch
+      ? tasksSectionStart + nextSectionMatch.index
+      : epicMatter.content.length;
+
+    epicMatter.content =
+      epicMatter.content.slice(0, tasksSectionStart) +
+      `${UI_CONSTANTS.SECTIONS.TASKS_MARKER}\n\n| # | Task | Status | Priority | ID |\n|:--|:-----|:------:|:--------:|:-----|\n${taskTable}\n${UI_CONSTANTS.SECTIONS.AUTO_COMMENT}\n\n` +
+      epicMatter.content.slice(tasksSectionEnd);
+  }
+
+  // Write the updated epic file
+  fs.writeFileSync(epicPath, matter.stringify(epicMatter.content, epicMatter.data));
 }

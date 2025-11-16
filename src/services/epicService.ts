@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { promptInput, promptPick } from '../utils/helpers';
 import * as fileService from './fileService';
-import * as epicService from './epicService';
 import { getPriorityOptions, getTaskTypeOptions } from '../utils/helpers';
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 import * as taskController from '../controller/taskController';
@@ -16,47 +15,31 @@ import { relativePathTaskToTaskpath } from '../utils/taskUtils';
 import { generateEpicName } from '../utils/epicTemplate';
 
 // [vNext] : next file version v0.0.2
-export async function handleEpicSelection(ws: string, type: string): Promise<string | undefined> {
-  const epics = epicService.listEpics(ws).map((epicPath: string) =>
-    path.basename(epicPath).replace(/^\[Epic\]_/, '').replace(/\.md$/, '')
-  );
 
-  const epicOptions = [
-    { label: '$(add) Create new epic...', value: '__new__' },
-    { label: '$(circle-slash) No epic', value: '' },
-    ...epics.map((epic) => ({ label: `$(bookmark) ${epic}`, value: epic }))
-  ];
-
-  const selected = await promptPick('Select or create an epic', epicOptions);
-  if (!selected) return undefined;
-
-  if (selected.value === '__new__') {
-    return await createNewEpic(type);
+export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Promise<SprintDesk.EpicMetadata> {
+  const ws = fileService.getWorkspaceRoot();
+  const title = epicMetadata.title || await promptInput('Epic Title');
+  if (!title) throw new Error('Epic title is required');
+  const tasksDir = fileService.getTasksDir(ws);
+  const totalTasks = fileService.getTasksBaseNames(tasksDir).length;
+  // get _id 
+  const _id = totalTasks === 0 ? 1 : totalTasks + 1;
+  const taskBaseName = fileService.createTaskBaseName(title, _id);
+  const taskName = taskBaseName+'.md'
+  const epicData: SprintDesk.EpicMetadata = {
+    _id,
+    title,
+    status: epicMetadata.status || 'planned',
+    priority: epicMetadata.priority || 'medium',
+    path: taskName,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    totalTasks: 0,
+    completedTasks: 0,
   }
-
-  return selected.value || undefined;
-}
-
-async function createNewEpic(type: string): Promise<string | undefined> {
-  const newEpicName = await promptInput('New epic title', UI_CONSTANTS.QUICK_PICK.EPIC_TITLE);
-  if (!newEpicName) return;
-
-  const epicPriority = await promptPick('Select epic priority', getPriorityOptions());
-  if (!epicPriority?.value) return;
-
-  const owner = await promptInput('Epic owner (optional)', UI_CONSTANTS.QUICK_PICK.EPIC_OWNER);
-  const epicPriorityValue = epicPriority.value as SprintDesk.Priority;
-
-  const epicMetadata: SprintDesk.EpicMetadata = {
-    title: newEpicName,
-    priority: epicPriorityValue || 'medium' ,
-    owner: owner || undefined,
-    type,
-    status: 'planned'
-  };
-
-  epicService.createEpicFromMetadata(epicMetadata);
-  return newEpicName;
+  // write epic file
+  fs.writeFileSync(path.join(fileService.getEpicsDir(ws), taskName), generateEpicTemplate(epicData), 'utf8');
+  return epicData;
 }
 
 
@@ -71,6 +54,23 @@ async function createNewEpic(type: string): Promise<string | undefined> {
 
 
 // [vPrevious]
+export function createEpicFromMetadata(metadata: SprintDesk.EpicMetadata): string {
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!ws) throw new Error('No workspace');
+
+  const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
+  fs.mkdirSync(epicsDir, { recursive: true });
+  
+  const epicName = generateEpicName(metadata.title);
+  const epicPath = path.join(epicsDir, epicName);
+  
+  if (!fs.existsSync(epicPath)) {
+    const content = generateEpicTemplate(metadata);
+    fs.writeFileSync(epicPath, content, 'utf8');
+  }
+  
+  return epicPath;
+}
 interface TreeItemLike {
   label: string;
   collapsibleState: vscode.TreeItemCollapsibleState;
@@ -92,27 +92,10 @@ export function listEpics(ws: string): string[] {
   }
   return fileService.listMdFiles(epicsDir).map(f => path.join(epicsDir, f));
 }
-export function createEpicFromMetadata(metadata: SprintDesk.EpicMetadata): string {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!ws) throw new Error('No workspace');
 
-  const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
-  fs.mkdirSync(epicsDir, { recursive: true });
-  
-  const epicName = generateEpicName(metadata.title);
-  const epicPath = path.join(epicsDir, epicName);
-  
-  if (!fs.existsSync(epicPath)) {
-    const content = generateEpicTemplate(metadata);
-    fs.writeFileSync(epicPath, content, 'utf8');
-  }
-  
-  return epicPath;
-}
 export function createEpic(name: string): string {
   return createEpicFromMetadata({
     title: name,
-    type: 'feature',
     status: 'planned',
     priority: 'medium'
   });

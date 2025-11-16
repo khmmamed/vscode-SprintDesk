@@ -1,4 +1,3 @@
-import * as taskController from '../controller/taskController';
 import { PROJECT_CONSTANTS, UI_CONSTANTS } from './constant';
 import { generateEpicName } from './epicTemplate';
 
@@ -6,29 +5,26 @@ export function generateTaskId(title: string): string {
   const slug = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
   return `tsk_${slug}`;
 }
-
 export function generateEpicId(title: string): string {
   const slug = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
   return `epic_${slug}`;
 }
-
 export function getTaskName(title: string): string {
   const taskSlug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const totalTasks = taskController.readTasksTotal();
-  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASKPATTERN(totalTasks)}${taskSlug}`;
+  // Avoid depending on workspace/server state in webview utilities — use stable prefix
+  return `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${taskSlug}`;
 }
 export function generateTaskFile(title: string, epicTitle?: string): string {
   return `${getTaskName(title)}.md`;
 }
-
 export const generateTaskMetadata = (metadata: SprintDesk.TaskMetadata): string => {
   const now = new Date().toISOString();
   const taskId = generateTaskId(metadata.title);
-  const epicName = metadata.epicTitle ? `${generateEpicName(metadata.epicTitle)}` : '';
-  const taskName = metadata.epicTitle ?
-    `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}_${generateEpicName(metadata.epicTitle)}` :
+  const epicName = metadata.epic?.title ? `${generateEpicName(metadata.epic.title)}` : '';
+  const taskName = metadata.epic?.title ?
+    `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}_${generateEpicName(metadata.epic.title)}` :
     `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}.md`
-  console.log('Generating task metadata for ID:', taskId);
+
   return `---
 _id: ${taskId}
 title: ${metadata.title.toLowerCase().replace(/\s+/g, '-')}
@@ -43,10 +39,10 @@ created_at: ${now}
 updated_at: ${now}
 objective: ${metadata.objective || 'Add task objective here...'}
 path: ../tasks/${taskName}
-${metadata.epicId && metadata.epicTitle ? `epic:
-  _id: ${metadata.epicId}
-  title: ${metadata.epicTitle}
-  path: ../${PROJECT_CONSTANTS.EPICS_DIR}/${epicName}` : ''}
+epic:
+  _id: 
+  title: 
+  path: 
 sprints: 
 backlogs: 
 related_tasks: 
@@ -57,7 +53,7 @@ export const generateTaskContent = (metadata: SprintDesk.TaskMetadata): string =
   const now = new Date().toISOString();
   return `
 # 🧩 Task: ${metadata.title}
-${metadata.epicTitle ? `📘 Epic: \`${metadata.epicTitle}\`` : ''}
+${metadata.epic?.title ? `📘 Epic: \`${metadata.epic.title}\`` : ''}
 
 
 ## 🗂️ Overview
@@ -88,9 +84,9 @@ Add task description here...
 
 ## 🧠 Notes
 > Add implementation notes here...
-${metadata.epicTitle ? `
+${metadata.epic?.title ? `
 ## Epic
-- [${metadata.epicTitle}](../${PROJECT_CONSTANTS.EPICS_DIR}/${generateEpicName(metadata.epicTitle)})
+- [${metadata.epic.title}](../${PROJECT_CONSTANTS.EPICS_DIR}/${generateEpicName(metadata.epic.title)})
 ` : ''}
 
 ## Sprints
@@ -109,7 +105,6 @@ export function generateTaskTemplate(metadata: SprintDesk.TaskMetadata): string 
 ${generateTaskContent(metadata)}
 `;
 }
-
 // Update epic line after task header
 export const updateEpicHeaderLine = (ls: string[], epicMeta: SprintDesk.EpicMetadata): string[] => {
   const taskHeaderIdx = ls.findIndex(l => l.trim().startsWith('# 🧩 Task'));
@@ -124,7 +119,6 @@ export const updateEpicHeaderLine = (ls: string[], epicMeta: SprintDesk.EpicMeta
         : line
   ).flat();
 };
-
 // Update epic section
 export const updateEpicSection = (ls: string[], epicMeta: SprintDesk.EpicMetadata): string[] => {
   const secIdx = ls.findIndex(l => l.trim() === '## Epic');
@@ -139,8 +133,6 @@ export const updateEpicSection = (ls: string[], epicMeta: SprintDesk.EpicMetadat
   const before = ls.slice(0, secIdx + 1); // include the '## Epic' line
   return [...before, link];
 };
-
-
 
 /* 
  * Old code for reference:
