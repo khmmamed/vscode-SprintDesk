@@ -17,33 +17,49 @@ import * as epicService from "../services/epicService";
 import * as taskService from "../services/taskService";
 import { promptInput, promptPick, getPriorityOptions, getTaskTypeOptions } from "../utils/helpers";
 
-// [vNext]
-export async function handleTaskInputsController() {
-  const ws = fileService.getWorkspaceRoot();
-  if (!ws) return vscode.window.showErrorMessage('No workspace open');
-
+// [vNext]: version: 0.0.2
+export async function handleTaskInputsController(ws?: string) {
+  if (!ws) {
+    ws = fileService.getWorkspaceRoot();
+  }
   try {
+    // Get task metadata
     const taskTitle = await promptInput('Enter task title', UI_CONSTANTS.QUICK_PICK.TASK_TITLE);
     if (!taskTitle) return;
 
-    const type = await promptPick('Select task type', getTaskTypeOptions());
+    // Get task type
+    const type = await promptPick('Select task type',getTaskTypeOptions());
     if (!type) return;
 
-    const priority = await promptPick('Select priority', getPriorityOptions());
+    // Get priority
+    const priority = await  promptPick('Select priority', getPriorityOptions());
     if (!priority) return;
 
-    const category = await promptInput('Enter category (optional)', UI_CONSTANTS.QUICK_PICK.CATEGORY);
-    const component = await promptInput('Enter component (optional)', UI_CONSTANTS.QUICK_PICK.COMPONENT);
-    const duration = await promptInput('Enter duration estimate (optional)', UI_CONSTANTS.QUICK_PICK.DURATION);
-    const assignee = await promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
+    // Get category
+    const category = await  promptInput('Enter category (optional)', UI_CONSTANTS.QUICK_PICK.CATEGORY);
 
-    const epic = await handleEpicInputsController(ws);
+    // Get component
+    const component = await  promptInput('Enter component (optional)', UI_CONSTANTS.QUICK_PICK.COMPONENT);
 
-    if (epic?.title) {
-      await epicService.addTaskToEpic(epic.title, taskTitle);
-    }
+    // Get duration estimate
+    const duration = await  promptInput('Enter duration estimate (optional)', UI_CONSTANTS.QUICK_PICK.DURATION);
 
-    vscode.window.showInformationMessage('Task created successfully.');
+    // Get assignee
+    const assignee = await  promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
+
+    // create task and get metadata
+    const task = await taskService.createTask(ws, {
+      title: taskTitle,
+      type: type.value as SprintDesk.TaskType,
+      priority: priority.value as SprintDesk.Priority,
+      category,
+      component,
+      duration,
+      assignee,
+      status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
+    });
+
+    return task;
   } catch (err) {
     vscode.window.showErrorMessage(`Failed to create task: ${(err as Error).message}`);
   }
@@ -51,7 +67,13 @@ export async function handleTaskInputsController() {
 export async function createTask() {
   return handleTaskInputsController();
 }
-// [vPrevious]
+
+
+
+
+
+
+// [vPrevious] : version: 0.0.1
 export function readTasksIds(): string[] {
   const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
   const tasksNames = fileService.getTasksNames(tasksDir)

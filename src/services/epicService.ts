@@ -20,25 +20,25 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
   const ws = fileService.getWorkspaceRoot();
   const title = epicMetadata.title || await promptInput('Epic Title');
   if (!title) throw new Error('Epic title is required');
-  const tasksDir = fileService.getTasksDir(ws);
-  const totalTasks = fileService.getTasksBaseNames(tasksDir).length;
+  const epicsDir = fileService.getEpicsDir(ws);
+  const totalEpics = fileService.getEpicsBaseNames(epicsDir).length;
   // get _id 
-  const _id = totalTasks === 0 ? 1 : totalTasks + 1;
-  const taskBaseName = fileService.createTaskBaseName(title, _id);
-  const taskName = taskBaseName+'.md'
+  const _id = totalEpics === 0 ? 1 : totalEpics + 1;
+  const epicBaseName = fileService.createEpicBaseName(title, _id);
+  const epicName = epicBaseName+'.md'
   const epicData: SprintDesk.EpicMetadata = {
     _id,
     title,
     status: epicMetadata.status || 'planned',
     priority: epicMetadata.priority || 'medium',
-    path: taskName,
+    path: fileService.createEpicRelativePath(epicBaseName),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     totalTasks: 0,
     completedTasks: 0,
   }
   // write epic file
-  fs.writeFileSync(path.join(fileService.getEpicsDir(ws), taskName), generateEpicTemplate(epicData), 'utf8');
+  fs.writeFileSync(path.join(fileService.getEpicsDir(ws), epicName), generateEpicTemplate(epicData), 'utf8');
   return epicData;
 }
 

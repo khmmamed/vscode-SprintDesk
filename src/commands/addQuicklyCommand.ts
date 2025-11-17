@@ -10,7 +10,12 @@ import * as taskController from '../controller/taskController';
 export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand('sprintdesk.addQuickly', async () => {
 
-    
+    const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!ws) {
+      vscode.window.showErrorMessage('No workspace folder open.');
+      return;
+    }
+
     const input = await vscode.window.showInputBox({
       prompt: "Enter: '@task task name @epic epic name @backlog backlog name'",
       placeHolder: "@task My Task @epic My Epic @backlog My Backlog"
@@ -43,16 +48,11 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
     // Create task via TaskService (creates folders/files as needed)
     let taskPath: string;
     try {
-      const res = taskService.createTask({
+      const res = await taskService.createTask(ws, {
         title: taskTitle,
         type: 'feature',
         priority: 'medium',
-        status: 'waiting',
-        epic: {
-          _id: 1,
-          title: epicTitle || '',
-          path: ''
-        }
+        status: 'waiting'
       });
       taskPath = res.taskName;
     } catch (e) {

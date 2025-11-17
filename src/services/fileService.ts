@@ -182,13 +182,17 @@ export function createTaskBaseName(title: string, _id : number): string {
   const safeTitle = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return `${PROJECT_CONSTANTS.FILE_PREFIX.TASKPATTERN(_id)}${safeTitle || 'untitled-task'}`;
 }
+export function createEpicBaseName(title: string, _id : number): string {
+  const safeTitle = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `${PROJECT_CONSTANTS.FILE_PREFIX.EPICPATTERN(_id)}${safeTitle || 'untitled-epic'}`;
+}
 
 // [COMMIT]: create 
 export function createTaskRelativePath(basename: string): string {
   return `../Task/${basename}.md`;
 }
 export function createEpicRelativePath(basename: string): string {
-  return `../Epic/${basename}.md`;
+  return `../${PROJECT_CONSTANTS.EPICS_DIR}/${basename}.md`;
 }
 export function createBacklogRelativePath(basename: string): string {
   return `../Backlog/${basename}.md`;

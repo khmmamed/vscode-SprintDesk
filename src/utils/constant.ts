@@ -64,6 +64,7 @@ export const PROJECT_CONSTANTS = {
         TASKPATTERN: (index: number) => `[Task-${index}]_`,
         BACKLOG: "[Backlog]_",
         EPIC: "[Epic]_",
+        EPICPATTERN: (index: number) => `[Epic-${index}]_`,
         SPRINT: "[Sprint]_",
         TASK_LINK: "../Tasks/",
         EPIC_LINK: "../Epics/",

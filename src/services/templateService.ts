@@ -20,7 +20,6 @@ export const replaceSlugInContent = (content: string, slug: string): string => {
   return content.replace(slugPattern, slug);
 };
 
-
 // [COMMIT]: insert slug in Content
 // there is existing data in slug and we to insert new data
 export const insertSlugInContent = (content: string, slug: string): string => {
