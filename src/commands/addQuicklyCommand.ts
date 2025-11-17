@@ -46,7 +46,7 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
     const root = workspaceFolders[0].uri.fsPath;
 
     // Create task via TaskService (creates folders/files as needed)
-    let taskPath: string;
+    let taskPath: string | undefined;
     try {
       const res = await taskService.createTask(ws, {
         title: taskTitle,
@@ -54,7 +54,7 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
         priority: 'medium',
         status: 'waiting'
       });
-      taskPath = res.taskName;
+      taskPath = res?.path;
     } catch (e) {
       vscode.window.showErrorMessage('Failed to create task.');
       return;

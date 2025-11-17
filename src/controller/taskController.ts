@@ -70,9 +70,6 @@ export async function createTask() {
 
 
 
-
-
-
 // [vPrevious] : version: 0.0.1
 export function readTasksIds(): string[] {
   const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());

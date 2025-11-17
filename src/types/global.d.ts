@@ -21,6 +21,11 @@ declare global {
             status?: TaskStatus;
             assignee?: string;
             objective?: string;
+            path?: string;
+
+            // audit fields
+            createdAt?: string;
+            updatedAt?: string;
 
             epic?: {
                 _id?: number;

@@ -9,13 +9,12 @@ export function generateEpicName(title: string): string {
   return `${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicSlug}.md`;
 }
 export function generateEpicMetadata(metadata: SprintDesk.EpicMetadata): string {
-  const epicId = generateEpicId(metadata.title);
   const epicName = metadata.title.replace(/[^\w\s-]/g, '');
   const now = new Date().toISOString();
   const startDate = metadata.startDate?.toISOString() || now;
 
   return `---
-_id: ${epicId}
+_id: ${metadata._id}
 title: ${epicName}
 color: "#0b2cc2"
 description: ${metadata.description || 'Add epic description here...'}

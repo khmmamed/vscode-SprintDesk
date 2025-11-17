@@ -19,14 +19,13 @@ export function generateTaskFile(title: string, epicTitle?: string): string {
 }
 export const generateTaskMetadata = (metadata: SprintDesk.TaskMetadata): string => {
   const now = new Date().toISOString();
-  const taskId = generateTaskId(metadata.title);
   const epicName = metadata.epic?.title ? `${generateEpicName(metadata.epic.title)}` : '';
   const taskName = metadata.epic?.title ?
     `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}_${generateEpicName(metadata.epic.title)}` :
     `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}.md`
 
   return `---
-_id: ${taskId}
+_id: ${metadata._id}
 title: ${metadata.title.toLowerCase().replace(/\s+/g, '-')}
 type: ${metadata.type || 'feature'}
 category: ${metadata.category || 'uncategorized'}
