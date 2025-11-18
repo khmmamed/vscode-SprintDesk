@@ -31,11 +31,11 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
     title,
     status: epicMetadata.status || 'planned',
     priority: epicMetadata.priority || 'medium',
-    path: fileService.createEpicRelativePath(epicBaseName),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     totalTasks: 0,
     completedTasks: 0,
+    path: fileService.createEpicRelativePath(epicBaseName)
   }
   // write epic file
   fs.writeFileSync(path.join(fileService.getEpicsDir(ws), epicName), generateEpicTemplate(epicData), 'utf8');

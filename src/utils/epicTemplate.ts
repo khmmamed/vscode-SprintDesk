@@ -27,7 +27,7 @@ waitingTasks: 0
 startedTasks: 0
 doneTasks: 0
 progress: 0%
-
+path: ${metadata.path || ''}
 backlogs:
 
 sprints:

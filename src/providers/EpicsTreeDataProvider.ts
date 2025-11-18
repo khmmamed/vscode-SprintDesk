@@ -53,7 +53,6 @@ export class EpicsTreeItem extends vscode.TreeItem {
 
         const { data: taskMetadata } = matter.read(taskPath);
         const { status, priority, type } = taskMetadata;
-        console.log('Task status:', status);
         const statusKey = (status || TASK_CONSTANTS.STATUS.WAITING).toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.STATUS;
         const statusEmoji = UI_CONSTANTS.EMOJI.STATUS[statusKey] || UI_CONSTANTS.EMOJI.STATUS.WAITING;
 
@@ -61,7 +60,6 @@ export class EpicsTreeItem extends vscode.TreeItem {
         const priorityKey = (priority || '').toUpperCase() as keyof typeof UI_CONSTANTS.EMOJI.PRIORITY;
         const priorityEmoji = priority ? (UI_CONSTANTS.EMOJI.PRIORITY[priorityKey] || '') : '';
 
-        console.log('Task metadata:', taskMetadata);
         // Use the full filename with extension for the label and include priority emoji
         this.label = `${statusEmoji} ${path.basename(taskPath)}`;
 
@@ -130,9 +128,9 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
       const raw = String(handleData.itemHandles[0] || '');
       const parts = raw.split(' ');
-      taskName = parts[1] || parts.pop() || raw;
+      taskName = fileService.getTaskBaseName(parts[1]);
     }
-    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
+    const taskPath = fileService.createTaskRelativePath(taskName!);
 
     await this.addTaskToEpic(target.filePath!, taskPath);
   }
@@ -176,8 +174,8 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     this.refresh();
   }
   private async addTaskToEpic(epicPath: string, taskPath: string): Promise<void> {
-
-    await epicController.addTaskToEpic(epicPath, taskPath);
+    console.log(`Adding task ${taskPath} to epic ${fileService.createEpicRelativePath(fileService.getEpicBaseName(epicPath))}`);
+    await epicController.addTaskToEpic(fileService.createEpicRelativePath(fileService.getEpicBaseName(epicPath)), taskPath, this.workspaceRoot);
     this.refresh();
     void vscode.window.showInformationMessage(`Task added to epic`);
 
@@ -205,7 +203,9 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     });
   }
   private async updateTaskEpic (taskName: string, epicName: string): Promise<void>{
-    await taskController.updateTaskEpic(taskName, epicName);
+    const ws = this.getWorkspaceRoot();
+    const taskPath = path.join(ws || '','.SprintDesk', 'Tasks', taskName);
+    await taskController.updateTaskEpic(taskPath, {title: epicName, path: `../Epics/${epicName}`});
   }
   // handle drag and drop
   handleDrag(source: readonly EpicsTreeItem[], dataTransfer: vscode.DataTransfer): void {

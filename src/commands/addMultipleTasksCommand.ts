@@ -119,7 +119,7 @@ export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
               const taskLinks = taskFiles
                 .map((taskFile) => {
                   const { taskName } = parseTaskMetadataFromFilename(taskFile);
-                  return `- ${UI_CONSTANTS.EMOJI.COMMON.TASK} [${taskName}](../tasks/${taskFile})`;
+                  return `- ${UI_CONSTANTS.EMOJI.COMMON.TASK} [${taskName}](../Tasks/${taskFile})`;
                 })
                 .join("\n");
 

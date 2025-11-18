@@ -23,6 +23,7 @@ export async function createTask(ws: string, taskMetadata: SprintDesk.TaskMetada
   const _id = totalTasks === 0 ? 1 : totalTasks + 1;
   const taskBaseName = fileService.createTaskBaseName(taskMetadata.title, _id);
   const taskName = taskBaseName + '.md'
+
   const taskData: SprintDesk.TaskMetadata = {
     _id,
     title: taskMetadata.title,

@@ -3,16 +3,17 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
-
+import * as taskController from '../controller/taskController';
+import * as fileService from '../services/fileService';
 interface TaskData {
   _id: string;
-  name: string;
+  title: string;
   type: string;
   status: string;
   priority: string;
   epic?: {
     _id: string;
-    name: string;
+    title: string;
     path: string;
   };
   path: string;
@@ -26,12 +27,12 @@ export class TaskTreeItem extends vscode.TreeItem {
     public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None
   ) {
     // Create base TreeItem with initial label
-    super(taskData.name, collapsibleState);
+    super(taskData.title, collapsibleState);
     this.taskData = taskData;
 
     // Set task context and make draggable
     this.contextValue = 'task';
-    this.resourceUri = vscode.Uri.file(taskData.path);
+    this.resourceUri = vscode.Uri.file(fileService.createTaskRelativePath(taskData.title));
 
     // Set up visual elements
     this.setupVisuals();
@@ -40,7 +41,7 @@ export class TaskTreeItem extends vscode.TreeItem {
     this.command = {
       command: 'vscode.open',
       title: 'Open Task',
-      arguments: [vscode.Uri.file(taskData.path)]
+      arguments: [vscode.Uri.file(fileService.createTaskRelativePath(taskData.title))]
     };
   }
 
@@ -75,25 +76,24 @@ export class TaskTreeItem extends vscode.TreeItem {
   }
 
   private setupVisuals(): void {
-    // Set the main label with status
+ 
     const statusEmoji = this.getStatusEmoji(this.taskData.status);
-    const typeIcon = this.getTypeIcon(this.taskData.type);
     this.label = `${statusEmoji} ${path.basename(this.taskData.path)} `;
 
     // Set description with priority and epic
     const description = [this.getPriorityEmoji(this.taskData.priority)];
-    if (this.taskData.epic?.name) {
-      description.push(`${typeIcon} 📘 ${this.taskData?.epic?.name || 'No Epic'}`);
+    if (this.taskData.epic?.title) {
+      description.push(`📘 ${this.taskData?.epic?.title || 'No Epic'}`);
     }
     this.description = description.join(' ');
 
     // Set detailed tooltip
     this.tooltip = new vscode.MarkdownString()
-      .appendMarkdown(`**${this.taskData.name}**\n\n`)
+      .appendMarkdown(`**${this.taskData.title}**\n\n`)
       .appendMarkdown(`${this.getStatusEmoji(this.taskData.status)} Status: ${this.taskData.status}\n`)
       .appendMarkdown(`${this.getPriorityEmoji(this.taskData.priority)} Priority: ${this.taskData.priority}\n`)
       .appendMarkdown(`${this.getTypeIcon(this.taskData.type)} Type: ${this.taskData.type || 'feature'}\n`)
-      .appendMarkdown(this.taskData.epic ? `\n📘 Epic: ${this.taskData.epic.name}\n` : '')
+      .appendMarkdown(this.taskData.epic ? `\n📘 Epic: ${this.taskData.epic.title}\n` : '')
       .appendMarkdown(`\n📁 Path: \`${this.taskData.path}\``);
   }
 }
@@ -130,7 +130,7 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
     // Create a direct task data transfer without wrapping
     const transferData = {
       _id: taskData._id,
-      name: taskData.name,
+      title: taskData.title,
       type: taskData.type,
       status: taskData.status,
       priority: taskData.priority,
@@ -159,39 +159,22 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
 
     if (!element) {
       // Root level: list all tasks under .SprintDesk/Tasks
-      const tasksDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
-      if (!fs.existsSync(tasksDir)) {
-        return [];
-      }
-
-      const taskFiles = fs.readdirSync(tasksDir).filter(file =>
-        file.startsWith(PROJECT_CONSTANTS.FILE_PREFIX.TASK) && file.endsWith(PROJECT_CONSTANTS.MD_FILE_EXTENSION)
-      );
+      const taskFiles = taskController.readTasks(ws);
 
       return taskFiles.map(file => {
-        const filePath = path.join(tasksDir, file);
-        if (!fs.existsSync(filePath)) {
-          console.warn(`Task file not found: ${filePath}`);
-          return null;
-        }
 
         try {
-          const content = fs.readFileSync(filePath, 'utf8');
-          const { data } = matter(content);
+          const { data } = matter.read(file);
 
           // Create structured task data
           const taskData = {
             _id: data._id,
-            name: data.name,
+            title: data.title,
             type: data.type,
             status: data.status || 'not-started',
             priority: data.priority || 'low',
-            epic: data.epic ? {
-              _id: data.epic._id,
-              name: data.epic.name,
-              path: data.epic.file
-            } : undefined,
-            path: filePath
+            epic: data.epic,
+            path: data.path
           };
 
           // Create TreeItem with taskData
@@ -199,7 +182,7 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
 
           return item;
         } catch (error) {
-          console.error(`Error creating task item for ${file}:`, error);
+          console.error(`Error creating task item:`, error);
           return null;
         }
       }).filter(item => item !== null) as TaskTreeItem[];

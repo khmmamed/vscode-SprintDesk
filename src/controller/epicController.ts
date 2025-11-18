@@ -35,7 +35,7 @@ export function readEpicsMetadata(): SprintDesk.EpicMetadata[] {
 export function readEpicsTitles(): string[] {
   return readEpicsMetadata().map((metadata: any) => metadata.title || '');
 }
-export const handleEpicInputsController = async (ws: string): Promise<SprintDesk.EpicMetadata | undefined> => {
+export const handleEpicInputsController = async (ws?: string): Promise<SprintDesk.EpicMetadata | undefined> => {
   // Get Existing epics
   const epics = readEpicsMetadata();
   const epicOptions = [
@@ -85,8 +85,86 @@ export const handleEpicInputsController = async (ws: string): Promise<SprintDesk
 
 
 
+/* Tasks Operations */
+export function addTaskToEpic(epicPath: string, taskPath: string, ws?: string): void {
+  const absoluteTaskPath = fileService.taskRelativePathToAbsolute(taskPath, ws!);
+  const absoluteEpicPath = fileService.epicRelativePathToAbsolute(epicPath, ws!);
 
+  const { data: taskMetadata } = matter.read(absoluteTaskPath);
+  const { data: epicMetadata, content: epicContent } = matter.read(absoluteEpicPath);
+  console.log(`Adding task ${taskMetadata.title} to epic ${epicMetadata.title}`);
+  // Check if task already exists in YAML metadata
+  const existingTaskIndex = epicMetadata.tasks ?
+    epicMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
 
+  if (existingTaskIndex !== -1) {
+    console.log(`Task with ID ${taskMetadata._id} already exists in epic.`);
+    return;
+  }
+
+  // Prepare to modify Markdown content
+  const tasksSectionMarker = UI_CONSTANTS.SECTIONS.TASKS_MARKER;
+  let content = epicContent;
+
+  // Ensure the marker exists
+  if (!content.includes(tasksSectionMarker)) {
+    content += `\n\n${tasksSectionMarker}\n`;
+  }
+
+  const markerIndex = content.indexOf(tasksSectionMarker);
+  const afterMarker = markerIndex + tasksSectionMarker.length;
+
+  // Build a table row using your constant (expects an array)
+  const newRow = TASK_CONSTANTS.TASKS_TABLE_ROW([{
+    _id: taskMetadata._id,
+    title: taskMetadata.title,
+    status: taskMetadata.status || "Not Started",
+    priority: taskMetadata.priority || "Medium",
+    path: taskPath
+  }]);
+
+  const hasHeader = content.includes(TASK_CONSTANTS.TASKS_TABLE_HEADER);
+
+  if (!hasHeader) {
+    // Insert header and first row
+    content =
+      content.slice(0, afterMarker) +
+      "\n" +
+      TASK_CONSTANTS.TASKS_TABLE_HEADER +
+      newRow +
+      "\n" +
+      content.slice(afterMarker);
+  } else {
+    // Insert only the new row after the table header
+    const headerIndex = content.indexOf(TASK_CONSTANTS.TASKS_TABLE_HEADER);
+    const insertPoint = headerIndex + TASK_CONSTANTS.TASKS_TABLE_HEADER.length;
+
+    content =
+      content.slice(0, insertPoint) +
+      "\n" +
+      newRow +
+      content.slice(insertPoint);
+  }
+
+  // Add task to YAML frontmatter
+  const task = {
+    _id: taskMetadata._id,
+    title: taskMetadata.title,
+    priority: taskMetadata.priority || 'Medium',
+    status: taskMetadata.status || 'Not Started',
+    path: taskPath
+  };
+
+  if (!epicMetadata.tasks) {
+    epicMetadata.tasks = [task];
+  } else {
+    epicMetadata.tasks.push(task);
+  }
+
+  // Write updated frontmatter + content
+  const updatedContent = matter.stringify(content, epicMetadata);
+  fs.writeFileSync(absoluteEpicPath, updatedContent);
+}
 
 
 
@@ -154,51 +232,7 @@ export function getEpicTotalTasks(epicName: string): number {
 }
 
 /* Tasks Operations */
-export function addTaskToEpic(epicPath: string, taskPath: string): void {
-  const { data: taskMetadata } = matter.read(taskPath);
-  const { data: epicMetadata, content: epicContent } = matter.read(epicPath);
 
-  const existingTaskIndex = epicMetadata.tasks ?
-    epicMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
-  if (existingTaskIndex === -1) {
-    // Add task to markdown section
-    const tasksSectionMarker = UI_CONSTANTS.SECTIONS.TASKS_MARKER;
-    let content = epicContent;
-    if (!content.includes(tasksSectionMarker)) {
-      content += `\n\n${tasksSectionMarker}\n`;
-    }
-    const taskPathFormatted = path.relative(path.dirname(epicPath), taskPath).replace(/\\/g, '/');
-    const taskLink = `- [${taskMetadata.title || taskMetadata.name}](${taskPathFormatted})`;
-    const tasksIndex = content.indexOf(tasksSectionMarker);
-
-    if (tasksIndex !== -1) {
-      content = content.slice(0, tasksIndex + tasksSectionMarker.length) +
-        '\n' + taskLink +
-        content.slice(tasksIndex + tasksSectionMarker.length);
-    }
-    // Add task to YAML frontmatter
-    const task = {
-      _id: taskMetadata._id,
-      title: taskMetadata.title || taskMetadata.name,
-      priority: taskMetadata.priority || 'Medium',
-      status: taskMetadata.status || 'Not Started',
-      path: taskPathFormatted
-    };
-
-    if (!epicMetadata.tasks) {
-      epicMetadata.tasks = [task];
-    } else {
-      epicMetadata.tasks.push(task);
-    }
-    // Write updated content with both markdown and frontmatter changes
-    const updatedContent = matter.stringify(content, epicMetadata);
-    fs.writeFileSync(epicPath, updatedContent);
-  } else {
-    console.log(`Task with ID ${taskMetadata._id} already exists in epic.`);
-    return;
-  }
-
-}
 
 export function removeTaskFromEpic(epicPath: string, taskPath: string): void {
   const { data: epicMetadata, content: epicContent } = matter.read(epicPath);

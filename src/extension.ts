@@ -23,6 +23,7 @@ import { addTaskToBacklogInteractive, addExistingTasksToBacklog } from './servic
 import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
 
 import * as path from 'path';
+import { createTask } from "./controller/taskController";
 
 // existing tasks dir helper moved to services/fileService
 
@@ -82,9 +83,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Add Task: view title button on Tasks
   context.subscriptions.push(vscode.commands.registerCommand('sprintdesk.addTask', async () => {
-    await writeTask();
-    tasksProvider?.refresh(); // Refresh task tree view
-    sprintsProvider.refresh(); // Refresh sprints if task was added to a sprint
+    await createTask();
+    tasksProvider?.refresh(); 
+    sprintsProvider.refresh(); 
   }));
 
   // Add Epic: view title button on Epics

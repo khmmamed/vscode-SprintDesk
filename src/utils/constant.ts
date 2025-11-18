@@ -111,6 +111,9 @@ export const TASK_CONSTANTS = {
     FILE_PREFIX: "[Task]_",
     TASKS_SECTION: "## Tasks",
     TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
+    TASKS_TABLE_ROW: (tasks: SprintDesk.ITaskMetadata[]) => tasks.map((task, index) => {
+        return `| ${task._id} | [${task.title}](${task.path}) | ${task.status} | ${task.priority} | \`${task._id}\` |`;
+    }).join('\n'),
     TEMPLATE: (title: string) => `# 🧩 Task: ${title}\n\n## 📋 Description\n`,
     CONTENT: {
         OVERVIEW: `## 🗂️ Overview\n`,

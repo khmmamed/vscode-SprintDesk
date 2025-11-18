@@ -78,7 +78,7 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`No backlog file found matching '${backlogName}'.`);
       } else {
         const backlogContent = backlogService.readBacklog(match);
-        const taskLink = `- [${taskTitle.replace(/\s+/g, '-').toLowerCase()}](../tasks/${taskPath})`;
+        const taskLink = `- [${taskTitle.replace(/\s+/g, '-').toLowerCase()}](../Tasks/${taskPath})`;
         const newContent = insertTaskLinkUnderSection(backlogContent, 'tasks', taskLink);
         backlogService.updateBacklog(match, newContent);
       }

@@ -187,16 +187,30 @@ export function createEpicBaseName(title: string, _id : number): string {
   return `${PROJECT_CONSTANTS.FILE_PREFIX.EPICPATTERN(_id)}${safeTitle || 'untitled-epic'}`;
 }
 
-// [COMMIT]: create 
+// [COMMIT]: create relative paths functions
 export function createTaskRelativePath(basename: string): string {
-  return `../Task/${basename}.md`;
+  return `../${PROJECT_CONSTANTS.TASKS_DIR}/${basename}.md`;
 }
 export function createEpicRelativePath(basename: string): string {
   return `../${PROJECT_CONSTANTS.EPICS_DIR}/${basename}.md`;
 }
 export function createBacklogRelativePath(basename: string): string {
-  return `../Backlog/${basename}.md`;
+  return `../${PROJECT_CONSTANTS.BACKLOGS_DIR}/${basename}.md`;
 }
 export function createSprintRelativePath(basename: string): string {
-  return `../Sprint/${basename}.md`;
+  return `../${PROJECT_CONSTANTS.SPRINTS_DIR}/${basename}.md`;
+}
+
+// [COMMIT]: relative paths to absolute paths functions
+export function taskRelativePathToAbsolute(relativePath: string, ws: string): string {
+  return path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, path.basename(relativePath));
+}
+export function epicRelativePathToAbsolute(relativePath: string, ws: string): string {
+  return path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR, path.basename(relativePath));
+}
+export function backlogRelativePathToAbsolute(relativePath: string, ws: string): string {
+  return path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.BACKLOGS_DIR, path.basename(relativePath));
+}
+export function sprintRelativePathToAbsolute(relativePath: string, ws: string): string {
+  return path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.SPRINTS_DIR, path.basename(relativePath));
 }

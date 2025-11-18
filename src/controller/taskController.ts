@@ -15,9 +15,21 @@ import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from "../utils/consta
 import * as vscode from "vscode";
 import * as epicService from "../services/epicService";
 import * as taskService from "../services/taskService";
+import * as epicController from "./epicController";
 import { promptInput, promptPick, getPriorityOptions, getTaskTypeOptions } from "../utils/helpers";
 
 // [vNext]: version: 0.0.2
+export async function readAllTasksData(ws?: string): Promise<SprintDesk.ITaskMetadata[]> {
+  if (!ws) {
+    ws = fileService.getWorkspaceRoot();
+  }
+  const taskFiles = readTasks(ws);
+  const tasksData: SprintDesk.ITaskMetadata[] = taskFiles.map(taskFile => {
+    const { data } = matter.read(taskFile);
+    return data as SprintDesk.ITaskMetadata;
+  });
+  return tasksData;
+}
 export async function handleTaskInputsController(ws?: string) {
   if (!ws) {
     ws = fileService.getWorkspaceRoot();
@@ -28,24 +40,24 @@ export async function handleTaskInputsController(ws?: string) {
     if (!taskTitle) return;
 
     // Get task type
-    const type = await promptPick('Select task type',getTaskTypeOptions());
+    const type = await promptPick('Select task type', getTaskTypeOptions());
     if (!type) return;
 
     // Get priority
-    const priority = await  promptPick('Select priority', getPriorityOptions());
+    const priority = await promptPick('Select priority', getPriorityOptions());
     if (!priority) return;
 
     // Get category
-    const category = await  promptInput('Enter category (optional)', UI_CONSTANTS.QUICK_PICK.CATEGORY);
+    const category = await promptInput('Enter category (optional)', UI_CONSTANTS.QUICK_PICK.CATEGORY);
 
     // Get component
-    const component = await  promptInput('Enter component (optional)', UI_CONSTANTS.QUICK_PICK.COMPONENT);
+    const component = await promptInput('Enter component (optional)', UI_CONSTANTS.QUICK_PICK.COMPONENT);
 
     // Get duration estimate
-    const duration = await  promptInput('Enter duration estimate (optional)', UI_CONSTANTS.QUICK_PICK.DURATION);
+    const duration = await promptInput('Enter duration estimate (optional)', UI_CONSTANTS.QUICK_PICK.DURATION);
 
     // Get assignee
-    const assignee = await  promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
+    const assignee = await promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
 
     // create task and get metadata
     const task = await taskService.createTask(ws, {
@@ -64,11 +76,61 @@ export async function handleTaskInputsController(ws?: string) {
     vscode.window.showErrorMessage(`Failed to create task: ${(err as Error).message}`);
   }
 }
-export async function createTask() {
-  return handleTaskInputsController();
+export async function createTask(ws?: string) {
+  if (!ws) {
+    ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
+
+  const task = await handleTaskInputsController(ws);
+
+  // Get epic
+  const epic = await epicController.handleEpicInputsController(ws);
+
+  if (!epic) {
+    vscode.window.showWarningMessage('No epic selected. Task will be created without an epic.');
+    return;
+  }
+
+  if (!task) {
+    vscode.window.showWarningMessage('Task creation was cancelled or failed.');
+    return;
+  }
+  // add epic to task
+  addEpicToTask(epic!, task!.path!, ws);
+
+  // add task to epic
+  epicController.addTaskToEpic(epic!.path!, task!.path!, ws);
+
+
 }
 
+export async function addEpicToTask(epic: SprintDesk.EpicMetadata, taskRelativePath: string, ws?: string) {
+  if (!ws) {
+    ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
 
+  await updateTaskEpic(fileService.taskRelativePathToAbsolute(taskRelativePath, ws!), epic);
+
+}
+export async function updateTaskEpic(taskPath: string, epic: SprintDesk.EpicMetadata): Promise<void> {
+  const taskFile = matter.read(taskPath);
+
+  const lines = taskFile.content.split('\n');
+  const epicMetaLines = updateEpicHeaderLine(lines, epic);
+  const updatedLines = updateEpicSection(epicMetaLines, epic);
+
+  // Sanitize task metadata to avoid undefined values
+  const updatedMeta = Object.fromEntries(
+    Object.entries({ ...taskFile.data, epic }).map(([k, v]) => [k, v ?? null])
+  );
+
+  // Write updated task file
+  fs.writeFileSync(
+    taskPath,
+    matter.stringify(updatedLines.join('\n'), updatedMeta),
+    'utf-8'
+  );
+};
 
 // [vPrevious] : version: 0.0.1
 export function readTasksIds(): string[] {
@@ -169,33 +231,7 @@ export const updateTaskSlugContent = (
   const updatedContent = matter.stringify(newLines.join('\n'), parsed.data);
   fs.writeFileSync(taskPath, updatedContent, 'utf-8');
 };
-export const updateTaskEpic = (taskName: string, epicName: string): void => {
-  const taskFile = matter.read(getTaskPath(taskName));
-  const epicFile = matter.read(getEpicPath(epicName));
 
-  // Safely extract epic metadata
-  const epicMeta = {
-    _id: epicFile.data._id ?? null,
-    title: epicFile.data.title ?? 'Untitled Epic',
-    path: epicFile.data.path ?? ''
-  };
-
-  const lines = taskFile.content.split('\n');
-  const epicMetaLines = updateEpicHeaderLine(lines, epicMeta);
-  const updatedLines = updateEpicSection(epicMetaLines, epicMeta);
-
-  // Sanitize task metadata to avoid undefined values
-  const updatedMeta = Object.fromEntries(
-    Object.entries({ ...taskFile.data, epic: epicMeta }).map(([k, v]) => [k, v ?? null])
-  );
-
-  // Write updated task file
-  fs.writeFileSync(
-    getTaskPath(taskName),
-    matter.stringify(updatedLines.join('\n'), updatedMeta),
-    'utf-8'
-  );
-};
 export const updateTaskBacklogs = (taskName: string, backlogName: string): void => {
   const taskPath = getTaskPath(taskName);
   const backlogPath = getBacklogPath(backlogName);

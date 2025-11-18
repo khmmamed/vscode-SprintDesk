@@ -19,10 +19,6 @@ export function generateTaskFile(title: string, epicTitle?: string): string {
 }
 export const generateTaskMetadata = (metadata: SprintDesk.TaskMetadata): string => {
   const now = new Date().toISOString();
-  const epicName = metadata.epic?.title ? `${generateEpicName(metadata.epic.title)}` : '';
-  const taskName = metadata.epic?.title ?
-    `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}_${generateEpicName(metadata.epic.title)}` :
-    `[Task]_${metadata.title.toLowerCase().replace(/\s+/g, '-')}.md`
 
   return `---
 _id: ${metadata._id}
@@ -37,11 +33,7 @@ assignee: ${metadata.assignee || 'unassigned'}
 created_at: ${now}
 updated_at: ${now}
 objective: ${metadata.objective || 'Add task objective here...'}
-path: ../tasks/${taskName}
-epic:
-  _id: 
-  title: 
-  path: 
+path: ${metadata.path}
 sprints: 
 backlogs: 
 related_tasks: 

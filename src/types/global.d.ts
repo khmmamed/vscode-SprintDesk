@@ -91,16 +91,17 @@ declare global {
         interface ITaskMetadata {
             _id: string;
             title: string;
-            type: TaskType;
+            type?: TaskType;
             category?: string;
             component?: string;
             duration?: string;
-            priority: Priority;
-            status: TaskStatus;
+            priority?: Priority;
+            status?: TaskStatus;
             assignee?: string;
-            created_at: string;
-            updated_at: string;
+            created_at?: string;
+            updated_at?: string;
             objective?: string;
+            path?: string;
         }
     }
 }
