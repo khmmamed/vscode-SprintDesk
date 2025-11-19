@@ -88,6 +88,51 @@ declare global {
 
         interface IAppProps { }
 
+        interface ISprintMetadata {
+            _id: string;
+            title: string;
+            type?: TaskType;
+            category?: string;
+            component?: string;
+            duration?: string;
+            priority?: Priority;
+            status?: TaskStatus;
+            assignee?: string;
+            created_at?: string;
+            updated_at?: string;
+            objective?: string;
+            path?: string;
+        }
+        interface IBacklogMetadata {
+            _id: string;
+            title: string;
+            type?: TaskType;
+            category?: string;
+            component?: string;
+            duration?: string;
+            priority?: Priority;
+            status?: TaskStatus;
+            assignee?: string;
+            created_at?: string;
+            updated_at?: string;
+            objective?: string;
+            path?: string;
+        }
+        interface IEpicMetadata {
+            _id: string;
+            title: string;
+            type?: TaskType;
+            category?: string;
+            component?: string;
+            duration?: string;
+            priority?: Priority;
+            status?: TaskStatus;
+            assignee?: string;
+            created_at?: string;
+            updated_at?: string;
+            objective?: string;
+            path?: string;
+        }
         interface ITaskMetadata {
             _id: string;
             title: string;

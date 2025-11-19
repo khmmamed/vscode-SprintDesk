@@ -10,7 +10,6 @@ import * as path from 'path';
 import { getEpicsPath } from '../utils/backlogUtils';
 import matter from 'gray-matter';
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
-import { getTaskPath } from '../utils/taskUtils';
 import * as vscode from 'vscode';
 import * as fileService from '../services/fileService';
 import { getPriorityOptions, promptInput, promptPick } from '../utils/helpers';

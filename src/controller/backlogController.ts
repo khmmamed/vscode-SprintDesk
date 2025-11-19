@@ -3,7 +3,6 @@ import * as path from 'path';
 import { getBacklogPath, getBacklogsPath } from '../utils/backlogUtils';
 import matter from 'gray-matter';
 import { UI_CONSTANTS } from '../utils/constant';
-import { getTaskPath } from '../utils/taskUtils';
 
 interface ITask {
   _id: string;

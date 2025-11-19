@@ -55,7 +55,7 @@ Displays metadata like name, version, author, and permissions.
 Allows install, uninstall, and update actions connected through the GraphQL API.  
 Maintains UI consistency with the global VSCode theme and UX guidelines.
 
----
+
 
 ## ✅ Acceptance Criteria
 - 🧾 Displays metadata: name, version, author, permissions  
@@ -64,7 +64,7 @@ Maintains UI consistency with the global VSCode theme and UX guidelines.
 - 🧠 API errors handled gracefully  
 - 🚀 Loads in under 1 second locally  
 
----
+
 
 ## 📋 Checklist
 - [x] Layout and component design complete  
@@ -73,7 +73,11 @@ Maintains UI consistency with the global VSCode theme and UX guidelines.
 - [x] Implement error state component  
 - [x] Test with mock data and theme variations  
 
----
+## 🧠 Notes
+- Reuse existing `ExtensionCard` component for visual consistency  
+- Cache GraphQL results for 30s to minimize requests  
+- Add analytics hooks for *view*, *install*, and *update* actions  
+- Verify accessibility compliance under both themes  
 
 ## Epic
 - [Extensions Management](../epics/[Epic]_extensions-management.md)
@@ -85,13 +89,6 @@ Maintains UI consistency with the global VSCode theme and UX guidelines.
 - [Features](../backlogs/[backlog]_Features.md)  
 - [UX](../backlogs/[backlog]_UX.md)
 
-## Related Tasks
- 
-
 ---
+## Related Tasks
 
-## 🧠 Notes
-- Reuse existing `ExtensionCard` component for visual consistency  
-- Cache GraphQL results for 30s to minimize requests  
-- Add analytics hooks for *view*, *install*, and *update* actions  
-- Verify accessibility compliance under both themes  

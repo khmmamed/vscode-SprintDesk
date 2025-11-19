@@ -19,6 +19,35 @@ import * as epicController from "./epicController";
 import { promptInput, promptPick, getPriorityOptions, getTaskTypeOptions } from "../utils/helpers";
 
 // [vNext]: version: 0.0.2
+export function readTasksIds(): string[] {
+  const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
+  const tasksNames = fileService.getTasksNames(tasksDir)
+  // map tasks names and read their metadata to get ids
+  const tasksIds = tasksNames.map(taskName => {
+    const taskPath = path.join(tasksDir, `${taskName}`);
+    const { data } = matter.read(taskPath);
+    return data._id || '';
+  }).filter(_id => _id !== '');
+  return tasksIds;
+}
+export function readTasksTotal(): number {
+  const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
+  if (!fs.existsSync(tasksDir)) return 0;
+  const files = fs.readdirSync(tasksDir);
+  return files.length;
+}
+export function readTasksNames(): string[] {
+  const tasksPath = fileService.getTasksDir(fileService.getWorkspaceRoot());
+  if (!fs.existsSync(tasksPath)) return [];
+
+  const files = fs.readdirSync(tasksPath);
+  // filter only .md files and return basename without extension
+  const taskNames = files
+    .filter(f => f.endsWith('.md'))
+    .map(f => path.basename(f, '.md'));
+
+  return taskNames;
+}
 export async function readAllTasksData(ws?: string): Promise<SprintDesk.ITaskMetadata[]> {
   if (!ws) {
     ws = fileService.getWorkspaceRoot();
@@ -29,6 +58,15 @@ export async function readAllTasksData(ws?: string): Promise<SprintDesk.ITaskMet
     return data as SprintDesk.ITaskMetadata;
   });
   return tasksData;
+}
+export function readTasks(ws: string): string[] {
+  const tasksDirs = fileService.getExistingTasksDirs(ws);
+  const files: string[] = [];
+  for (const d of tasksDirs) {
+    const entries = fileService.listMdFiles(d);
+    files.push(...entries.map(f => path.join(d, f)));
+  }
+  return files;
 }
 export async function handleTaskInputsController(ws?: string) {
   if (!ws) {
@@ -133,44 +171,8 @@ export async function updateTaskEpic(taskPath: string, epic: SprintDesk.EpicMeta
 };
 
 // [vPrevious] : version: 0.0.1
-export function readTasksIds(): string[] {
-  const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
-  const tasksNames = fileService.getTasksNames(tasksDir)
-  // map tasks names and read their metadata to get ids
-  const tasksIds = tasksNames.map(taskName => {
-    const taskPath = path.join(tasksDir, `${taskName}`);
-    const { data } = matter.read(taskPath);
-    return data._id || '';
-  }).filter(_id => _id !== '');
-  return tasksIds;
-}
-export function readTasksTotal(): number {
-  const tasksDir = fileService.getTasksDir(fileService.getWorkspaceRoot());
-  if (!fs.existsSync(tasksDir)) return 0;
-  const files = fs.readdirSync(tasksDir);
-  return files.length;
-}
-export function readTasksNames(): string[] {
-  const tasksPath = fileService.getTasksDir(fileService.getWorkspaceRoot());
-  if (!fs.existsSync(tasksPath)) return [];
 
-  const files = fs.readdirSync(tasksPath);
-  // filter only .md files and return basename without extension
-  const taskNames = files
-    .filter(f => f.endsWith('.md'))
-    .map(f => path.basename(f, '.md'));
 
-  return taskNames;
-}
-export function readTasks(ws: string): string[] {
-  const tasksDirs = fileService.getExistingTasksDirs(ws);
-  const files: string[] = [];
-  for (const d of tasksDirs) {
-    const entries = fileService.listMdFiles(d);
-    files.push(...entries.map(f => path.join(d, f)));
-  }
-  return files;
-}
 export function readTaskData(filePath: string): SprintDesk.ITaskMetadata {
   const { data } = matter(filePath);
   return data as SprintDesk.ITaskMetadata;

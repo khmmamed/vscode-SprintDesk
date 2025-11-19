@@ -8,10 +8,6 @@
 
 // [COMMIT]: Global Emoji Constants
 export const COMMON_EMOJI = {
-    BACKLOG: "📒",
-    EPIC: "🚩",
-    SPRINT: "🏃",
-    TASK: "✅",
     GOAL: '🎯',
     HOT: '🔥',
     PROJECT: "📂",
@@ -21,14 +17,37 @@ export const COMMON_EMOJI = {
     TOTAL_TASKS: "🛠",
     PROGRESS: "📊",
     SUMMARY: "📝",
-    TASK_LIST: "📋",
-    TASKS_SECTION: "🧱",
-    PRIORITY: "⚡",
     TYPE: "🏷️",
     ASSIGNEE: "👤",
     FOLDER: "📁",
     OPEN_FILE: "📂",
     CHECKMARK: "✔️",
+    OVERVIEW: "🗂️",
+    /* Global Content Emojis */
+    DESCRIPTION: "📜",
+    ACCEPTANCE_CRITERIA: "✅",
+    CHECKLIST: "📝",
+    NOTES: "🧠",
+    
+    /* RELATED COLLECTIONS EMOJIS */
+    SPRINT: "🏃",
+    SPRINT_LIST: "📆",
+    SPRINT_SECTION: "⏱️",
+    RELATED_SPRINTS: "🔗",
+    BACKLOG: "📒",
+    BACKLOG_LIST: "📋",
+    BACKLOGS_SECTION: "📋",
+    RELATED_BACKLOGS: "🔗",
+    EPIC: "🚩",
+    EPIC_LIST: "🧱",
+    EPICS_SECTION: "🧱",
+    RELATED_EPICS: "🔗",
+    TASK: "📌",
+    TASK_LIST: "📋",
+    TASKS_SECTION: "🛠️",
+    RELATED_TASKS: "🔗",
+    PRIORITY: "⚡",
+    
 }
 
 export const STATUS_EMOJI = {
@@ -60,16 +79,18 @@ export const PROJECT_CONSTANTS = {
 
     // File Naming Patterns
     FILE_PREFIX: {
-        TASK: "[Task]_",
-        TASKPATTERN: (index: number) => `[Task-${index}]_`,
         BACKLOG: "[Backlog]_",
+        BACKLOGPATTERN: (index: number) => `[Backlog-${index}]_`,
         EPIC: "[Epic]_",
         EPICPATTERN: (index: number) => `[Epic-${index}]_`,
         SPRINT: "[Sprint]_",
-        TASK_LINK: "../Tasks/",
+        SPRINTPATTERN: (index: number) => `[Sprint-${index}]_`,
         EPIC_LINK: "../Epics/",
         BACKLOG_LINK: "../Backlogs/",
-        SPRINT_LINK: "../Sprints/"
+        SPRINT_LINK: "../Sprints/",
+        TASK: "[Task]_",
+        TASKPATTERN: (index: number) => `[Task-${index}]_`,
+        TASK_LINK: "../Tasks/",
     },
     ID_PREFIX: {
         EPIC: "epic_",
@@ -109,24 +130,45 @@ export const TASK_CONSTANTS = {
     },
     // File & Template
     FILE_PREFIX: "[Task]_",
-    TASKS_SECTION: "## Tasks",
+    /** Sprints Content Table */
+    SPRINT_SECTION: `## ${COMMON_EMOJI.SPRINT_SECTION} Sprints`,
+    SPRINT_TABLE_HEADER: "| # | Sprint | Status | Priority | File |\n|:--|:------|:------:|:--------:|:-----|",
+    SPRINT_TABLE_ROW: (sprints: SprintDesk.ISprintMetadata[]) => sprints.map((sprint) => {
+        return `| ${sprint._id} | [${sprint.title}](${sprint.path}) | ${sprint.status} | - | \`${sprint._id}\` |`;
+    }).join('\n'),
+    /** Backlogs Content Table */
+    BACKLOG_SECTION: `## ${COMMON_EMOJI.BACKLOGS_SECTION} Backlogs`,
+    BACKLOG_TABLE_HEADER: "| # | Backlog | Status | Priority | File |\n|:--|:-------|:------:|:--------:|:-----|",
+    BACKLOG_TABLE_ROW: (backlogs: SprintDesk.IBacklogMetadata[]) => backlogs.map((backlog) => {
+        return `| ${backlog._id} | [${backlog.title}](${backlog.path}) | - | - | \`${backlog._id}\` |`;
+    }).join('\n'),
+    /** Epics Content Table */
+    EPIC_SECTION: `## ${COMMON_EMOJI.EPICS_SECTION} Epics`,
+    EPIC_TABLE_HEADER: "| # | Epic | Status | Priority | File |\n|:--|:----|:------:|:--------:|:-----|",
+    EPIC_TABLE_ROW: (epics: SprintDesk.IEpicMetadata[]) => epics.map((epic) => {
+        return `| ${epic._id} | [${epic.title}](${epic.path}) | ${epic.status} | ${epic.priority} | \`${epic._id}\` |`;
+    }).join('\n'),
+    /** Tasks Content Table */
+    TASKS_SECTION: `## ${COMMON_EMOJI.TASKS_SECTION} Tasks`,
     TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
-    TASKS_TABLE_ROW: (tasks: SprintDesk.ITaskMetadata[]) => tasks.map((task, index) => {
+    TASKS_TABLE_ROW: (tasks: SprintDesk.ITaskMetadata[]) => tasks.map((task) => {
         return `| ${task._id} | [${task.title}](${task.path}) | ${task.status} | ${task.priority} | \`${task._id}\` |`;
     }).join('\n'),
     TEMPLATE: (title: string) => `# 🧩 Task: ${title}\n\n## 📋 Description\n`,
     CONTENT: {
-        OVERVIEW: `## 🗂️ Overview\n`,
+        OVERVIEW: `## ${COMMON_EMOJI.OVERVIEW} Overview\n`,
         OVERVIEW_TABLE_HEADER: `| Field | Value |\n|:--|:--|\n`,
         OVERVIEW_TABEL_ROW: (field: string, value: string) => `| ${field} | ${value} |\n`,
-        DESCRIPTION: `## 📜 Description\n`,
-        ACCEPTANCE_CRITERIA: `## ✅ Acceptance Criteria\n`,
-        CHECKLIST: `## 📝 Checklist\n`,
-        NOTES: `## 🧠 Notes\n`,
-        RELATED_TASKS: `## 🔗 Related Tasks\n`,
-        EPIC: `## 🧱 Epic\n`,
-        SPRINTS: `## ⏱️ Sprints\n`,
-        BACKLOGS: `## 📋 Backlogs\n`,
+
+        // [NOTE]: to be deleted
+        DESCRIPTION: `## ${COMMON_EMOJI.DESCRIPTION} Description\n`,
+        ACCEPTANCE_CRITERIA: `## ${COMMON_EMOJI.ACCEPTANCE_CRITERIA} Acceptance Criteria\n`,
+        CHECKLIST: `## ${COMMON_EMOJI.CHECKLIST} Checklist\n`,
+        NOTES: `## ${COMMON_EMOJI.NOTES} Notes\n`,
+        RELATED_TASKS: `## ${COMMON_EMOJI.RELATED_TASKS} Related Tasks\n`,
+        EPIC: `## ${COMMON_EMOJI.EPIC} Epic\n`,
+        SPRINTS: `## ${COMMON_EMOJI.SPRINT} Sprints\n`,
+        BACKLOGS: `## ${COMMON_EMOJI.BACKLOG} Backlogs\n`,
     },
 
     // Markers
@@ -145,10 +187,48 @@ export const EPIC_CONSTANTS = {
         BLOCKED: "⛔ Blocked"
     },
     FILE_PREFIX: "[Epic]_",
-    TASKS_SECTION: "## 🧱 Tasks",
-    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | ID |\n|:--|:-----|:------:|:--------:|:-----|",
     TEMPLATE: (name: string) => `# 🌟 Epic: ${name}\n\n## 🧱 Tasks\n`,
-    DEFAULT_COLOR: "#0b2cc2"  // deep blue
+    DEFAULT_COLOR: "#0b2cc2",  // deep blue
+
+    /** Sprints Content Table */
+    SPRINT_SECTION: `## ${COMMON_EMOJI.SPRINT_SECTION} Sprints`,
+    SPRINT_TABLE_HEADER: "| # | Sprint | Status | Priority | File |\n|:--|:------|:------:|:--------:|:-----|",
+    SPRINT_TABLE_ROW: (sprints: SprintDesk.ISprintMetadata[]) => sprints.map((sprint) => {
+        return `| ${sprint._id} | [${sprint.title}](${sprint.path}) | ${sprint.status} | - | \`${sprint._id}\` |`;
+    }).join('\n'),
+    /** Backlogs Content Table */
+    BACKLOG_SECTION: `## ${COMMON_EMOJI.BACKLOGS_SECTION} Backlogs`,
+    BACKLOG_TABLE_HEADER: "| # | Backlog | Status | Priority | File |\n|:--|:-------|:------:|:--------:|:-----|",
+    BACKLOG_TABLE_ROW: (backlogs: SprintDesk.IBacklogMetadata[]) => backlogs.map((backlog) => {
+        return `| ${backlog._id} | [${backlog.title}](${backlog.path}) | - | - | \`${backlog._id}\` |`;
+    }).join('\n'),
+    /** Epics Content Table */
+    EPIC_SECTION: `## ${COMMON_EMOJI.EPICS_SECTION} Epics`,
+    EPIC_TABLE_HEADER: "| # | Epic | Status | Priority | File |\n|:--|:----|:------:|:--------:|:-----|",
+    EPIC_TABLE_ROW: (epics: SprintDesk.IEpicMetadata[]) => epics.map((epic) => {
+        return `| ${epic._id} | [${epic.title}](${epic.path}) | ${epic.status} | ${epic.priority} | \`${epic._id}\` |`;
+    }).join('\n'),
+    /** Tasks Content Table */
+    TASKS_SECTION: `## ${COMMON_EMOJI.TASKS_SECTION} Tasks`,
+    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
+    TASKS_TABLE_ROW: (tasks: SprintDesk.ITaskMetadata[]) => tasks.map((task) => {
+        return `| ${task._id} | [${task.title}](${task.path}) | ${task.status} | ${task.priority} | \`${task._id}\` |`;
+    }).join('\n'),
+    CONTENT: {
+        OVERVIEW: `## ${COMMON_EMOJI.OVERVIEW} Overview\n`,
+        OVERVIEW_TABLE_HEADER: `| Field | Value |\n|:--|:--|\n`,
+        OVERVIEW_TABEL_ROW: (field: string, value: string) => `| ${field} | ${value} |\n`,
+
+        // [NOTE]: to be deleted
+        DESCRIPTION: `## ${COMMON_EMOJI.DESCRIPTION} Description\n`,
+        ACCEPTANCE_CRITERIA: `## ${COMMON_EMOJI.ACCEPTANCE_CRITERIA} Acceptance Criteria\n`,
+        CHECKLIST: `## ${COMMON_EMOJI.CHECKLIST} Checklist\n`,
+        NOTES: `## ${COMMON_EMOJI.NOTES} Notes\n`,
+        RELATED_TASKS: `## ${COMMON_EMOJI.RELATED_TASKS} Related Tasks\n`,
+        EPIC: `## ${COMMON_EMOJI.EPIC} Epic\n`,
+        SPRINTS: `## ${COMMON_EMOJI.SPRINT} Sprints\n`,
+        BACKLOGS: `## ${COMMON_EMOJI.BACKLOG} Backlogs\n`,
+    },
 };
 
 /**
@@ -161,10 +241,49 @@ export const BACKLOG_CONSTANTS = {
         ARCHIVED: "archived"
     },
     FILE_PREFIX: "[Backlog]_",
-    TASKS_SECTION: "## 📋 Tasks",
-    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
     TEMPLATE: (name: string) => `# Backlog: ${name}\n\n## 📋 Tasks\n`,
-    DEFAULT_COLOR: "#2563eb"  // blue-600
+    DEFAULT_COLOR: "#2563eb",  // blue-600
+
+
+    /** Sprints Content Table */
+    SPRINT_SECTION: `## ${COMMON_EMOJI.SPRINT_SECTION} Sprints`,
+    SPRINT_TABLE_HEADER: "| # | Sprint | Status | Priority | File |\n|:--|:------|:------:|:--------:|:-----|",
+    SPRINT_TABLE_ROW: (sprints: SprintDesk.ISprintMetadata[]) => sprints.map((sprint) => {
+        return `| ${sprint._id} | [${sprint.title}](${sprint.path}) | ${sprint.status} | - | \`${sprint._id}\` |`;
+    }).join('\n'),
+    /** Backlogs Content Table */
+    BACKLOG_SECTION: `## ${COMMON_EMOJI.BACKLOGS_SECTION} Backlogs`,
+    BACKLOG_TABLE_HEADER: "| # | Backlog | Status | Priority | File |\n|:--|:-------|:------:|:--------:|:-----|",
+    BACKLOG_TABLE_ROW: (backlogs: SprintDesk.IBacklogMetadata[]) => backlogs.map((backlog) => {
+        return `| ${backlog._id} | [${backlog.title}](${backlog.path}) | - | - | \`${backlog._id}\` |`;
+    }).join('\n'),
+    /** Epics Content Table */
+    EPIC_SECTION: `## ${COMMON_EMOJI.EPICS_SECTION} Epics`,
+    EPIC_TABLE_HEADER: "| # | Epic | Status | Priority | File |\n|:--|:----|:------:|:--------:|:-----|",
+    EPIC_TABLE_ROW: (epics: SprintDesk.IEpicMetadata[]) => epics.map((epic) => {
+        return `| ${epic._id} | [${epic.title}](${epic.path}) | ${epic.status} | ${epic.priority} | \`${epic._id}\` |`;
+    }).join('\n'),
+    /** Tasks Content Table */
+    TASKS_SECTION: `## ${COMMON_EMOJI.TASKS_SECTION} Tasks`,
+    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
+    TASKS_TABLE_ROW: (tasks: SprintDesk.ITaskMetadata[]) => tasks.map((task) => {
+        return `| ${task._id} | [${task.title}](${task.path}) | ${task.status} | ${task.priority} | \`${task._id}\` |`;
+    }).join('\n'),
+    CONTENT: {
+        OVERVIEW: `## ${COMMON_EMOJI.OVERVIEW} Overview\n`,
+        OVERVIEW_TABLE_HEADER: `| Field | Value |\n|:--|:--|\n`,
+        OVERVIEW_TABEL_ROW: (field: string, value: string) => `| ${field} | ${value} |\n`,
+
+        // [NOTE]: to be deleted
+        DESCRIPTION: `## ${COMMON_EMOJI.DESCRIPTION} Description\n`,
+        ACCEPTANCE_CRITERIA: `## ${COMMON_EMOJI.ACCEPTANCE_CRITERIA} Acceptance Criteria\n`,
+        CHECKLIST: `## ${COMMON_EMOJI.CHECKLIST} Checklist\n`,
+        NOTES: `## ${COMMON_EMOJI.NOTES} Notes\n`,
+        RELATED_TASKS: `## ${COMMON_EMOJI.RELATED_TASKS} Related Tasks\n`,
+        EPIC: `## ${COMMON_EMOJI.EPIC} Epic\n`,
+        SPRINTS: `## ${COMMON_EMOJI.SPRINT} Sprints\n`,
+        BACKLOGS: `## ${COMMON_EMOJI.BACKLOG} Backlogs\n`,
+    },
 };
 
 /**
@@ -178,14 +297,53 @@ export const SPRINT_CONSTANTS = {
         COMPLETED: "completed"
     },
     FILE_PREFIX: "[Sprint]_",
-    TASKS_SECTION: "## 📋 Tasks",
-    TASKS_TABLE_HEADER: "| # | Task | Epic | Status | Priority |\n|:--|:-----|:----:|:------:|:--------:|",
     TEMPLATE: (name: string) => `# ⏱️ Sprint: ${name}\n\n## 📋 Tasks\n`,
     SEPARATOR: {
         DATE: "-",
         DURATION: "_",
         YEAR_PREFIX: "20"
-    }
+    },
+
+
+    /** Sprints Content Table */
+    SPRINT_SECTION: `## ${COMMON_EMOJI.SPRINT_SECTION} Sprints`,
+    SPRINT_TABLE_HEADER: "| # | Sprint | Status | Priority | File |\n|:--|:------|:------:|:--------:|:-----|",
+    SPRINT_TABLE_ROW: (sprints: SprintDesk.ISprintMetadata[]) => sprints.map((sprint) => {
+        return `| ${sprint._id} | [${sprint.title}](${sprint.path}) | ${sprint.status} | - | \`${sprint._id}\` |`;
+    }).join('\n'),
+    /** Backlogs Content Table */
+    BACKLOG_SECTION: `## ${COMMON_EMOJI.BACKLOGS_SECTION} Backlogs`,
+    BACKLOG_TABLE_HEADER: "| # | Backlog | Status | Priority | File |\n|:--|:-------|:------:|:--------:|:-----|",
+    BACKLOG_TABLE_ROW: (backlogs: SprintDesk.IBacklogMetadata[]) => backlogs.map((backlog) => {
+        return `| ${backlog._id} | [${backlog.title}](${backlog.path}) | - | - | \`${backlog._id}\` |`;
+    }).join('\n'),
+    /** Epics Content Table */
+    EPIC_SECTION: `## ${COMMON_EMOJI.EPICS_SECTION} Epics`,
+    EPIC_TABLE_HEADER: "| # | Epic | Status | Priority | File |\n|:--|:----|:------:|:--------:|:-----|",
+    EPIC_TABLE_ROW: (epics: SprintDesk.IEpicMetadata[]) => epics.map((epic) => {
+        return `| ${epic._id} | [${epic.title}](${epic.path}) | ${epic.status} | ${epic.priority} | \`${epic._id}\` |`;
+    }).join('\n'),
+    /** Tasks Content Table */
+    TASKS_SECTION: `## ${COMMON_EMOJI.TASKS_SECTION} Tasks`,
+    TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",
+    TASKS_TABLE_ROW: (tasks: SprintDesk.ITaskMetadata[]) => tasks.map((task) => {
+        return `| ${task._id} | [${task.title}](${task.path}) | ${task.status} | ${task.priority} | \`${task._id}\` |`;
+    }).join('\n'),
+    CONTENT: {
+        OVERVIEW: `## ${COMMON_EMOJI.OVERVIEW} Overview\n`,
+        OVERVIEW_TABLE_HEADER: `| Field | Value |\n|:--|:--|\n`,
+        OVERVIEW_TABEL_ROW: (field: string, value: string) => `| ${field} | ${value} |\n`,
+
+        // [NOTE]: to be deleted
+        DESCRIPTION: `## ${COMMON_EMOJI.DESCRIPTION} Description\n`,
+        ACCEPTANCE_CRITERIA: `## ${COMMON_EMOJI.ACCEPTANCE_CRITERIA} Acceptance Criteria\n`,
+        CHECKLIST: `## ${COMMON_EMOJI.CHECKLIST} Checklist\n`,
+        NOTES: `## ${COMMON_EMOJI.NOTES} Notes\n`,
+        RELATED_TASKS: `## ${COMMON_EMOJI.RELATED_TASKS} Related Tasks\n`,
+        EPIC: `## ${COMMON_EMOJI.EPIC} Epic\n`,
+        SPRINTS: `## ${COMMON_EMOJI.SPRINT} Sprints\n`,
+        BACKLOGS: `## ${COMMON_EMOJI.BACKLOG} Backlogs\n`,
+    },
 };
 
 /**
@@ -230,7 +388,6 @@ export const UI_CONSTANTS = {
             EPIC: "🚩",
             SPRINT: "⏱️",
             TASK: "✅",
-
 
             PROJECT: "📂",
             FILE: "📄",
