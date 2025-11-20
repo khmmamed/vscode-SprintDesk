@@ -143,11 +143,9 @@ export const TASK_CONSTANTS = {
         return `| ${backlog._id} | [${backlog.title}](${backlog.path}) | - | - | \`${backlog._id}\` |`;
     }).join('\n'),
     /** Epics Content Table */
-    EPIC_SECTION: `## ${COMMON_EMOJI.EPICS_SECTION} Epics`,
+    EPIC_SECTION: `## ${COMMON_EMOJI.EPICS_SECTION} Epic`,
     EPIC_TABLE_HEADER: "| # | Epic | Status | Priority | File |\n|:--|:----|:------:|:--------:|:-----|",
-    EPIC_TABLE_ROW: (epics: SprintDesk.IEpicMetadata[]) => epics.map((epic) => {
-        return `| ${epic._id} | [${epic.title}](${epic.path}) | ${epic.status} | ${epic.priority} | \`${epic._id}\` |`;
-    }).join('\n'),
+    EPIC_TABLE_ROW: (epic: SprintDesk.EpicMetadata) => `| ${epic._id} | [${epic.title}](${epic.path}) | ${epic.status} | ${epic.priority} | \`${epic._id}\` |`,
     /** Tasks Content Table */
     TASKS_SECTION: `## ${COMMON_EMOJI.TASKS_SECTION} Tasks`,
     TASKS_TABLE_HEADER: "| # | Task | Status | Priority | File |\n|:--|:-----|:------:|:--------:|:-----|",

@@ -1,4 +1,4 @@
-import { PROJECT_CONSTANTS, UI_CONSTANTS } from './constant';
+import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from './constant';
 import { generateEpicName } from './epicTemplate';
 
 export function generateTaskId(title: string): string {
@@ -111,18 +111,27 @@ export const updateEpicHeaderLine = (ls: string[], epicMeta: SprintDesk.EpicMeta
   ).flat();
 };
 // Update epic section
-export const updateEpicSection = (ls: string[], epicMeta: SprintDesk.EpicMetadata): string[] => {
-  const secIdx = ls.findIndex(l => l.trim() === '## Epic');
-  const link = `- [${epicMeta.title}](${epicMeta.path})`;
+export const updateEpicSection = (
+  ls: string[], 
+  epicMeta: SprintDesk.EpicMetadata
+): string[] => {
+  const sectionHeader = TASK_CONSTANTS.EPIC_SECTION; // "## 🗂 Epics"
+  const tableHeader = TASK_CONSTANTS.EPIC_TABLE_HEADER; // "| # | Epic | Status | Priority | File |"
+  const tableRows = TASK_CONSTANTS.EPIC_TABLE_ROW(epicMeta); // rows from metadata
+
+  const secIdx = ls.findIndex(l => l.trim() === sectionHeader);
 
   if (secIdx === -1) {
-    // If no "## Epic" section, append it at the end
-    return [...ls, '## Epic', link];
+    // If no Epic section exists, append section + header + rows
+    return [...ls, sectionHeader, tableHeader, tableRows];
   }
 
-  // Keep lines before the section, replace everything after with the new link
-  const before = ls.slice(0, secIdx + 1); // include the '## Epic' line
-  return [...before, link];
+  // Replace existing Epic section with updated table
+  const before = ls.slice(0, secIdx); // lines before Epic section
+  const after = ls.slice(secIdx + 1); // lines after the header (optional: could trim old table)
+  
+  // Here we can optionally remove old rows until next section, for simplicity we just replace
+  return [...before, sectionHeader, tableHeader, tableRows];
 };
 
 /* 
