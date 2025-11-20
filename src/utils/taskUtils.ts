@@ -3,15 +3,13 @@ import * as path from 'path';
 import * as taskService from '../services/taskService';
 import { PROJECT_CONSTANTS } from './constant';
 import matter from 'gray-matter';
+import * as fileService from '../services/fileService';
 
 
 export const getTasksPath = (): string => {
-    const wsFolders = vscode.workspace.workspaceFolders;
-    if (!wsFolders || wsFolders.length === 0) {
-        throw new Error("No workspace folder is open.");
-    }
-    const workspaceRoot = wsFolders[0].uri.fsPath;
-const SPRINTDESK_PATH = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR);
+    const workspaceRoot = fileService.getWorkspaceRoot();
+    if (!workspaceRoot) throw new Error('No workspace folder is open.');
+    const SPRINTDESK_PATH = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR);
     return path.join(SPRINTDESK_PATH, PROJECT_CONSTANTS.TASKS_DIR);
 };
 export const getTaskPath = (taskName: string): string => {
@@ -19,7 +17,7 @@ export const getTaskPath = (taskName: string): string => {
     return path.join(tasksPath, `${taskName}`);
 }
 export const relativePathTaskToTaskpath = (rel: string): string => {
-    const ws = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+    const ws = fileService.getWorkspaceRoot();
     const ProjectDir = path.join(ws!, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR);
     return path.resolve(ProjectDir, rel);
 };

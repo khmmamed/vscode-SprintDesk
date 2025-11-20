@@ -135,13 +135,19 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
   }
 
   constructor() {
-    // Initialize workspace root
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) {
-      throw new Error('No workspace folder found');
-    }
-    this.workspaceRoot = folders[0].uri.fsPath;
+    // Initialize workspace root from fileService (may be overridden later)
+    this.workspaceRoot = fileService.getWorkspaceRoot();
 
+  }
+
+  /**
+   * Set the repository root that this provider should read from.
+   * Pass `undefined` to reset to the default workspace folder.
+   */
+  public setWorkspaceRoot(root?: string) {
+    if (root) this.workspaceRoot = root;
+    else this.workspaceRoot = fileService.getWorkspaceRoot();
+    this.refresh();
   }
 
   private async handleTaskDropFromTasks(target: BacklogsTreeItem, handleData: any): Promise<void> {
@@ -329,7 +335,7 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     return [];
   }
   private getWorkspaceRoot(): string {
-    return this.workspaceRoot;
+    return this.workspaceRoot || fileService.getWorkspaceRoot();
   }
   public refresh(): void {
     this._onDidChangeTreeData.fire(undefined);

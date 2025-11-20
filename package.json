@@ -52,8 +52,9 @@
     ],
     "commands": [
       {
-        "command": "vscode-react-webview-starter.openWebview",
-        "title": "React Webview: Open webview"
+        "command": "sprintdesk.addTask",
+        "title": "SprintDesk: Add Task",
+        "icon": "$(add)"
       },
       {
         "command": "sprintdesk.viewTasks",
@@ -70,20 +71,24 @@
         "icon": "$(edit)"
       },
       {
-        "command": "sprintdesk.viewBacklogs",
-        "title": "SprintDesk: View Backlogs"
-      },
-      {
-        "command": "sprintdesk.viewEpics",
-        "title": "SprintDesk: View Epics"
-      },
-      {
         "command": "sprintdesk.addMultipleTasks",
         "title": "SprintDesk: Add Multiple Tasks"
       },
       {
         "command": "sprintdesk.addQuickly",
         "title": "SprintDesk: Add Quickly"
+      },
+      {
+        "command": "vscode-react-webview-starter.openWebview",
+        "title": "React Webview: Open webview"
+      },
+      {
+        "command": "sprintdesk.viewBacklogs",
+        "title": "SprintDesk: View Backlogs"
+      },
+      {
+        "command": "sprintdesk.viewEpics",
+        "title": "SprintDesk: View Epics"
       },
       {
         "command": "sprintdesk.startFeatureFromTask",
@@ -103,11 +108,6 @@
       {
         "command": "sprintdesk.addSprint",
         "title": "SprintDesk: Add Sprint",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.addTask",
-        "title": "SprintDesk: Add Task",
         "icon": "$(add)"
       },
       {

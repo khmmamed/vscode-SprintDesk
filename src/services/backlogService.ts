@@ -206,7 +206,7 @@ export function deleteBacklog(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 export async function addExistingTasksToBacklog(item: any) {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
   const backlogFile: string | undefined = item?.filePath;
   if (!backlogFile) { vscode.window.showErrorMessage('Backlog file not found.'); return; }
@@ -249,7 +249,7 @@ export async function addExistingTasksToBacklog(item: any) {
   }
 }
 export async function addTaskToBacklogInteractive(item: any) {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
   const backlogFile: string | undefined = item?.filePath;
   if (!backlogFile) { vscode.window.showErrorMessage('Backlog file not found for this item.'); return; }

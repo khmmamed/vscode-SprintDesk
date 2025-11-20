@@ -55,7 +55,7 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
 
 // [vPrevious]
 export function createEpicFromMetadata(metadata: SprintDesk.EpicMetadata): string {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
 
   const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
@@ -110,7 +110,7 @@ export function deleteEpic(filePath: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 export function addTaskToEpic(epicTitle: string, taskName: string) {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   const epicsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
   const epicPath = path.join(epicsDir, generateEpicName(epicTitle));

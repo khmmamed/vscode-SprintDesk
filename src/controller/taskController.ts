@@ -116,7 +116,7 @@ export async function handleTaskInputsController(ws?: string) {
 }
 export async function createTask(ws?: string) {
   if (!ws) {
-    ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
 
   const task = await handleTaskInputsController(ws);
@@ -144,7 +144,7 @@ export async function createTask(ws?: string) {
 
 export async function addEpicToTask(epic: SprintDesk.EpicMetadata, taskRelativePath: string, ws?: string) {
   if (!ws) {
-    ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
 
   await updateTaskEpic(fileService.taskRelativePathToAbsolute(taskRelativePath, ws!), epic);

@@ -20,7 +20,7 @@ interface TreeItemLike {
   };
 }
 export function createSprint(nameParts: { d1: string; mo1: string; d2: string; mo2: string; yy: string; yyyy: string }): string {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   const { d1, mo1, d2, mo2, yy, yyyy } = nameParts;
   const fileName = `${PROJECT_CONSTANTS.FILE_PREFIX.SPRINT}${d1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo1}${SPRINT_CONSTANTS.SEPARATOR.DURATION}${d2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo2}${SPRINT_CONSTANTS.SEPARATOR.DURATION}${yyyy}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
@@ -53,7 +53,7 @@ export async function createSprintInteractive() {
 }
 
 export async function addExistingTasksToSprint(item: any) {
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
   const sprintFile: string | undefined = item?.filePath;
   if (!sprintFile) { vscode.window.showErrorMessage('Sprint file not found.'); return; }
@@ -92,9 +92,8 @@ export async function addExistingTasksToSprint(item: any) {
 
 export async function startFeatureFromTask(item: any) {
   try {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
-    const workspaceRoot = folders[0].uri.fsPath;
+    const workspaceRoot = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
 
     const taskSlug: string | undefined = item?.taskSlug || item?.label?.toString()?.replace(/\s+/g, '-');
     const taskFilePath: string | undefined = item?.taskFilePath;

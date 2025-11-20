@@ -44,6 +44,11 @@ export function getWorkspaceRoot(uri?: vscode.Uri): string {
     }
   }
 
+  // If an override was set programmatically, prefer that
+  if ((getWorkspaceRoot as any)._overrideRoot) {
+    return (getWorkspaceRoot as any)._overrideRoot as string;
+  }
+
   // Fallback to first workspace folder
   const wsFolders = vscode.workspace.workspaceFolders;
   if (wsFolders && wsFolders.length > 0) {
@@ -51,6 +56,10 @@ export function getWorkspaceRoot(uri?: vscode.Uri): string {
   }
 
   return '';
+}
+// Allow other parts of the extension to override the detected workspace root
+export function setWorkspaceRootOverride(root?: string) {
+  (getWorkspaceRoot as any)._overrideRoot = root;
 }
 export function getSprintDeskDir(ws: string): string {
   return path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR);

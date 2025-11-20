@@ -157,16 +157,45 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
       const sel = (e.selection && e.selection[0]) as any;
       // Try to read our repo path from the selection -- either 'fullPath' (our custom item) or resourceUri
-      const repoPath = sel?.fullPath ?? sel?.resourceUri?.fsPath;
+      let selectedPath = sel?.fullPath ?? sel?.resourceUri?.fsPath;
+      let repoPath: string | undefined = undefined;
+      if (selectedPath) {
+        const path = require('path');
+        // If the selected path is a repo node or category, it already points to the repo root
+        if (sel?.nodeType === 'repo' || sel?.nodeType === 'category') {
+          repoPath = sel.fullPath || sel.resourceUri?.fsPath;
+        } else {
+          // File node selected: try to locate the repository root by trimming at the .SprintDesk segment
+          const parts = String(selectedPath).split(path.sep);
+          const sdIndex = parts.indexOf('.SprintDesk');
+          if (sdIndex > 0) {
+            repoPath = parts.slice(0, sdIndex).join(path.sep);
+          } else {
+            // fallback: assume parent 3 levels up (repo/.SprintDesk/<category>/file.md)
+            repoPath = path.resolve(selectedPath, '..', '..', '..');
+          }
+        }
+      }
+
+      // If a repository is selected, set override; if selection is empty, clear override
       if (repoPath) {
-        // Set tasks provider to use this repository root
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tasksProvider as any).setWorkspaceRoot(repoPath);
-        tasksProvider.refresh();
-        // Optionally refresh other views that should be repo-scoped
-        backlogsProvider?.refresh();
-        epicsProvider?.refresh();
-        sprintsProvider.refresh();
+        // Persist override to fileService so services also pick it up
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fileService = require('./services/fileService');
+        fileService.setWorkspaceRootOverride(repoPath);
+
+        // Update all providers that support setWorkspaceRoot
+        try { (tasksProvider as any).setWorkspaceRoot(repoPath); } catch {}
+        try { (backlogsProvider as any).setWorkspaceRoot(repoPath); } catch {}
+        try { (epicsProvider as any).setWorkspaceRoot(repoPath); } catch {}
+        try { (sprintsProvider as any).setWorkspaceRoot(repoPath); } catch {}
+      } else {
+        const fileService = require('./services/fileService');
+        fileService.setWorkspaceRootOverride(undefined);
+        try { (tasksProvider as any).setWorkspaceRoot(undefined); } catch {}
+        try { (backlogsProvider as any).setWorkspaceRoot(undefined); } catch {}
+        try { (epicsProvider as any).setWorkspaceRoot(undefined); } catch {}
+        try { (sprintsProvider as any).setWorkspaceRoot(undefined); } catch {}
       }
     } catch (err) {
       console.error('Failed to switch tasks provider workspace root on repo selection', err);

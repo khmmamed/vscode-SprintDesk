@@ -87,7 +87,7 @@ export function readTasks(ws: string): string[] {
 
 export async function writeTask() {
   // Get workspace
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) {
     vscode.window.showErrorMessage('No workspace open');
     return;
