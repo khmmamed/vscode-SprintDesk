@@ -107,33 +107,6 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
   ];
   readonly dragMimeTypes = ['application/vnd.code.tree.sprintdesk-sprints'];
 
-  private resolveTaskPath(handleData: any): string {
-    let taskFilePath: string | undefined;
-
-    // Prefer explicit path-like fields first
-    if (handleData.path) taskFilePath = handleData.path;
-    else if (handleData.filePath) taskFilePath = handleData.filePath;
-    else if (handleData.taskPath) taskFilePath = handleData.taskPath;
-
-    // If legacy itemHandles exists, extract basename using split(' ')[1]
-    if (!taskFilePath && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
-      const raw = String(handleData.itemHandles[0] || '');
-      const parts = raw.split(' ');
-      const maybeBasename = parts[1] || parts.pop() || raw;
-      let base = path.basename(maybeBasename).trim();
-      if (!base.toLowerCase().endsWith('.md')) base = `${base}.md`;
-
-      const ws = this.getWorkspaceRoot();
-      if (!ws) throw new Error('No workspace root found');
-      taskFilePath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR, base);
-    }
-
-    if (!taskFilePath) throw new Error('Could not resolve task path from drop data');
-    if (!fs.existsSync(taskFilePath)) throw new Error(`Task file not found: ${taskFilePath}`);
-
-    return taskFilePath;
-  }
-
   constructor() {
     // Initialize workspace root
     const folders = vscode.workspace.workspaceFolders;

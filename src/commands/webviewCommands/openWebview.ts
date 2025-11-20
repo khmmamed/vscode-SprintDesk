@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { getWebviewContent } from "../webview/getWebviewContent";
-import { scanSprintDeskFolders } from "./viewProjects";
+import { getWebviewContent } from "../../webview/getWebviewContent";
+import { scanSprintDeskFolders } from "./../viewProjects";
 
 export function registerOpenWebviewCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand("vscode-react-webview-starter.openWebview", () => {

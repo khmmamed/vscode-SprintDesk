@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import * as backlogService from "../services/backlogService";
-import { getWebviewContent } from "../webview/getWebviewContent";
+import * as backlogService from "../../services/backlogService";
+import { getWebviewContent } from "../../webview/getWebviewContent";
 
 export function registerViewBacklogsCommand(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand("sprintdesk.viewBacklogs", async () => {

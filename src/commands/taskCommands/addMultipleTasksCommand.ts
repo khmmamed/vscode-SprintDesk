@@ -1,10 +1,10 @@
 // src/commands/addMultipleTasksCommand.ts
 import * as vscode from "vscode";
-import { getWebviewContent } from "../webview/getWebviewContent";
-import * as epicService from '../services/epicService';
-import * as taskService from '../services/taskService';
-import { parseTaskMetadataFromFilename } from '../utils/taskTemplate';
-import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
+import { getWebviewContent } from "../../webview/getWebviewContent";
+import * as epicService from '../../services/epicService';
+import * as taskService from '../../services/taskService';
+import { parseTaskMetadataFromFilename } from '../../utils/taskTemplate';
+import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../../utils/constant';
 
 export function addMultipleTasksCommand(context: vscode.ExtensionContext) {
   const command = vscode.commands.registerCommand(

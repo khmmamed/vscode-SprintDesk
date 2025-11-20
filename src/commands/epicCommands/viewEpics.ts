@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import * as epicService from "../services/epicService";
-import { getWebviewContent } from "../webview/getWebviewContent";
+import * as epicService from "../../services/epicService";
+import { getWebviewContent } from "../../webview/getWebviewContent";
 
 export function registerViewEpicsCommand(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand("sprintdesk.viewEpics", async () => {

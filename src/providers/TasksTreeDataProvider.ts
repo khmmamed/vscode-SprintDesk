@@ -24,6 +24,8 @@ export class TaskTreeItem extends vscode.TreeItem {
 
   constructor(
     taskData: TaskData,
+    // absolute path to the markdown file on disk (preferred)
+    absoluteFilePath?: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None
   ) {
     // Create base TreeItem with initial label
@@ -32,17 +34,36 @@ export class TaskTreeItem extends vscode.TreeItem {
 
     // Set task context and make draggable
     this.contextValue = 'task';
-    this.resourceUri = vscode.Uri.file(fileService.createTaskRelativePath(taskData.title));
+    // Prefer the provided absolute path. If not available, try to resolve
+    // using workspace folder and file service helpers.
+    let resourceFsPath: string | undefined = undefined;
+    if (absoluteFilePath) {
+      resourceFsPath = absoluteFilePath;
+    } else {
+      const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+      try {
+        const rel = fileService.createTaskRelativePath(taskData.title);
+        resourceFsPath = fileService.taskRelativePathToAbsolute(rel, ws);
+      } catch (e) {
+        resourceFsPath = undefined;
+      }
+    }
+
+    if (resourceFsPath) {
+      this.resourceUri = vscode.Uri.file(resourceFsPath);
+    }
 
     // Set up visual elements
     this.setupVisuals();
 
-    // Make clickable to open
-    this.command = {
-      command: 'vscode.open',
-      title: 'Open Task',
-      arguments: [vscode.Uri.file(fileService.createTaskRelativePath(taskData.title))]
-    };
+    // Make primary click open the markdown preview
+    if (resourceFsPath) {
+      this.command = {
+        command: 'sprintdesk.viewTaskPreview',
+        title: 'Preview Task',
+        arguments: [vscode.Uri.file(resourceFsPath)]
+      };
+    }
   }
 
   private getStatusEmoji(status: string): string {
@@ -177,8 +198,9 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
             path: data.path
           };
 
-          // Create TreeItem with taskData
-          const item = new TaskTreeItem(taskData);
+          // Create TreeItem with taskData and pass the absolute file path so
+          // the item can open the correct file when clicked.
+          const item = new TaskTreeItem(taskData, file);
 
           return item;
         } catch (error) {

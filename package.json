@@ -60,6 +60,16 @@
         "title": "SprintDesk: View Tasks"
       },
       {
+        "command": "sprintdesk.viewTaskPreview",
+        "title": "SprintDesk: Preview Task",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "sprintdesk.editTaskRaw",
+        "title": "SprintDesk: Edit Task (Raw)",
+        "icon": "$(edit)"
+      },
+      {
         "command": "sprintdesk.viewBacklogs",
         "title": "SprintDesk: View Backlogs"
       },
@@ -231,6 +241,17 @@
           "command": "sprintdesk.addExistingTasksToBacklog",
           "when": "view == sprintdesk-backlogs && viewItem == backlog",
           "group": "inline"
+        }
+        ,
+        {
+          "command": "sprintdesk.viewTaskPreview",
+          "when": "view == sprintdesk-tasks && viewItem == task",
+          "group": "inline"
+        },
+        {
+          "command": "sprintdesk.editTaskRaw",
+          "when": "view == sprintdesk-tasks && viewItem == task",
+          "group": "inline@1"
         }
       ]
     }

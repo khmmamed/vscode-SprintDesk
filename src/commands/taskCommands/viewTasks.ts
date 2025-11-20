@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { getWebviewContent } from "../webview/getWebviewContent";
-import { getAllTaskRows, TaskRow } from "../utils/taskUtils";
+import { getWebviewContent } from "../../webview/getWebviewContent";
+import { getAllTaskRows, TaskRow } from "../../utils/taskUtils";
 
 export function registerViewTasksCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand("sprintdesk.viewTasks", async () => {

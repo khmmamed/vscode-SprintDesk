@@ -330,11 +330,11 @@ export const SPRINT_CONSTANTS = {
         return `| ${task._id} | [${task.title}](${task.path}) | ${task.status} | ${task.priority} | \`${task._id}\` |`;
     }).join('\n'),
     CONTENT: {
+        HEADER:(start: string, end: string) => `# ${COMMON_EMOJI.SPRINT} Sprint : ${start} ➜ ${end}`,
         OVERVIEW: `## ${COMMON_EMOJI.OVERVIEW} Overview\n`,
-        OVERVIEW_TABLE_HEADER: `| Field | Value |\n|:--|:--|\n`,
+        OVERVIEW_TABLE_HEADER: `| 🗓 Dates | 28 Oct 2025 → 04 Nov 2025 |\n|:--|:--|\n`,
         OVERVIEW_TABEL_ROW: (field: string, value: string) => `| ${field} | ${value} |\n`,
-
-        // [NOTE]: to be deleted
+        // [NOTE]: to be deleted because section are new approach defined
         DESCRIPTION: `## ${COMMON_EMOJI.DESCRIPTION} Description\n`,
         ACCEPTANCE_CRITERIA: `## ${COMMON_EMOJI.ACCEPTANCE_CRITERIA} Acceptance Criteria\n`,
         CHECKLIST: `## ${COMMON_EMOJI.CHECKLIST} Checklist\n`,

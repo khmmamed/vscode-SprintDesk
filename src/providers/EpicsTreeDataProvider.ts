@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as epicController from '../controller/epicController';
 import * as taskController from '../controller/taskController';
-import * as backlogController from '../controller/backlogController';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import * as epicService from '../services/epicService';
@@ -174,7 +173,6 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
     this.refresh();
   }
   private async addTaskToEpic(epicPath: string, taskPath: string): Promise<void> {
-    console.log(`Adding task ${taskPath} to epic ${fileService.createEpicRelativePath(fileService.getEpicBaseName(epicPath))}`);
     await epicController.addTaskToEpic(fileService.createEpicRelativePath(fileService.getEpicBaseName(epicPath)), taskPath, this.workspaceRoot);
     this.refresh();
     void vscode.window.showInformationMessage(`Task added to epic`);
@@ -296,7 +294,7 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
 
     const items = files.map(name => {
       const filePath = path.join(epicsDir, name);
-      const label = this.humanizeEpicName(name);
+      const label = name;
       return new EpicsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
     });
 
