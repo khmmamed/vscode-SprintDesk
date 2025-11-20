@@ -9,7 +9,7 @@ export function acquireVsCodeApiOnce(): any {
       // Mock for dev server
       vscodeApi = {
         postMessage: (msg: any) => {
-          console.log("Mock VSCode API:", msg);
+          
         },
       };
     }

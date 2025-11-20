@@ -2,8 +2,8 @@
   "name": "vscode-sprintdesk",
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
-  "description": "",
-  "version": "0.3.1",
+  "description": "A Visual Studio Code extension for managing sprints and tasks in an agile development workflow",
+  "version": "0.3.9",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -15,101 +15,10 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:sprintdesk.viewProjects"
   ],
   "main": "./dist/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "vscode-react-webview-starter.openWebview",
-        "title": "React Webview: Open webview"
-      },
-      {
-        "command": "sprintdesk.viewTasks",
-        "title": "SprintDesk: View Tasks"
-      },
-      {
-        "command": "sprintdesk.viewBacklogs",
-        "title": "SprintDesk: View Backlogs"
-      },
-      {
-        "command": "sprintdesk.viewEpics",
-        "title": "SprintDesk: View Epics"
-      },
-      {
-        "command": "sprintdesk.addMultipleTasks",
-        "title": "SprintDesk: Add Multiple Tasks"
-      },
-      {
-        "command": "sprintdesk.addQuickly",
-        "title": "SprintDesk: Add Quickly"
-      },
-      {
-        "command": "sprintdesk.startFeatureFromTask",
-        "title": "SprintDesk: Start Feature from Task",
-        "icon": "$(git-branch)"
-      },
-      {
-        "command": "sprintdesk.openSprintFile",
-        "title": "SprintDesk: Open Sprint File",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "sprintdesk.showSprintCalendar",
-        "title": "SprintDesk: Show Sprint Calendar",
-        "icon": "$(calendar)"
-      }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "sprintdesk",
-          "title": "SprintDesk",
-          "icon": "./assets/activitybar-icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "sprintdesk": [
-        {
-          "id": "sprintdesk-sprints",
-          "name": "Sprints"
-        },
-        {
-          "id": "sprintdesk-backlogs",
-          "name": "Backlogs"
-        },
-        {
-          "id": "sprintdesk-epics",
-          "name": "Epics",
-          "type": "webview"
-        },
-        {
-          "id": "sprintdesk-tasks",
-          "name": "Tasks"
-        }
-      ]
-    },
-    "menus": {
-      "view/item/context": [
-        {
-          "command": "sprintdesk.startFeatureFromTask",
-          "when": "view == sprintdesk-sprints && viewItem == sprintTask",
-          "group": "inline"
-        },
-        {
-          "command": "sprintdesk.openSprintFile",
-          "when": "view == sprintdesk-sprints && viewItem == sprint",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.showSprintCalendar",
-          "when": "view == sprintdesk-sprints && viewItem == sprint",
-          "group": "inline@2"
-        }
-      ]
-    }
-  },
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "webpack",
@@ -126,13 +35,235 @@
     "clean": "rimraf dist",
     "test": "node ./out/test/runTest.js"
   },
+  "contributes": {
+    "keybindings": [
+      {
+        "command": "sprintdesk.addTask",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "workspaceHasSprintDesk"
+      },
+      {
+        "command": "sprintdesk.addQuickly",
+        "key": "ctrl+shift+q",
+        "mac": "cmd+shift+q",
+        "when": "workspaceHasSprintDesk"
+      }
+    ],
+    "commands": [
+      {
+        "command": "sprintdesk.addTask",
+        "title": "SprintDesk: Add Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.viewTasks",
+        "title": "SprintDesk: View Tasks"
+      },
+      {
+        "command": "sprintdesk.viewTaskPreview",
+        "title": "SprintDesk: Preview Task",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "sprintdesk.editTaskRaw",
+        "title": "SprintDesk: Edit Task (Raw)",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sprintdesk.addMultipleTasks",
+        "title": "SprintDesk: Add Multiple Tasks"
+      },
+      {
+        "command": "sprintdesk.addQuickly",
+        "title": "SprintDesk: Add Quickly"
+      },
+      {
+        "command": "vscode-react-webview-starter.openWebview",
+        "title": "React Webview: Open webview"
+      },
+      {
+        "command": "sprintdesk.viewBacklogs",
+        "title": "SprintDesk: View Backlogs"
+      },
+      {
+        "command": "sprintdesk.viewEpics",
+        "title": "SprintDesk: View Epics"
+      },
+      {
+        "command": "sprintdesk.startFeatureFromTask",
+        "title": "SprintDesk: Start Feature from Task",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "sprintdesk.openSprintFile",
+        "title": "SprintDesk: Open Sprint File",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "sprintdesk.showSprintCalendar",
+        "title": "SprintDesk: Show Sprint Calendar",
+        "icon": "$(calendar)"
+      },
+      {
+        "command": "sprintdesk.addSprint",
+        "title": "SprintDesk: Add Sprint",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.addEpic",
+        "title": "SprintDesk: Add Epic",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.addTaskToBacklog",
+        "title": "SprintDesk: Add Task to Backlog",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.refresh",
+        "title": "SprintDesk: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sprintdesk.addExistingTasksToSprint",
+        "title": "SprintDesk: Add Tasks to Sprint",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.addExistingTasksToBacklog",
+        "title": "SprintDesk: Add Tasks to Backlog",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.viewProjects",
+        "title": "SprintDesk: Projects",
+        "icon": "$(folder)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sprintdesk",
+          "title": "SprintDesk",
+          "icon": "./assets/activitybar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sprintdesk": [
+        {
+          "id": "sprintdesk-repositories",
+          "name": "Repositories"
+        },
+        {
+          "id": "sprintdesk-sprints",
+          "name": "Sprints"
+        },
+        {
+          "id": "sprintdesk-backlogs",
+          "name": "Backlogs"
+        },
+        {
+          "id": "sprintdesk-epics",
+          "name": "Epics"
+        },
+        {
+          "id": "sprintdesk-tasks",
+          "name": "Tasks"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "sprintdesk.addTask",
+          "title": "SprintDesk: Create New Task",
+          "when": "workspaceHasSprintDesk"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "sprintdesk.addSprint",
+          "when": "view == sprintdesk-sprints",
+          "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.addTask",
+          "when": "view == sprintdesk-tasks",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sprintdesk.addEpic",
+          "when": "view == sprintdesk-epics",
+          "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.refresh",
+          "when": "view =~ /^sprintdesk-/",
+          "group": "navigation@9"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "sprintdesk.addQuickly",
+          "group": "sprintdesk@1",
+          "when": "workspaceHasSprintDesk"
+        },
+        {
+          "command": "sprintdesk.addTask",
+          "group": "sprintdesk@2",
+          "when": "workspaceHasSprintDesk"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sprintdesk.startFeatureFromTask",
+          "when": "view == sprintdesk-sprints && viewItem == sprintTask",
+          "group": "inline"
+        },
+        {
+          "command": "sprintdesk.openSprintFile",
+          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "group": "inline@1"
+        },
+        {
+          "command": "sprintdesk.showSprintCalendar",
+          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "group": "inline@2"
+        },
+        {
+          "command": "sprintdesk.addExistingTasksToSprint",
+          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "group": "inline@3"
+        },
+        {
+          "command": "sprintdesk.addExistingTasksToBacklog",
+          "when": "view == sprintdesk-backlogs && viewItem == backlog",
+          "group": "inline"
+        },
+        {
+          "command": "sprintdesk.viewTaskPreview",
+          "when": "view == sprintdesk-tasks && viewItem == task",
+          "group": "inline"
+        },
+        {
+          "command": "sprintdesk.editTaskRaw",
+          "when": "view == sprintdesk-tasks && viewItem == task",
+          "group": "inline@1"
+        }
+      ]
+    }
+  },
   "devDependencies": {
     "@estruyf/vscode": "^1.1.0",
+    "@types/d3-dispatch": "^2.0.0",
     "@types/glob": "^7.2.0",
+    "@types/minimatch": "^5.1.2",
     "@types/mocha": "^9.1.1",
     "@types/node": "16.x",
-    "@types/react": "^19.0.1",
-    "@types/react-dom": "^19.0.2",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
     "@types/uuid": "^8.3.4",
     "@types/vscode": "^1.71.0",
     "@types/webpack": "^5.28.1",
@@ -146,8 +277,8 @@
     "mocha": "^10.0.0",
     "npm-run-all": "^4.1.5",
     "postcss-loader": "^7.0.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "rimraf": "^3.0.2",
     "style-loader": "^3.3.1",
     "ts-loader": "^9.4.1",
@@ -156,5 +287,9 @@
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^5.2.0",
     "webpack-manifest-plugin": "^5.0.0"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "react-flow-renderer": "^10.3.17"
   }
 }
