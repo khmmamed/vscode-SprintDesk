@@ -3,7 +3,7 @@
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
   "description": "A Visual Studio Code extension for managing sprints and tasks in an agile development workflow",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -241,8 +241,7 @@
           "command": "sprintdesk.addExistingTasksToBacklog",
           "when": "view == sprintdesk-backlogs && viewItem == backlog",
           "group": "inline"
-        }
-        ,
+        },
         {
           "command": "sprintdesk.viewTaskPreview",
           "when": "view == sprintdesk-tasks && viewItem == task",
