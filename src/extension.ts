@@ -139,9 +139,9 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(repositoriesTreeView);
 
   // Register delegated commands (one file per command)
+  registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
   registerScanProjectStructureCommand(context);
   registerAddSprintCommand(context, { createSprintInteractive });
-  registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
   registerAddEpicCommand(context, { createEpicInteractive });
   registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
   registerAddTaskToBacklogCommand(context, { addTaskToBacklogInteractive });
