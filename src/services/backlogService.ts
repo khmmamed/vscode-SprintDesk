@@ -11,6 +11,7 @@ import {
 import matter from 'gray-matter';
 import { getBacklogTasks } from '../controller/backlogController';
 import { relativePathTaskToTaskpath } from '../utils/taskUtils';
+import { SprintDeskItem } from '../utils/SprintDeskItem';
 
 interface TreeItemLike {
   label: string;
@@ -197,13 +198,46 @@ export function listBacklogs(ws: string): string[] {
   return fileService.listMdFiles(backlogsDir).map(f => path.join(backlogsDir, f));
 }
 export function readBacklog(filePath: string): string {
-  return fileService.readFileSyncSafe(filePath);
+  // Use SprintDeskItem class to read backlog content
+  try {
+    const backlogItem = new SprintDeskItem(filePath);
+    return backlogItem.getContent();
+  } catch (error) {
+    console.error('❌ Failed to read backlog with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    return fileService.readFileSyncSafe(filePath);
+  }
 }
+
 export function updateBacklog(filePath: string, content: string) {
-  fs.writeFileSync(filePath, content, 'utf8');
+  // Use SprintDeskItem class to update backlog content
+  try {
+    const backlogItem = new SprintDeskItem(filePath);
+    backlogItem.update(content);
+    console.log(`✅ Backlog content updated using SprintDeskItem: ${filePath}`);
+  } catch (error) {
+    console.error('❌ Failed to update backlog with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    fs.writeFileSync(filePath, content, 'utf8');
+  }
 }
+
 export function deleteBacklog(filePath: string) {
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  if (fs.existsSync(filePath)) {
+    // Use SprintDeskItem class to delete backlog
+    try {
+      const backlogItem = new SprintDeskItem(filePath);
+      backlogItem.delete();
+      console.log(`✅ Backlog deleted using SprintDeskItem: ${filePath}`);
+    } catch (error) {
+      console.error('❌ Failed to delete backlog with SprintDeskItem, falling back to original method:', error);
+      
+      // Fallback to original method
+      fs.unlinkSync(filePath);
+    }
+  }
 }
 export async function addExistingTasksToBacklog(item: any) {
   const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

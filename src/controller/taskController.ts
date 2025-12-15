@@ -3,20 +3,19 @@
  * Description: This controller handles operations related to tasks in the SprintDesk application.
  * v0.0.1 
  **/
-import matter, { test } from "gray-matter";
+import matter from "gray-matter";
 import path from "path";
 import fs from "fs";
 import { getBacklogPath } from "../utils/backlogUtils";
 import * as fileService from "../services/fileService";
-import { getEpicPath, handleEpicInputsController } from "./epicController";
 import { getTaskPath } from "../utils/taskUtils";
 import { updateEpicHeaderLine, updateEpicSection } from "../utils/taskTemplate";
-import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from "../utils/constant";
+import { TASK_CONSTANTS, UI_CONSTANTS } from "../utils/constant";
 import * as vscode from "vscode";
-import * as epicService from "../services/epicService";
 import * as taskService from "../services/taskService";
 import * as epicController from "./epicController";
 import { promptInput, promptPick, getPriorityOptions, getTaskTypeOptions } from "../utils/helpers";
+import { SprintDeskItem } from "../utils/SprintDeskItem";
 
 // [vNext]: version: 0.0.2
 export function readTasksIds(): string[] {
@@ -68,7 +67,7 @@ export function readTasks(ws: string): string[] {
   }
   return files;
 }
-export async function handleTaskInputsController(ws?: string) {
+export async function handleTaskInputsController(ws?: string, epic?: SprintDesk.EpicMetadata) {
   if (!ws) {
     ws = fileService.getWorkspaceRoot();
   }
@@ -97,7 +96,7 @@ export async function handleTaskInputsController(ws?: string) {
     // Get assignee
     const assignee = await promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
 
-    // create task and get metadata
+    // create task and get metadata with epic included
     const task = await taskService.createTask(ws, {
       title: taskTitle,
       type: type.value as SprintDesk.TaskType,
@@ -107,6 +106,11 @@ export async function handleTaskInputsController(ws?: string) {
       duration,
       assignee,
       status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
+      epic: epic ? {
+        _id: epic._id,
+        title: epic.title,
+        path: epic.path
+      } : undefined
     });
 
     return task;
@@ -119,9 +123,7 @@ export async function createTask(ws?: string) {
     ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
 
-  const task = await handleTaskInputsController(ws);
-
-  // Get epic
+  // Get epic first
   const epic = await epicController.handleEpicInputsController(ws);
 
   if (!epic) {
@@ -129,17 +131,16 @@ export async function createTask(ws?: string) {
     return;
   }
 
+  // Get task inputs with epic context
+  const task = await handleTaskInputsController(ws, epic);
+
   if (!task) {
     vscode.window.showWarningMessage('Task creation was cancelled or failed.');
     return;
   }
-  // add epic to task
-  addEpicToTask(epic!, task!.path!, ws);
 
-  // add task to epic
-  epicController.addTaskToEpic(epic!.path!, task!.path!, ws);
-
-
+  // Task is now created with epic included, no need for separate addition
+  console.log(`✅ Task created with epic: ${task.title} -> ${epic.title}`);
 }
 
 export async function addEpicToTask(epic: SprintDesk.EpicMetadata, taskRelativePath: string, ws?: string) {
@@ -147,8 +148,19 @@ export async function addEpicToTask(epic: SprintDesk.EpicMetadata, taskRelativeP
     ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
 
-  await updateTaskEpic(fileService.taskRelativePathToAbsolute(taskRelativePath, ws!), epic);
-
+  const taskPath = fileService.taskRelativePathToAbsolute(taskRelativePath, ws!);
+  
+  // Use SprintDeskItem class to add epic to task
+  try {
+    const taskItem = new SprintDeskItem(taskPath);
+    taskItem.addEpic(epic.path!);
+    console.log(`✅ Epic added to task using SprintDeskItem: ${epic.title} -> ${taskPath}`);
+  } catch (error) {
+    console.error('❌ Failed to add epic to task with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    await updateTaskEpic(taskPath, epic);
+  }
 }
 export async function updateTaskEpic(taskPath: string, epic: SprintDesk.EpicMetadata): Promise<void> {
   const taskFile = matter.read(taskPath);
@@ -177,29 +189,63 @@ export async function updateTaskEpic(taskPath: string, epic: SprintDesk.EpicMeta
 
 
 export function readTaskData(filePath: string): SprintDesk.ITaskMetadata {
-  const { data } = matter(filePath);
-  return data as SprintDesk.ITaskMetadata;
+  // Use SprintDeskItem class to read task data
+  try {
+    const taskItem = new SprintDeskItem(filePath);
+    return taskItem.getMetadata() as SprintDesk.ITaskMetadata;
+  } catch (error) {
+    console.error('❌ Failed to read task data with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    const { data } = matter(filePath);
+    return data as SprintDesk.ITaskMetadata;
+  }
 }
+
 export function readTaskContent(filePath: string): string {
-  const { content } = matter(filePath);
-  return content;
+  // Use SprintDeskItem class to read task content
+  try {
+    const taskItem = new SprintDeskItem(filePath);
+    return taskItem.getContent();
+  } catch (error) {
+    console.error('❌ Failed to read task content with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    const { content } = matter(filePath);
+    return content;
+  }
 }
 export function updateTaskMetadata(taskPath: string, newData: Partial<SprintDesk.ITaskMetadata>): void {
-  const parsed = matter(taskPath);
-  const updatedData = { ...parsed.data, ...newData };
-  const updatedContent = matter.stringify(parsed.content, updatedData);
-  fs.writeFileSync(taskPath, updatedContent, 'utf-8');
+  // Use SprintDeskItem class to update metadata
+  try {
+    const taskItem = new SprintDeskItem(taskPath);
+    taskItem.update(undefined, newData);
+    console.log(`✅ Task metadata updated using SprintDeskItem: ${taskPath}`);
+  } catch (error) {
+    console.error('❌ Failed to update task metadata with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    const parsed = matter(taskPath);
+    const updatedData = { ...parsed.data, ...newData };
+    const updatedContent = matter.stringify(parsed.content, updatedData);
+    fs.writeFileSync(taskPath, updatedContent, 'utf-8');
+  }
 }
 /** Update the content of a markdown file while preserving front-matter */
 export const updateTaskContent = (taskPath: string, newContent: string): void => {
-  // Read file and parse front-matter
-  const parsed = matter.read(taskPath);
-
-  // Update content while keeping existing front-matter
-  const updatedContent = matter.stringify(newContent, parsed.data);
-
-  // Write back to file
-  fs.writeFileSync(taskPath, updatedContent, 'utf-8');
+  // Use SprintDeskItem class to update content
+  try {
+    const taskItem = new SprintDeskItem(taskPath);
+    taskItem.update(newContent);
+    console.log(`✅ Task content updated using SprintDeskItem: ${taskPath}`);
+  } catch (error) {
+    console.error('❌ Failed to update task content with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    const parsed = matter.read(taskPath);
+    const updatedContent = matter.stringify(newContent, parsed.data);
+    fs.writeFileSync(taskPath, updatedContent, 'utf-8');
+  }
 };
 export const updateTaskSlugContent = (
   taskPath: string,

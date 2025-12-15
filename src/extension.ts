@@ -2,27 +2,34 @@ import * as vscode from "vscode";
 
 // webview
 import { getWebviewContent } from "./webview/getWebviewContent";
-// commands
-import {
-  registerAddSprintCommand,
-  registerAddExistingTasksToSprintCommand,
-  registerShowSprintCalendarCommand,
-  registerOpenSprintFileCommand,
-  registerAddTaskToBacklogCommand,
-  registerAddExistingTasksToBacklogCommand,
-  registerAddEpicCommand,
-  registerAddTaskToEpicCommand,
-  registerAddQuicklyCommand,
-  registerStartFeatureFromTaskCommand,
-  registerOpenWebviewCommand,
-  registerViewTasksCommand,
-  registerViewTaskPreviewCommand,
-  registerEditTaskRawCommand,
-  registerViewEpicsCommand,
-  registerViewBacklogsCommand,
-  addMultipleTasksCommand,
-  registerAddTaskCommand
-} from './commands';
+  // commands
+  import {
+    registerAddSprintCommand,
+    registerAddExistingTasksToSprintCommand,
+    registerShowSprintCalendarCommand,
+    registerOpenSprintFileCommand,
+    registerAddTaskToBacklogCommand,
+    registerAddExistingTasksToBacklogCommand,
+    registerAddEpicCommand,
+    registerAddTaskToEpicCommand,
+    registerAddQuicklyCommand,
+    registerStartFeatureFromTaskCommand,
+    registerOpenWebviewCommand,
+    registerViewTasksCommand,
+    registerViewTaskPreviewCommand,
+    registerEditTaskRawCommand,
+    registerViewEpicsCommand,
+    registerViewBacklogsCommand,
+    addMultipleTasksCommand,
+    registerAddTaskCommand
+  } from './commands';
+  // repository commands
+  import {
+    registerCreateTaskFromRepoCommand,
+    registerCreateEpicFromRepoCommand,
+    registerCreateSprintFromRepoCommand,
+    registerCreateBacklogFromRepoCommand
+  } from './commands';
 import { registerViewProjectStructureCommand } from "./commands/viewProjectStructure";
 import { registerViewProjectsCommand } from "./commands/viewProjects";
 import { registerRefreshCommand } from './commands/refreshCommand';
@@ -143,10 +150,16 @@ export async function activate(context: vscode.ExtensionContext) {
   registerScanProjectStructureCommand(context);
   registerAddSprintCommand(context, { createSprintInteractive });
   registerAddEpicCommand(context, { createEpicInteractive });
-  registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
   registerAddTaskToBacklogCommand(context, { addTaskToBacklogInteractive });
   registerAddExistingTasksToBacklogCommand(context, { addExistingTasksToBacklog });
   registerAddTaskToEpicCommand(context, { epicsProvider, tasksProvider });
+  registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
+  
+  // Register repository commands
+  registerCreateTaskFromRepoCommand(context, { repositoriesTreeView, tasksProvider, sprintsProvider, epicsProvider, backlogsProvider });
+  registerCreateEpicFromRepoCommand(context, { repositoriesTreeView, epicsProvider, tasksProvider, sprintsProvider, backlogsProvider });
+  registerCreateSprintFromRepoCommand(context, { repositoriesTreeView, sprintsProvider, tasksProvider, epicsProvider, backlogsProvider });
+  registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
   registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
   registerOpenSprintFileCommand(context);

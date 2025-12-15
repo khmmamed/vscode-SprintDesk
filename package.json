@@ -139,6 +139,22 @@
         "command": "sprintdesk.viewProjects",
         "title": "SprintDesk: Projects",
         "icon": "$(folder)"
+      },
+      {
+        "command": "sprintdesk.createTaskFromRepo",
+        "title": "SprintDesk: Create Task from Repository"
+      },
+      {
+        "command": "sprintdesk.createEpicFromRepo",
+        "title": "SprintDesk: Create Epic from Repository"
+      },
+      {
+        "command": "sprintdesk.createSprintFromRepo",
+        "title": "SprintDesk: Create Sprint from Repository"
+      },
+      {
+        "command": "sprintdesk.createBacklogFromRepo",
+        "title": "SprintDesk: Create Backlog from Repository"
       }
     ],
     "viewsContainers": {
@@ -188,15 +204,21 @@
           "when": "view == sprintdesk-sprints",
           "group": "navigation"
         },
+
+        {
+          "command": "sprintdesk.addEpic",
+          "when": "view == sprintdesk-epics",
+          "group": "navigation"
+        },
         {
           "command": "sprintdesk.addTask",
           "when": "view == sprintdesk-tasks",
           "group": "navigation@1"
         },
         {
-          "command": "sprintdesk.addEpic",
-          "when": "view == sprintdesk-epics",
-          "group": "navigation"
+          "command": "sprintdesk.addTask",
+          "when": "view == sprintdesk-repositories",
+          "group": "navigation@1"
         },
         {
           "command": "sprintdesk.refresh",
@@ -251,6 +273,26 @@
           "command": "sprintdesk.editTaskRaw",
           "when": "view == sprintdesk-tasks && viewItem == task",
           "group": "inline@1"
+        },
+        {
+          "command": "sprintdesk.createTaskFromRepo",
+          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "group": "create@1"
+        },
+        {
+          "command": "sprintdesk.createEpicFromRepo",
+          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "group": "create@2"
+        },
+        {
+          "command": "sprintdesk.createSprintFromRepo",
+          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "group": "create@3"
+        },
+        {
+          "command": "sprintdesk.createBacklogFromRepo",
+          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "group": "create@4"
         }
       ]
     }

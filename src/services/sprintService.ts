@@ -6,6 +6,7 @@ import insertTaskLinkUnderSection from '../utils/mdUtils';
 import { PROJECT_CONSTANTS, SPRINT_CONSTANTS, UI_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import { getSprintTasks } from '../controller/sprintController';
 import { relativePathTaskToTaskpath } from '../utils/taskUtils';
+import { SprintDeskItem } from '../utils/SprintDeskItem';
 interface TreeItemLike {
   label: string;
   collapsibleState: vscode.TreeItemCollapsibleState;
@@ -27,11 +28,35 @@ export function createSprint(nameParts: { d1: string; mo1: string; d2: string; m
   const sprintsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.SPRINTS_DIR);
   fs.mkdirSync(sprintsDir, { recursive: true });
   const filePath = path.join(sprintsDir, fileName);
+  
   if (!fs.existsSync(filePath)) {
-  const shortStart = `${d1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
-  const shortEnd = `${d2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
-  const content = `# ${UI_CONSTANTS.EMOJI.COMMON.CALENDAR} Sprint : ${shortStart} ➜ ${shortEnd}\n- **${UI_CONSTANTS.EMOJI.COMMON.LAST_UPDATE} Last update:** ${new Date().toISOString()}\n- **${UI_CONSTANTS.EMOJI.COMMON.TOTAL_TASKS} Total Tasks:** 0\n- **${UI_CONSTANTS.EMOJI.COMMON.PROGRESS} Progress:** ✅ [0/0] 🟩100%\n- **${UI_CONSTANTS.EMOJI.COMMON.SUMMARY} Summary:** \n\n## ${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} Tasks\n`;
-    fs.writeFileSync(filePath, content, 'utf8');
+    const shortStart = `${d1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
+    const shortEnd = `${d2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
+    const content = `# ${UI_CONSTANTS.EMOJI.COMMON.CALENDAR} Sprint : ${shortStart} ➜ ${shortEnd}\n- **${UI_CONSTANTS.EMOJI.COMMON.LAST_UPDATE} Last update:** ${new Date().toISOString()}\n- **${UI_CONSTANTS.EMOJI.COMMON.TOTAL_TASKS} Total Tasks:** 0\n- **${UI_CONSTANTS.EMOJI.COMMON.PROGRESS} Progress:** ✅ [0/0] 🟩100%\n- **${UI_CONSTANTS.EMOJI.COMMON.SUMMARY} Summary:** \n\n## ${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} Tasks\n`;
+    
+    // Use SprintDeskItem class to create sprint
+    try {
+      const sprintItem = new SprintDeskItem(filePath);
+      
+      // Create sprint file using SprintDeskItem
+      sprintItem.update(content, {
+        title: `Sprint : ${shortStart} ➜ ${shortEnd}`,
+        startDate: `${d1}${mo1}${yyyy}`,
+        endDate: `${d2}${mo2}${yyyy}`,
+        totalTasks: 0,
+        completedTasks: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      sprintItem.create();
+      
+      console.log(`✅ Sprint created successfully using SprintDeskItem: ${filePath}`);
+    } catch (error) {
+      console.error('❌ Failed to create sprint with SprintDeskItem, falling back to original method:', error);
+      
+      // Fallback to original method if SprintDeskItem fails
+      fs.writeFileSync(filePath, content, 'utf8');
+    }
   }
   return filePath;
 }

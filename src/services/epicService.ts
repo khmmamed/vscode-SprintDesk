@@ -13,6 +13,7 @@ import {
 import { getEpicTasks } from '../controller/epicController';
 import { relativePathTaskToTaskpath } from '../utils/taskUtils';
 import { generateEpicName } from '../utils/epicTemplate';
+import { SprintDeskItem } from '../utils/SprintDeskItem';
 
 // [vNext] : next file version v0.0.2
 
@@ -26,6 +27,8 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
   const _id = totalEpics === 0 ? 1 : totalEpics + 1;
   const epicBaseName = fileService.createEpicBaseName(title, _id);
   const epicName = epicBaseName+'.md'
+  const epicPath = path.join(fileService.getEpicsDir(ws), epicName);
+  
   const epicData: SprintDesk.EpicMetadata = {
     _id,
     title,
@@ -35,10 +38,28 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
     updatedAt: new Date().toISOString(),
     totalTasks: 0,
     completedTasks: 0,
-    path: fileService.createEpicRelativePath(epicBaseName)
+    path: epicPath
   }
-  // write epic file
-  fs.writeFileSync(path.join(fileService.getEpicsDir(ws), epicName), generateEpicTemplate(epicData), 'utf8');
+
+  // Use SprintDeskItem class to create epic
+  try {
+    const epicItem = new SprintDeskItem(epicPath);
+    
+    // Generate epic content using existing template
+    const epicContent = generateEpicTemplate(epicData);
+    
+    // Create epic file using SprintDeskItem
+    epicItem.update(epicContent, epicData);
+    epicItem.create();
+    
+    console.log(`✅ Epic created successfully using SprintDeskItem: ${epicPath}`);
+  } catch (error) {
+    console.error('❌ Failed to create epic with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method if SprintDeskItem fails
+    fs.writeFileSync(epicPath, generateEpicTemplate(epicData), 'utf8');
+  }
+  
   return epicData;
 }
 
@@ -65,8 +86,25 @@ export function createEpicFromMetadata(metadata: SprintDesk.EpicMetadata): strin
   const epicPath = path.join(epicsDir, epicName);
   
   if (!fs.existsSync(epicPath)) {
-    const content = generateEpicTemplate(metadata);
-    fs.writeFileSync(epicPath, content, 'utf8');
+    // Use SprintDeskItem class to create epic
+    try {
+      const epicItem = new SprintDeskItem(epicPath);
+      
+      // Generate epic content using existing template
+      const epicContent = generateEpicTemplate(metadata);
+      
+      // Create epic file using SprintDeskItem
+      epicItem.update(epicContent, metadata);
+      epicItem.create();
+      
+      console.log(`✅ Epic created successfully using SprintDeskItem: ${epicPath}`);
+    } catch (error) {
+      console.error('❌ Failed to create epic with SprintDeskItem, falling back to original method:', error);
+      
+      // Fallback to original method if SprintDeskItem fails
+      const content = generateEpicTemplate(metadata);
+      fs.writeFileSync(epicPath, content, 'utf8');
+    }
   }
   
   return epicPath;
@@ -101,13 +139,46 @@ export function createEpic(name: string): string {
   });
 }
 export function readEpic(filePath: string): string {
-  return fs.readFileSync(filePath, 'utf8');
+  // Use SprintDeskItem class to read epic content
+  try {
+    const epicItem = new SprintDeskItem(filePath);
+    return epicItem.getContent();
+  } catch (error) {
+    console.error('❌ Failed to read epic with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    return fs.readFileSync(filePath, 'utf8');
+  }
 }
+
 export function updateEpic(filePath: string, content: string) {
-  fs.writeFileSync(filePath, content, 'utf8');
+  // Use SprintDeskItem class to update epic content
+  try {
+    const epicItem = new SprintDeskItem(filePath);
+    epicItem.update(content);
+    console.log(`✅ Epic content updated using SprintDeskItem: ${filePath}`);
+  } catch (error) {
+    console.error('❌ Failed to update epic with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method
+    fs.writeFileSync(filePath, content, 'utf8');
+  }
 }
+
 export function deleteEpic(filePath: string) {
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  if (fs.existsSync(filePath)) {
+    // Use SprintDeskItem class to delete epic
+    try {
+      const epicItem = new SprintDeskItem(filePath);
+      epicItem.delete();
+      console.log(`✅ Epic deleted using SprintDeskItem: ${filePath}`);
+    } catch (error) {
+      console.error('❌ Failed to delete epic with SprintDeskItem, falling back to original method:', error);
+      
+      // Fallback to original method
+      fs.unlinkSync(filePath);
+    }
+  }
 }
 export function addTaskToEpic(epicTitle: string, taskName: string) {
   const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

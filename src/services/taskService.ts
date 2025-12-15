@@ -5,9 +5,12 @@ import * as fileService from './fileService';
 import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 import * as epicController from '../controller/epicController';
 import * as taskController from '../controller/taskController';
+import { SprintDeskItem } from '../utils/SprintDeskItem';
 
 import {
   generateTaskFile,
+  generateTaskMetadata,
+  generateTaskContent,
   generateTaskTemplate,
 } from '../utils/taskTemplate';
 import { title } from 'process';
@@ -23,6 +26,7 @@ export async function createTask(ws: string, taskMetadata: SprintDesk.TaskMetada
   const _id = totalTasks === 0 ? 1 : totalTasks + 1;
   const taskBaseName = fileService.createTaskBaseName(taskMetadata.title, _id);
   const taskName = taskBaseName + '.md'
+  const taskPath = path.join(tasksDir, taskName);
 
   const taskData: SprintDesk.TaskMetadata = {
     _id,
@@ -34,12 +38,34 @@ export async function createTask(ws: string, taskMetadata: SprintDesk.TaskMetada
     assignee: taskMetadata.assignee || '',
     status: taskMetadata.status || 'waiting',
     priority: taskMetadata.priority || 'medium',
-    path: fileService.createTaskRelativePath(taskBaseName),
+    path: taskPath, // Use absolute path for TaskTreeItem
+    relativePath: fileService.createTaskRelativePath(taskBaseName), // Keep relative path for reference
+    epic: taskMetadata.epic, // Include epic if provided
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   }
-  // write epic file
-  fs.writeFileSync(path.join(tasksDir, taskName), generateTaskTemplate(taskData), 'utf8');
+
+  // Use SprintDeskItem class to create the task
+  try {
+    // Generate the task content using existing template
+    const taskContent = generateTaskMetadata(taskData) + '\n\n' + generateTaskContent(taskData);
+    
+    // First write the file directly since SprintDeskItem expects file to exist for parsing
+    fs.writeFileSync(taskPath, taskContent, 'utf8');
+    
+    // Now create SprintDeskItem instance and ensure metadata is properly set
+    const taskItem = new SprintDeskItem(taskPath);
+    
+    // Ensure the path is set correctly in metadata
+    taskItem.updateMetadata({ path: taskPath });
+    
+    console.log(`✅ Task created successfully using SprintDeskItem: ${taskPath}`);
+  } catch (error) {
+    console.error('❌ Failed to create task with SprintDeskItem, falling back to original method:', error);
+    
+    // Fallback to original method if SprintDeskItem fails
+    fs.writeFileSync(taskPath, generateTaskTemplate(taskData), 'utf8');
+  }
 
   return taskData;
 }
@@ -71,7 +97,19 @@ export function updateTask(filePath: string, content: string) {
 }
 
 export function deleteTask(filePath: string) {
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  if (fs.existsSync(filePath)) {
+    // Use SprintDeskItem class to delete task
+    try {
+      const taskItem = new SprintDeskItem(filePath);
+      taskItem.delete();
+      console.log(`✅ Task deleted using SprintDeskItem: ${filePath}`);
+    } catch (error) {
+      console.error('❌ Failed to delete task with SprintDeskItem, falling back to original method:', error);
+      
+      // Fallback to original method
+      fs.unlinkSync(filePath);
+    }
+  }
 }
 
 export function readTasks(ws: string): string[] {

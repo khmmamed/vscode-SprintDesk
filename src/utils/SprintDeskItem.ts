@@ -65,8 +65,15 @@ export class SprintDeskItem {
   constructor(filePath: string) {
     this.filePath = filePath;
     this.itemType = this.detectItemType();
-    this.content = readFileSyncSafe(filePath);
-    this.metadata = this.parseMetadata();
+    
+    // Handle case where file doesn't exist yet
+    if (fileExists(filePath)) {
+      this.content = readFileSyncSafe(filePath);
+      this.metadata = this.parseMetadata();
+    } else {
+      this.content = '';
+      this.metadata = {};
+    }
   }
 
   private detectItemType(): ItemType {
@@ -88,7 +95,7 @@ export class SprintDeskItem {
     }
   }
 
-  private updateMetadata(newMetadata: any): void {
+  public updateMetadata(newMetadata: any): void {
     try {
       const updatedMetadata = { ...this.metadata, ...newMetadata };
       const parsed = matter(this.content);
@@ -113,6 +120,13 @@ export class SprintDeskItem {
   // CRUD Operations
   public create(): void {
     if (!fileExists(this.filePath)) {
+      // For new files, ensure we have basic metadata
+      if (!this.metadata || Object.keys(this.metadata).length === 0) {
+        this.metadata = {
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      }
       this.save();
     } else {
       throw new Error(`File already exists: ${this.filePath}`);
