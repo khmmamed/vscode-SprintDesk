@@ -145,15 +145,22 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(repositoriesTreeView);
 
   // Register delegated commands (one file per command)
+  registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
   registerScanProjectStructureCommand(context);
   registerAddSprintCommand(context, { createSprintInteractive });
-  registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
   registerAddEpicCommand(context, { createEpicInteractive });
   registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
 registerAddBacklogCommand(context, { createBacklogInteractive });
   registerAddTaskToBacklogCommand(context, { addTaskToBacklogInteractive });
   registerAddExistingTasksToBacklogCommand(context, { addExistingTasksToBacklog });
   registerAddTaskToEpicCommand(context, { epicsProvider, tasksProvider });
+  registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
+  
+  // Register repository commands
+  registerCreateTaskFromRepoCommand(context, { repositoriesTreeView, tasksProvider, sprintsProvider, epicsProvider, backlogsProvider });
+  registerCreateEpicFromRepoCommand(context, { repositoriesTreeView, epicsProvider, tasksProvider, sprintsProvider, backlogsProvider });
+  registerCreateSprintFromRepoCommand(context, { repositoriesTreeView, sprintsProvider, tasksProvider, epicsProvider, backlogsProvider });
+  registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
   registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
 registerOpenSprintFileCommand(context);

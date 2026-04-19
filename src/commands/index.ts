@@ -8,7 +8,6 @@ export * from './backlogCommands/addBacklogCommand'
 export * from './backlogCommands/addExistingTasksToBacklogCommand'
 export * from './backlogCommands/addTaskToBacklogCommand'
 export * from './backlogCommands/viewBacklogs'
-
 // epic commands
 export * from './epicCommands/addEpicCommand'
 export * from './epicCommands/addTaskToEpicCommand'

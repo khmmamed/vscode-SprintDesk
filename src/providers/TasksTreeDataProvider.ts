@@ -5,6 +5,7 @@ import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import * as taskController from '../controller/taskController';
 import * as fileService from '../services/fileService';
+import { SprintDeskItem } from '../utils/SprintDeskItem';
 interface TaskData {
   _id: string;
   title: string;
@@ -39,6 +40,8 @@ export class TaskTreeItem extends vscode.TreeItem {
     let resourceFsPath: string | undefined = undefined;
     if (absoluteFilePath) {
       resourceFsPath = absoluteFilePath;
+    } else if (taskData.path) {
+      resourceFsPath = taskData.path;
     } else {
       const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
       try {
@@ -185,18 +188,39 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
       return taskFiles.map(file => {
 
         try {
-          const { data } = matter.read(file);
-
-          // Create structured task data
-          const taskData = {
-            _id: data._id,
-            title: data.title,
-            type: data.type,
-            status: data.status || 'not-started',
-            priority: data.priority || 'low',
-            epic: data.epic,
-            path: data.path
-          };
+          // Use SprintDeskItem class to read task data
+          let taskData: any;
+          
+          try {
+            const taskItem = new SprintDeskItem(file);
+            const metadata = taskItem.getMetadata();
+            
+            taskData = {
+              _id: metadata._id,
+              title: metadata.title,
+              type: metadata.type,
+              status: metadata.status || 'not-started',
+              priority: metadata.priority || 'low',
+              epic: metadata.epic,
+              path: metadata.path || file // Use absolute file path if metadata.path is undefined
+            };
+            
+            console.log(`✅ Task data read using SprintDeskItem: ${file}`);
+          } catch (sprintDeskError) {
+            console.error('❌ Failed to read task data with SprintDeskItem, falling back to original method:', sprintDeskError);
+            
+            // Fallback to original method
+            const { data } = matter.read(file);
+            taskData = {
+              _id: data._id,
+              title: data.title,
+              type: data.type,
+              status: data.status || 'not-started',
+              priority: data.priority || 'low',
+              epic: data.epic,
+              path: data.path || file // Use absolute file path if data.path is undefined
+            };
+          }
 
           // Create TreeItem with taskData and pass the absolute file path so
           // the item can open the correct file when clicked.
