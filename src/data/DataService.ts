@@ -421,8 +421,9 @@ export class DataService {
     return (title || '')
       .toString()
       .trim()
+      .toLowerCase()
       .replace(/\s+/g, '-')
-      .replace(/[^A-Za-z0-9\-]/g, '')
+      .replace(/[^a-z0-9\-]/g, '')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
   }
@@ -483,8 +484,8 @@ export class DataService {
     const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
     const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
     const filename = pattern
-      .replace('${taskNumber}', taskNumber)
-      .replace('${tasktitle}', taskTitleSlug);
+      .replace(/\$\{tasknumber\}/ig, taskNumber)
+      .replace(/\$\{tasktitle\}/ig, taskTitleSlug);
 
     const newFilePath = path.join(tasksDir, filename);
     const oldFilePath = path.join(tasksDir, `${task.id}.md`);
