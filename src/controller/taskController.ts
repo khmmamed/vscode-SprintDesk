@@ -115,31 +115,31 @@ export async function createTask(ws?: string) {
     ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
 
-  // Get epic first
-  const epic = await epicController.handleEpicInputsController(ws);
-
-  if (!epic) {
-    vscode.window.showWarningMessage('No epic selected. Task will be created without an epic.');
-    return;
-  }
-
-  // Get task inputs with epic context
-  const task = await handleTaskInputsController(ws, epic);
+  // Get task inputs first (create task without epic)
+  const task = await handleTaskInputsController(ws, undefined);
 
   if (!task) {
     vscode.window.showWarningMessage('Task creation was cancelled or failed.');
     return;
   }
+
+  // Then prompt/select/create epic to attach (optional)
+  const epic = await epicController.handleEpicInputsController(ws);
+
   // attach epic to task via TaskService (updates YAML + md)
   try {
-    taskService.updateTask(task.id, { epic: epic!.title });
+    if (epic && epic.title) {
+      taskService.updateTask(task.id, { epic: epic.title });
+    }
   } catch (err) {
     console.error('Failed to update task with epic via taskService:', err);
   }
 
   // add task to epic (update epic file)
   try {
-    epicController.addTaskToEpic(epic!.path!, task!.path!, ws);
+    if (epic && epic.path) {
+      epicController.addTaskToEpic(epic.path!, task.path!, ws);
+    }
   } catch (err) {
     console.error('Failed to add task to epic file:', err);
   }
