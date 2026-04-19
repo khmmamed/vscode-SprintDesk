@@ -32,14 +32,20 @@ export function getSprintPath(sprintName: string): string {
 }
 
 export function getSprintMetadata(sprintName: string): { [key: string]: any; } {
-  const sprintPath = getSprintPath(sprintName);
-  const { data } = matter.read(sprintPath);
-  return data;
+  const ws = fileService.getWorkspaceRoot();
+  const dataService = getDataService(ws);
+  const sprint = dataService.getSprint(sprintName);
+  return sprint || {};
 }
 
 export function getSprintContent(sprintFile: string): { [key: string]: any; } {
-  const { data } = matter.read(sprintFile);
-  return data;
+  try {
+    const matter = require('gray-matter');
+    const parsed = matter.read(sprintFile);
+    return parsed?.data || {};
+  } catch (e) {
+    return {};
+  }
 }
 
 export function getSprintDescription(sprintName: string): string {
@@ -62,8 +68,8 @@ export function addTaskToSprint(sprintPath: string, taskPath: string): void {
   try {
     const ws = fileService.getWorkspaceRoot();
     const dataService = getDataService(ws);
-    const sprintId = path.basename(sprintPath, path.extname(sprintPath));
-    const taskId = path.basename(taskPath, path.extname(taskPath));
+    const sprintId = path.basename(String(sprintPath), path.extname(String(sprintPath)));
+    const taskId = path.basename(String(taskPath), path.extname(String(taskPath)));
 
     const sprint = dataService.getSprint(sprintId);
     if (!sprint) {
@@ -106,8 +112,8 @@ export function removeTaskFromSprint(sprintPath: string, taskPath: string): void
   try {
     const ws = fileService.getWorkspaceRoot();
     const dataService = getDataService(ws);
-    const sprintId = path.basename(sprintPath, path.extname(sprintPath));
-    const taskId = path.basename(taskPath, path.extname(taskPath));
+    const sprintId = path.basename(String(sprintPath), path.extname(String(sprintPath)));
+    const taskId = path.basename(String(taskPath), path.extname(String(taskPath)));
 
     const sprint = dataService.getSprint(sprintId);
     if (!sprint) {
