@@ -428,6 +428,17 @@ export class DataService {
       .replace(/^-|-$/g, '');
   }
 
+  private getTaskFilename(task: Task): string {
+    const cfg = vscode.workspace.getConfiguration('sprintdesk');
+    const pattern = cfg.get<string>('taskNamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
+    const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
+    const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
+    const filename = pattern
+      .replace(/\$\{tasknumber\}/ig, taskNumber)
+      .replace(/\$\{tasktitle\}/ig, taskTitleSlug);
+    return filename;
+  }
+
   private generateBacklogMd(backlog: Backlog, tasks: Task[]): string {
     let md = `# 📒 Backlog: ${backlog.name}\n`;
     md += `- **Last update:** ${new Date().toISOString()}\n`;
@@ -436,7 +447,8 @@ export class DataService {
     md += `## 📋 Tasks\n`;
     for (const task of tasks) {
       const statusEmoji = task.status === 'done' ? '✅' : task.status === 'in-progress' ? '🔄' : '⏳';
-      md += `- ${statusEmoji} [${task.title}](../Tasks/${task.id}.md) ${task.status}\n`;
+      const fname = this.getTaskFilename(task);
+      md += `- ${statusEmoji} [${task.title}](../Tasks/${fname}) ${task.status}\n`;
     }
 
     return md;
@@ -452,7 +464,8 @@ export class DataService {
     md += `## 🧱 Tasks\n`;
     for (const task of tasks) {
       const taskStatusEmoji = task.status === 'done' ? '✅' : task.status === 'in-progress' ? '🔄' : '⏳';
-      md += `- ${taskStatusEmoji} [${task.title}](../Tasks/${task.id}.md)\n`;
+      const fname = this.getTaskFilename(task);
+      md += `- ${taskStatusEmoji} [${task.title}](../Tasks/${fname})\n`;
     }
 
     return md;
@@ -468,7 +481,8 @@ export class DataService {
     md += `## 📋 Tasks\n`;
     for (const task of tasks) {
       const taskStatusEmoji = task.status === 'done' ? '✅' : task.status === 'in-progress' ? '🔄' : '⏳';
-      md += `- ${taskStatusEmoji} [${task.title}](../Tasks/${task.id}.md) ${task.status}\n`;
+      const fname = this.getTaskFilename(task);
+      md += `- ${taskStatusEmoji} [${task.title}](../Tasks/${fname}) ${task.status}\n`;
     }
 
     return md;
