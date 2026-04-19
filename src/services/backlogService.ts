@@ -13,7 +13,9 @@ import { getBacklogTasks } from '../controller/backlogController';
 import { relativePathTaskToTaskpath } from '../utils/taskUtils';
 import { BACKLOG_CONSTANTS } from '../utils/constant';
 import { getDataService } from '../data/DataService';
+import * as taskService from './taskService';
 import { Backlog } from '../data/types';
+import { SprintDeskItem } from '../utils/SprintDeskItem';
 
 export async function createBacklogInteractive(): Promise<void> {
   const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -303,17 +305,69 @@ export async function addExistingTasksToBacklog(item: any) {
   if (!picked || picked.length === 0) return;
 
   try {
-    let content = fs.readFileSync(backlogFile, 'utf8');
-    for (const p of picked) {
-      const linkTitle = p.label.trim().replace(/\s+/g, '-').toLowerCase();
-      const tasksFolder = path.basename((p as any).data.dir || path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR));
-      const link = `- ${TASK_CONSTANTS.LINK_MARKER} [${linkTitle}](../${tasksFolder}/${(p as any).data.file}) ${TASK_CONSTANTS.STATUS.WAITING}`;
-      content = insertTaskLinkUnderSection(content, UI_CONSTANTS.SECTIONS.TASKS, link);
+    const dataService = getDataService(ws);
+    const backlogId = path.basename(backlogFile, PROJECT_CONSTANTS.MD_FILE_EXTENSION);
+    const backlog = dataService.getBacklog(backlogId);
+    if (!backlog) { vscode.window.showErrorMessage('Backlog not found in data store.'); return; }
+
+    const allTasks = dataService.loadTasks();
+
+    for (const pickedItem of picked) {
+      const { dir, file } = (pickedItem as any).data as { dir: string; file: string };
+      const abs = path.join(dir, file);
+      const fileText = fileService.readFileSyncSafe(abs);
+      const tm = require('gray-matter')(fileText);
+      const taskId = tm.data._id || tm.data.id || path.basename(file, PROJECT_CONSTANTS.MD_FILE_EXTENSION);
+
+      // ensure task exists in YAML tasks; if not, try to add minimal entry
+      let taskObj = dataService.getTask(taskId);
+      if (!taskObj) {
+        // attempt to create task via taskService
+        try {
+          const created = await taskService.createTask(ws, { title: tm.data.title || path.basename(file, PROJECT_CONSTANTS.MD_FILE_EXTENSION) });
+          taskObj = created as any;
+        } catch {
+          // fallback: push minimal object into data
+          const generatedId = dataService.generateId('task');
+          const t: any = {
+            id: generatedId,
+            code: generatedId,
+            title: tm.data.title || path.basename(file, PROJECT_CONSTANTS.MD_FILE_EXTENSION),
+            type: tm.data.type || 'feature',
+            status: tm.data.status || 'waiting',
+            priority: tm.data.priority || 'medium',
+            epic: tm.data.epic || null,
+            backlog: backlogId,
+            sprint: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            path: `../${PROJECT_CONSTANTS.TASKS_DIR}/${file}`
+          };
+          dataService.addTask(t);
+          dataService.saveTaskMd(t);
+          taskObj = t;
+        }
+      }
+
+      if (!taskObj) continue; // narrow for TypeScript
+
+      // add task id to backlog if missing
+      if (!backlog.tasks.includes(taskObj.id)) {
+        backlog.tasks.push(taskObj.id);
+      }
+
+      // update task.backlog field and persist
+      dataService.updateTask(taskObj.id, { backlog: backlogId });
+      dataService.saveTaskMd(taskObj as any);
     }
-    fs.writeFileSync(backlogFile, content, 'utf8');
+
+    dataService.updateBacklog(backlog.id, { tasks: backlog.tasks });
+    dataService.saveBacklogMd(backlog);
+
     vscode.window.showInformationMessage('Tasks added to backlog.');
-  } catch {
-    vscode.window.showErrorMessage('Failed to update backlog file.');
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage('Failed to update backlog.');
   }
 }
 export async function addTaskToBacklogInteractive(item: any) {
@@ -334,27 +388,46 @@ export async function addTaskToBacklogInteractive(item: any) {
   if (epicName) fileName += `_${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}`;
   fileName += PROJECT_CONSTANTS.MD_FILE_EXTENSION;
 
-  const taskPath = path.join(tasksDir, fileName);
-  if (!fs.existsSync(taskPath)) {
-    const template = `---\n_id: ${PROJECT_CONSTANTS.ID_PREFIX.TASK}${taskName.replace(/\s+/g, '-').toLowerCase()}\nname: ${taskName.replace(/\s+/g, '-').toLowerCase()}\n---\n\n# 🧩 Task: ${taskName}\n`;
-    fs.writeFileSync(taskPath, template, 'utf8');
-  }
-
-  if (epicName) {
-    const epicFile = path.join(epicsDir, `${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicName.replace(/\s+/g, '-')}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`);
-    let epicContent = fileService.readFileSyncSafe(epicFile) || `# Epic: ${epicName}\n`;
-      const taskLink = `- ${TASK_CONSTANTS.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT_CONSTANTS.TASKS_DIR}/${fileName})`;
-    epicContent = insertTaskLinkUnderSection(epicContent, UI_CONSTANTS.SECTIONS.TASKS.toLowerCase(), taskLink);
-    fs.writeFileSync(epicFile, epicContent, 'utf8');
-  }
-
+  // create task via taskService so YAML and MD are consistent
   try {
-    let backlogContent = fs.readFileSync(backlogFile, 'utf8');
-    const taskLink = `- ${TASK_CONSTANTS.LINK_MARKER} [${taskName.replace(/\s+/g, '-').toLowerCase()}](../${PROJECT_CONSTANTS.TASKS_DIR}/${fileName})`;
-    backlogContent = insertTaskLinkUnderSection(backlogContent, UI_CONSTANTS.SECTIONS.TASKS, taskLink);
-    fs.writeFileSync(backlogFile, backlogContent, 'utf8');
+    const createdTask = await taskService.createTask(ws, {
+      title: taskName,
+      type: 'feature',
+      status: 'waiting',
+      priority: 'medium',
+      epic: epicName || null
+    });
+
+    const dataService = getDataService(ws);
+    const backlogId = path.basename(backlogFile, PROJECT_CONSTANTS.MD_FILE_EXTENSION);
+    const backlog = dataService.getBacklog(backlogId);
+    if (!backlog) { vscode.window.showErrorMessage('Backlog not found.'); return; }
+
+    if (!backlog.tasks.includes(createdTask.id)) {
+      backlog.tasks.push(createdTask.id);
+    }
+
+    dataService.updateBacklog(backlog.id, { tasks: backlog.tasks });
+    dataService.saveBacklogMd(backlog);
+
+    // ensure task has backlog assigned and md updated
+    dataService.updateTask(createdTask.id, { backlog: backlogId });
+    dataService.saveTaskMd(createdTask as any);
+
+    // if epic provided, update epic via DataService
+    if (epicName) {
+      const epics = dataService.loadEpics();
+      const epic = epics.find(e => e.name === epicName || e.id === epicName);
+      if (epic && !epic.tasks.includes(createdTask.id)) {
+        epic.tasks.push(createdTask.id);
+        dataService.updateEpic(epic.id, { tasks: epic.tasks });
+        dataService.saveEpicMd(epic);
+      }
+    }
+
     vscode.window.showInformationMessage('Task added to backlog.');
   } catch (e) {
-    vscode.window.showErrorMessage('Failed to update backlog file.');
+    console.error(e);
+    vscode.window.showErrorMessage('Failed to add task to backlog.');
   }
 }

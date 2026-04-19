@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from './fileService';
+import { getDataService } from '../data/DataService';
+import * as taskService from './taskService';
 import insertTaskLinkUnderSection from '../utils/mdUtils';
 import { PROJECT_CONSTANTS, SPRINT_CONSTANTS, UI_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import { getSprintTasks } from '../controller/sprintController';
@@ -24,41 +26,26 @@ export function createSprint(nameParts: { d1: string; mo1: string; d2: string; m
   const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!ws) throw new Error('No workspace');
   const { d1, mo1, d2, mo2, yy, yyyy } = nameParts;
-  const fileName = `${PROJECT_CONSTANTS.FILE_PREFIX.SPRINT}${d1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo1}${SPRINT_CONSTANTS.SEPARATOR.DURATION}${d2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo2}${SPRINT_CONSTANTS.SEPARATOR.DURATION}${yyyy}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
-  const sprintsDir = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.SPRINTS_DIR);
-  fs.mkdirSync(sprintsDir, { recursive: true });
-  const filePath = path.join(sprintsDir, fileName);
-  
-  if (!fs.existsSync(filePath)) {
-    const shortStart = `${d1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
-    const shortEnd = `${d2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
-    const content = `# ${UI_CONSTANTS.EMOJI.COMMON.CALENDAR} Sprint : ${shortStart} ➜ ${shortEnd}\n- **${UI_CONSTANTS.EMOJI.COMMON.LAST_UPDATE} Last update:** ${new Date().toISOString()}\n- **${UI_CONSTANTS.EMOJI.COMMON.TOTAL_TASKS} Total Tasks:** 0\n- **${UI_CONSTANTS.EMOJI.COMMON.PROGRESS} Progress:** ✅ [0/0] 🟩100%\n- **${UI_CONSTANTS.EMOJI.COMMON.SUMMARY} Summary:** \n\n## ${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} Tasks\n`;
-    
-    // Use SprintDeskItem class to create sprint
-    try {
-      const sprintItem = new SprintDeskItem(filePath);
-      
-      // Create sprint file using SprintDeskItem
-      sprintItem.update(content, {
-        title: `Sprint : ${shortStart} ➜ ${shortEnd}`,
-        startDate: `${d1}${mo1}${yyyy}`,
-        endDate: `${d2}${mo2}${yyyy}`,
-        totalTasks: 0,
-        completedTasks: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-      sprintItem.create();
-      
-      console.log(`✅ Sprint created successfully using SprintDeskItem: ${filePath}`);
-    } catch (error) {
-      console.error('❌ Failed to create sprint with SprintDeskItem, falling back to original method:', error);
-      
-      // Fallback to original method if SprintDeskItem fails
-      fs.writeFileSync(filePath, content, 'utf8');
-    }
-  }
-  return filePath;
+  const shortStart = `${d1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
+  const shortEnd = `${d2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
+
+  const dataService = getDataService(ws);
+  const sprintId = dataService.generateId('sprint');
+  const sprint: any = {
+    id: sprintId,
+    name: `Sprint : ${shortStart} ➜ ${shortEnd}`,
+    startDate: `${d1}${mo1}${yyyy}`,
+    endDate: `${d2}${mo2}${yyyy}`,
+    status: 'planned',
+    tasks: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  dataService.addSprint(sprint);
+  dataService.saveSprintMd(sprint);
+
+  return path.join(fileService.getSprintsDir(ws), `${sprint.id}.md`);
 }
 
 export async function createSprintInteractive() {
@@ -101,17 +88,45 @@ export async function addExistingTasksToSprint(item: any) {
   if (!picked || picked.length === 0) return;
 
   try {
-    let sprintContent = fs.readFileSync(sprintFile, 'utf8');
+    const dataService = getDataService(ws);
+    const sprintId = path.basename(sprintFile, PROJECT_CONSTANTS.MD_FILE_EXTENSION);
+    const sprint = dataService.getSprint(sprintId);
+    if (!sprint) { vscode.window.showErrorMessage('Sprint not found in data store.'); return; }
+
+    const allTasks = dataService.loadTasks();
+
     for (const p of picked) {
-      const linkTitle = p.label.trim().replace(/\s+/g, '-').toLowerCase();
-  const tasksFolder = path.basename((p as any).dir || path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.TASKS_DIR));
-  const link = `- ${TASK_CONSTANTS.LINK_MARKER} [${linkTitle}](../${tasksFolder}/${p.file}) ${TASK_CONSTANTS.STATUS.WAITING}`;
-  sprintContent = insertTaskLinkUnderSection(sprintContent, UI_CONSTANTS.SECTIONS.TASKS, link);
+      const abs = path.join(p.dir, p.file);
+      const fileText = fileService.readFileSyncSafe(abs);
+      const tm = require('gray-matter')(fileText);
+      const taskId = tm.data._id || tm.data.id || path.basename(p.file, PROJECT_CONSTANTS.MD_FILE_EXTENSION);
+
+      // ensure task exists in YAML; if not create via taskService
+      let taskObj = dataService.getTask(taskId);
+      if (!taskObj) {
+        try {
+          const created = await taskService.createTask(ws, { title: tm.data.title || path.basename(p.file, PROJECT_CONSTANTS.MD_FILE_EXTENSION) });
+          taskObj = created as any;
+        } catch {
+          continue;
+        }
+      }
+
+      if (!taskObj) continue; // narrow type for TypeScript
+
+      if (!sprint.tasks.includes(taskObj.id)) sprint.tasks.push(taskObj.id);
+
+      dataService.updateTask(taskObj.id, { sprint: sprint.id });
+      dataService.saveTaskMd(taskObj as any);
     }
-    fs.writeFileSync(sprintFile, sprintContent, 'utf8');
+
+    dataService.updateSprint(sprint.id, { tasks: sprint.tasks });
+    dataService.saveSprintMd(sprint);
+
     vscode.window.showInformationMessage('Tasks added to sprint.');
-  } catch {
-    vscode.window.showErrorMessage('Failed to update sprint file.');
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage('Failed to update sprint.');
   }
 }
 
@@ -144,16 +159,31 @@ export async function startFeatureFromTask(item: any) {
         updated = `${text}\n\n- **🟢 Started:** ${dateStr}\n`;
       }
       await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(updated));
+      // update YAML source of truth
+      try {
+        const dataService = getDataService(workspaceRoot);
+        const tm = require('gray-matter')(updated);
+        const taskId = tm.data._id || tm.data.id || undefined;
+        if (taskId) {
+          dataService.updateTask(taskId, { status: 'in-progress' });
+          const taskObj = dataService.getTask(taskId);
+          if (taskObj) dataService.saveTaskMd(taskObj);
+        }
+      } catch (e) { console.error('Failed to sync task status to YAML', e); }
     }
 
     if (sprintFilePath && item?.taskSlug) {
-      const sUri = vscode.Uri.file(sprintFilePath);
-      const sBytes = await vscode.workspace.fs.readFile(sUri);
-      let sprintText = Buffer.from(sBytes).toString('utf8');
-      const linkTitle = item.taskSlug.replace(/\s+/g, '-').toLowerCase();
-      const link = `- 📌 [${linkTitle}](../tasks/${item?.taskFileName || item?.taskFilePath?.split('\\').pop()}) ✅ [in progress]`;
-      sprintText = insertTaskLinkUnderSection(sprintText, 'Tasks', link);
-      await vscode.workspace.fs.writeFile(sUri, new TextEncoder().encode(sprintText));
+      try {
+        const dataService = getDataService(workspaceRoot);
+        const sprintId = path.basename(sprintFilePath, PROJECT_CONSTANTS.MD_FILE_EXTENSION);
+        const sprint = dataService.getSprint(sprintId);
+        if (sprint && item?.taskFileName) {
+          const taskId = item.taskSlug || path.basename(item.taskFileName, PROJECT_CONSTANTS.MD_FILE_EXTENSION);
+          if (!sprint.tasks.includes(taskId)) sprint.tasks.push(taskId);
+          dataService.updateSprint(sprint.id, { tasks: sprint.tasks });
+          dataService.saveSprintMd(sprint);
+        }
+      } catch (e) { console.error('Failed to sync sprint from task start', e); }
     }
   } catch (e) {
     vscode.window.showErrorMessage('Failed to start feature from task.');

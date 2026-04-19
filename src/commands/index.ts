@@ -25,3 +25,8 @@ export * from './webviewCommands/openWebview'
 
 // settings
 export * from './settingsCommands/openSettings'
+// repository import helpers (commands living in repositoryCommands/)
+export * from './repositoryCommands/createTaskFromRepoCommand'
+export * from './repositoryCommands/createEpicFromRepoCommand'
+export * from './repositoryCommands/createSprintFromRepoCommand'
+export * from './repositoryCommands/createBacklogFromRepoCommand'

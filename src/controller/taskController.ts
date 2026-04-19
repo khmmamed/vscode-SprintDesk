@@ -97,16 +97,12 @@ export async function handleTaskInputsController(ws?: string, epic?: SprintDesk.
     const assignee = await promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
 
     // create task and get metadata
-const task = await taskService.createTask(ws, {
+    const task = await taskService.createTask(ws, {
       title: taskTitle,
       type: type.value as SprintDesk.TaskType,
       priority: priority.value as SprintDesk.Priority,
       status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
-      epic: epic ? {
-        _id: epic._id,
-        title: epic.title,
-        path: epic.path
-      } : undefined
+      epic: epic ? epic.title : undefined
     });
 
     return task;
