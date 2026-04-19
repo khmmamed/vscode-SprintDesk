@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSprintsPath } from '../utils/backlogUtils';
-import matter from 'gray-matter';
 import { UI_CONSTANTS } from '../utils/constant';
+import { getDataService } from '../data/DataService';
+import * as fileService from '../services/fileService';
 
 interface ITask {
   _id: string;
@@ -58,69 +59,78 @@ export function getSprintTotalTasks(sprintName: string): number {
 
 /* Tasks Operations */
 export function addTaskToSprint(sprintPath: string, taskPath: string): void {
-  const { data: taskMetadata } = matter.read(taskPath);
-  const { data: sprintMetadata, content: sprintContent } = matter.read(sprintPath);
+  try {
+    const ws = fileService.getWorkspaceRoot();
+    const dataService = getDataService(ws);
+    const sprintId = path.basename(sprintPath, path.extname(sprintPath));
+    const taskId = path.basename(taskPath, path.extname(taskPath));
 
-  const existingTaskIndex = sprintMetadata.tasks ?
-    sprintMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
-  if (existingTaskIndex === -1) {
-    // Add task to markdown section
-    const tasksSectionMarker = UI_CONSTANTS.SECTIONS.TASKS_MARKER;
-    let content = sprintContent;
-    if (!content.includes(tasksSectionMarker)) {
-      content += `\n\n${tasksSectionMarker}\n`;
+    const sprint = dataService.getSprint(sprintId);
+    if (!sprint) {
+      console.warn('Sprint not found in data store:', sprintId);
+      return;
     }
-    const taskPathFormatted = path.relative(path.dirname(sprintPath), taskPath).replace(/\\/g, '/');
-    const taskLink = `- [${taskMetadata.title || taskMetadata.name}](${taskPathFormatted})`;
-    const tasksIndex = content.indexOf(tasksSectionMarker);
 
-    if (tasksIndex !== -1) {
-      content = content.slice(0, tasksIndex + tasksSectionMarker.length) +
-        '\n' + taskLink +
-        content.slice(tasksIndex + tasksSectionMarker.length);
+    // ensure task exists in data; if not, try to read frontmatter for metadata
+    let taskObj = dataService.getTask(taskId);
+    if (!taskObj && fs.existsSync(taskPath)) {
+      const matter = require('gray-matter');
+      const tm = matter.read(taskPath);
+      const tid = tm.data?._id || tm.data?.id || taskId;
+      taskObj = dataService.getTask(tid) || { id: tid, title: tm.data?.title || path.basename(taskPath) } as any;
     }
-    // Add task to YAML frontmatter
-    const task = {
-      _id: taskMetadata._id,
-      title: taskMetadata.title || taskMetadata.name,
-      priority: taskMetadata.priority || 'Medium',
-      status: taskMetadata.status || 'Not Started',
-      path: taskPathFormatted
-    };
 
-    if (!sprintMetadata.tasks) {
-      sprintMetadata.tasks = [task];
-    } else {
-      sprintMetadata.tasks.push(task);
+    if (sprint.tasks && sprint.tasks.includes(taskObj?.id)) {
+      console.log(`Task with ID ${taskObj?.id} already exists in sprint.`);
+      return;
     }
-    // Write updated content with both markdown and frontmatter changes
-    const updatedContent = matter.stringify(content, sprintMetadata);
-    fs.writeFileSync(sprintPath, updatedContent);
-  } else {
-    console.log(`Task with ID ${taskMetadata._id} already exists in sprint.`);
-    return;
+
+    // add task id to sprint and persist via DataService
+    sprint.tasks = sprint.tasks || [];
+    sprint.tasks.push(taskObj?.id);
+    dataService.updateSprint(sprint.id, { tasks: sprint.tasks });
+    dataService.saveSprintMd(sprint);
+
+    // update task.sprint and persist
+    if (taskObj && taskObj.id) {
+      dataService.updateTask(taskObj.id, { sprint: sprint.id });
+      dataService.saveTaskMd(taskObj as any);
+    }
+  } catch (e) {
+    console.error('Failed to add task to sprint via DataService', e);
   }
 
 }
 
 export function removeTaskFromSprint(sprintPath: string, taskPath: string): void {
-  const { data: sprintMetadata, content: sprintContent } = matter.read(sprintPath);
-  const { data: taskMetadata } = matter.read(taskPath);
-  const taskIndex = sprintMetadata.tasks ?
-    sprintMetadata.tasks.findIndex((t: any) => t._id === taskMetadata._id) : -1;
+  try {
+    const ws = fileService.getWorkspaceRoot();
+    const dataService = getDataService(ws);
+    const sprintId = path.basename(sprintPath, path.extname(sprintPath));
+    const taskId = path.basename(taskPath, path.extname(taskPath));
 
-  if (taskIndex !== -1) {
-    // remove from sprint metadata
-    const tasks = sprintMetadata.tasks.filter((task: ITask) => task._id !== taskMetadata._id);
-    sprintMetadata.tasks = tasks;
-    // Remove task from markdown section
-    const taskPathFormatted = path.relative(path.dirname(sprintPath), taskPath).replace(/\\/g, '/');
-    const taskLinkPattern = new RegExp(`^- \\[.*\\]\\(${taskPathFormatted.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\)\\s*`, 'm');
-    const updatedSprintContent = sprintContent.replace(taskLinkPattern, '').trim();
-    // Write updated content with both markdown and frontmatter changes
-    const updatedContent = matter.stringify(updatedSprintContent, sprintMetadata);
-    fs.writeFileSync(sprintPath, updatedContent);
-  } else {
-    console.log(`Task with ID ${taskMetadata._id} not found in sprint.`);
+    const sprint = dataService.getSprint(sprintId);
+    if (!sprint) {
+      console.warn('Sprint not found in data store:', sprintId);
+      return;
+    }
+
+    const tasks = (sprint.tasks || []).filter((t: string) => t !== taskId);
+    if (tasks.length === (sprint.tasks || []).length) {
+      console.log(`Task with ID ${taskId} not found in sprint.`);
+      return;
+    }
+
+    sprint.tasks = tasks;
+    dataService.updateSprint(sprint.id, { tasks: sprint.tasks });
+    dataService.saveSprintMd(sprint);
+
+    const taskObj = dataService.getTask(taskId);
+    if (taskObj) {
+      dataService.updateTask(taskObj.id, { sprint: '' });
+      dataService.saveTaskMd(taskObj as any);
+    }
+  } catch (e) {
+    console.error('Failed to remove task from sprint via DataService', e);
   }
 }

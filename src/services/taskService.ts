@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import * as fileService from './fileService';
+import { getDataService } from '../data/DataService';
 import { Task, TasksData, Config } from '../data/types';
 
 const SPRINTDESK_DIR = '.SprintDesk';
@@ -206,21 +207,13 @@ class TaskService {
 
   // === YAML Operations ===
   private loadTasksFromYaml(): Task[] {
-    const tasksPath = path.join(this.getDataPath(), 'tasks.yml');
-    try {
-      if (!fs.existsSync(tasksPath)) return [];
-      const content = fs.readFileSync(tasksPath, 'utf8');
-      const data = yaml.load(content) as TasksData;
-      return data.tasks || [];
-    } catch (e) {
-      return [];
-    }
+    const dataService = getDataService(this.workspaceRoot);
+    return dataService.loadTasks();
   }
 
   private saveTasksToYaml(tasks: Task[]): void {
-    const tasksPath = path.join(this.getDataPath(), 'tasks.yml');
-    fs.mkdirSync(path.dirname(tasksPath), { recursive: true });
-    fs.writeFileSync(tasksPath, yaml.dump({ tasks }), 'utf8');
+    const dataService = getDataService(this.workspaceRoot);
+    dataService.saveTasks(tasks);
   }
 
   // === Public CRUD Methods ===
@@ -271,33 +264,24 @@ class TaskService {
       task.path = undefined;
     }
 
-    const tasks = this.loadTasksFromYaml();
-    tasks.push(task);
-    this.saveTasksToYaml(tasks);
-    this.saveTaskMd(task);
+    const dataService = getDataService(ws);
+    dataService.addTask(task);
+    dataService.saveTaskMd(task);
 
     return task;
   }
 
   updateTask(taskId: string, updates: Partial<Task>): void {
-    const tasks = this.loadTasksFromYaml();
-    const index = tasks.findIndex(t => t.id === taskId);
-    
-    if (index !== -1) {
-      tasks[index] = { ...tasks[index], ...updates, updatedAt: new Date().toISOString() };
-      this.saveTasksToYaml(tasks);
-      this.saveTaskMd(tasks[index]);
-    }
+    const dataService = getDataService(this.workspaceRoot);
+    dataService.updateTask(taskId, updates);
+    const updated = dataService.getTask(taskId);
+    if (updated) dataService.saveTaskMd(updated as any);
   }
 
   deleteTask(taskId: string): void {
-    const task = this.getTask(taskId);
-    if (task) {
-      this.deleteTaskMd(task);
-    }
-
-    const tasks = this.loadTasksFromYaml().filter(t => t.id !== taskId);
-    this.saveTasksToYaml(tasks);
+    const dataService = getDataService(this.workspaceRoot);
+    dataService.deleteTask(taskId);
+    dataService.deleteTaskMd(taskId);
   }
 
   // Create task from existing full Task data (used by migration)
@@ -312,10 +296,9 @@ class TaskService {
     task.createdAt = task.createdAt || new Date().toISOString();
     task.updatedAt = task.updatedAt || new Date().toISOString();
 
-    const tasks = this.loadTasksFromYaml();
-    tasks.push(task);
-    this.saveTasksToYaml(tasks);
-    this.saveTaskMd(task, true);
+    const dataService = getDataService(ws);
+    dataService.addTask(task);
+    dataService.saveTaskMd(task, true);
 
     return task;
   }

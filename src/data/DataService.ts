@@ -180,6 +180,14 @@ export class DataService {
     this.saveTasks(tasks);
   }
 
+  deleteTaskMd(taskId: string): void {
+    const tasksDir = this.getTasksDir();
+    const filePath = path.join(tasksDir, `${taskId}.md`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+
   getTask(taskId: string): Task | undefined {
     return this.loadTasks().find(t => t.id === taskId);
   }
@@ -397,25 +405,7 @@ export class DataService {
 
   // === MD Generation ===
   private generateTaskMd(task: Task, additionalContent?: string): string {
-    const frontmatter = {
-      _id: task.id,
-      title: task.title,
-      type: task.type,
-      status: task.status,
-      priority: task.priority,
-      epic: task.epic,
-      backlog: task.backlog,
-      sprint: task.sprint,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt
-    };
-
-    let md = '---\n';
-    md += yaml.dump(frontmatter).replace(/^---\n/, '').replace(/\n$/, '');
-    md += '\n---\n\n';
-
-    md += `# 🧩 Task: ${task.title}\n\n`;
-
+    let md = `# 🧩 Task: ${task.title}\n\n`;
     md += `## 📋 Description\n`;
     md += `\n## ✅ Acceptance Criteria\n`;
     md += `\n## 📝 Notes\n`;
@@ -428,19 +418,7 @@ export class DataService {
   }
 
   private generateBacklogMd(backlog: Backlog, tasks: Task[]): string {
-    const frontmatter = {
-      id: backlog.id,
-      name: backlog.name,
-      description: backlog.description,
-      tasks: backlog.tasks,
-      color: backlog.color
-    };
-
-    let md = '---\n';
-    md += yaml.dump(frontmatter).replace(/^---\n/, '').replace(/\n$/, '');
-    md += '\n---\n\n';
-
-    md += `# 📒 Backlog: ${backlog.name}\n`;
+    let md = `# 📒 Backlog: ${backlog.name}\n`;
     md += `- **Last update:** ${new Date().toISOString()}\n`;
     md += `- **Total Tasks:** ${tasks.length}\n\n`;
 
@@ -455,23 +433,7 @@ export class DataService {
 
   private generateEpicMd(epic: Epic, tasks: Task[]): string {
     const statusEmoji = epic.status === 'completed' ? '✅' : epic.status === 'in-progress' ? '🔄' : '⏳';
-
-    const frontmatter = {
-      _id: epic.id,
-      name: epic.name,
-      description: epic.description,
-      status: epic.status,
-      priority: epic.priority,
-      tasks: epic.tasks,
-      createdAt: epic.createdAt,
-      updatedAt: epic.updatedAt
-    };
-
-    let md = '---\n';
-    md += yaml.dump(frontmatter).replace(/^---\n/, '').replace(/\n$/, '');
-    md += '\n---\n\n';
-
-    md += `# 🚩 Epic: ${epic.name}\n`;
+    let md = `# 🚩 Epic: ${epic.name}\n`;
     md += `${statusEmoji} **Status:** ${epic.status}\n`;
     md += `- **Priority:** ${epic.priority}\n`;
     md += `- **Tasks:** ${tasks.length}\n\n`;
@@ -487,23 +449,7 @@ export class DataService {
 
   private generateSprintMd(sprint: Sprint, tasks: Task[]): string {
     const statusEmoji = sprint.status === 'completed' ? '✅' : sprint.status === 'in-progress' ? '🔄' : '⏳';
-
-    const frontmatter = {
-      id: sprint.id,
-      name: sprint.name,
-      startDate: sprint.startDate,
-      endDate: sprint.endDate,
-      status: sprint.status,
-      tasks: sprint.tasks,
-      createdAt: sprint.createdAt,
-      updatedAt: sprint.updatedAt
-    };
-
-    let md = '---\n';
-    md += yaml.dump(frontmatter).replace(/^---\n/, '').replace(/\n$/, '');
-    md += '\n---\n\n';
-
-    md += `# ⏱️ Sprint: ${sprint.name}\n`;
+    let md = `# ⏱️ Sprint: ${sprint.name}\n`;
     md += `${statusEmoji} **${sprint.startDate} → ${sprint.endDate}**\n`;
     md += `- **Status:** ${sprint.status}\n`;
     md += `- **Tasks:** ${tasks.length}\n\n`;
@@ -530,6 +476,8 @@ export class DataService {
       const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
       if (userContentMatch) {
         additionalContent = userContentMatch[1];
+      } else {
+        additionalContent = existingContent;
       }
     }
 
@@ -549,11 +497,14 @@ export class DataService {
       const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
       if (userContentMatch) {
         additionalContent = userContentMatch[1];
+      } else {
+        additionalContent = existingContent;
       }
     }
 
     const tasks = this.getTasksByBacklog(backlog.id);
-    const md = this.generateBacklogMd(backlog, tasks);
+    let md = this.generateBacklogMd(backlog, tasks);
+    if (additionalContent) md += '\n' + additionalContent;
     fs.writeFileSync(filePath, md, 'utf8');
   }
 
@@ -569,11 +520,14 @@ export class DataService {
       const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
       if (userContentMatch) {
         additionalContent = userContentMatch[1];
+      } else {
+        additionalContent = existingContent;
       }
     }
 
     const tasks = this.getTasksByEpic(epic.id);
-    const md = this.generateEpicMd(epic, tasks);
+    let md = this.generateEpicMd(epic, tasks);
+    if (additionalContent) md += '\n' + additionalContent;
     fs.writeFileSync(filePath, md, 'utf8');
   }
 
@@ -589,11 +543,14 @@ export class DataService {
       const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
       if (userContentMatch) {
         additionalContent = userContentMatch[1];
+      } else {
+        additionalContent = existingContent;
       }
     }
 
     const tasks = this.getTasksBySprint(sprint.id);
-    const md = this.generateSprintMd(sprint, tasks);
+    let md = this.generateSprintMd(sprint, tasks);
+    if (additionalContent) md += '\n' + additionalContent;
     fs.writeFileSync(filePath, md, 'utf8');
   }
 
