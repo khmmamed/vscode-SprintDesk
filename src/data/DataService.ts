@@ -417,6 +417,16 @@ export class DataService {
     return md;
   }
 
+  private slugifyTitle(title: string): string {
+    return (title || '')
+      .toString()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^A-Za-z0-9\-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
   private generateBacklogMd(backlog: Backlog, tasks: Task[]): string {
     let md = `# 📒 Backlog: ${backlog.name}\n`;
     md += `- **Last update:** ${new Date().toISOString()}\n`;
@@ -467,22 +477,42 @@ export class DataService {
   saveTaskMd(task: Task, preserveUserContent: boolean = true): void {
     const tasksDir = this.getTasksDir();
     fs.mkdirSync(tasksDir, { recursive: true });
+    // derive filename from user-configured pattern
+    const cfg = vscode.workspace.getConfiguration('sprintdesk');
+    const pattern = cfg.get<string>('taskMdFilenamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
+    const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
+    const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
+    const filename = pattern
+      .replace('${taskNumber}', taskNumber)
+      .replace('${tasktitle}', taskTitleSlug);
 
-    const filePath = path.join(tasksDir, `${task.id}.md`);
+    const newFilePath = path.join(tasksDir, filename);
+    const oldFilePath = path.join(tasksDir, `${task.id}.md`);
+
     let additionalContent: string | undefined;
-
-    if (preserveUserContent && fs.existsSync(filePath)) {
-      const existingContent = fs.readFileSync(filePath, 'utf8');
-      const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
-      if (userContentMatch) {
-        additionalContent = userContentMatch[1];
-      } else {
-        additionalContent = existingContent;
+    if (preserveUserContent) {
+      if (fs.existsSync(newFilePath)) {
+        const existingContent = fs.readFileSync(newFilePath, 'utf8');
+        const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
+        additionalContent = userContentMatch ? userContentMatch[1] : existingContent;
+      } else if (fs.existsSync(oldFilePath)) {
+        const existingContent = fs.readFileSync(oldFilePath, 'utf8');
+        const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
+        additionalContent = userContentMatch ? userContentMatch[1] : existingContent;
       }
     }
 
     const md = this.generateTaskMd(task, additionalContent);
-    fs.writeFileSync(filePath, md, 'utf8');
+    fs.writeFileSync(newFilePath, md, 'utf8');
+
+    // remove legacy id-based file if it exists and is different
+    try {
+      if (fs.existsSync(oldFilePath) && oldFilePath !== newFilePath) {
+        fs.unlinkSync(oldFilePath);
+      }
+    } catch (e) {
+      // ignore deletion errors
+    }
   }
 
   saveBacklogMd(backlog: Backlog, preserveUserContent: boolean = true): void {
