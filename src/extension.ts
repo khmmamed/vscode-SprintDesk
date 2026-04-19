@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as path from "path";
+import * as fs from "fs";
 
 // webview
 import { getWebviewContent } from "./webview/getWebviewContent";
@@ -8,6 +10,7 @@ import {
   registerAddExistingTasksToSprintCommand,
   registerShowSprintCalendarCommand,
   registerOpenSprintFileCommand,
+  registerAddBacklogCommand,
   registerAddTaskToBacklogCommand,
   registerAddExistingTasksToBacklogCommand,
   registerAddEpicCommand,
@@ -27,6 +30,9 @@ import { registerViewProjectStructureCommand } from "./commands/viewProjectStruc
 import { registerViewProjectsCommand } from "./commands/viewProjects";
 import { registerRefreshCommand } from './commands/refreshCommand';
 import { registerScanProjectStructureCommand } from './commands/scanProjectStructureCommand';
+import {
+  registerOpenSettingsCommand
+} from './commands';
 // Provider
 import { SprintsTreeDataProvider } from './providers/SprintsTreeDataProvider';
 import { TasksTreeDataProvider } from './providers/TasksTreeDataProvider';
@@ -36,7 +42,7 @@ import { RepositoriesTreeDataProvider } from './providers/RepositoriesTreeDataPr
 // Services
 import { createSprintInteractive } from './services/sprintService';
 import { createEpicInteractive } from './services/epicService';
-import { addTaskToBacklogInteractive, addExistingTasksToBacklog } from './services/backlogService';
+import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './services/backlogService';
 import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
 // controller
 import { createTask } from "./controller/taskController";
@@ -144,13 +150,17 @@ export async function activate(context: vscode.ExtensionContext) {
   registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
   registerAddEpicCommand(context, { createEpicInteractive });
   registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
+registerAddBacklogCommand(context, { createBacklogInteractive });
   registerAddTaskToBacklogCommand(context, { addTaskToBacklogInteractive });
   registerAddExistingTasksToBacklogCommand(context, { addExistingTasksToBacklog });
   registerAddTaskToEpicCommand(context, { epicsProvider, tasksProvider });
   registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
-  registerOpenSprintFileCommand(context);
+registerOpenSprintFileCommand(context);
   registerShowSprintCalendarCommand(context);
+
+  // Settings commands
+  registerOpenSettingsCommand(context);
 
   // When user selects a repository in the repositories tree, switch the Tasks provider to read from that repo
   repositoriesTreeView.onDidChangeSelection(e => {
@@ -202,31 +212,35 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  // === Auto-copy .SprintDesk template on activation ===
+// === Ensure .SprintDesk folder structure on activation ===
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders) {
-    // No workspace open → nothing to do
     return;
   }
 
-  const workspaceRoot = workspaceFolders[0].uri;
-  const extensionRoot = vscode.Uri.file(context.extensionPath);
-  const sourceTemplate = vscode.Uri.joinPath(extensionRoot, "template", ".SprintDesk");
-  const destTemplate = vscode.Uri.joinPath(workspaceRoot, ".SprintDesk");
+  const ws = workspaceFolders[0].uri.fsPath;
+  const sdPath = path.join(ws, '.SprintDesk');
 
-  try {
-    // Check if .SprintDesk already exists in the workspace
-    await vscode.workspace.fs.stat(destTemplate);
-    // If it exists, do nothing
-    return;
-  } catch { }
-
-  try {
-    await vscode.workspace.fs.copy(sourceTemplate, destTemplate, { overwrite: false });
-    vscode.window.showInformationMessage("📦 SprintDesk folder has been set up in your project!");
-  } catch (err) {
-    console.error("Failed to copy .SprintDesk:", err);
+// Ensure all directories exist
+  const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints'];
+  for (const dir of dirs) {
+    const fullPath = path.join(sdPath, dir);
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+    }
   }
+
+  // Ensure data files exist
+  const dataFiles = ['tasks.yml', 'backlogs.yml', 'epics.yml', 'sprints.yml'];
+  for (const file of dataFiles) {
+    const dataPath = path.join(sdPath, 'data', file);
+    if (!fs.existsSync(dataPath)) {
+      const key = file.replace('.yml', '');
+      fs.writeFileSync(dataPath, `${key}: []`, 'utf8');
+    }
+  }
+
+  vscode.window.showInformationMessage("📦 SprintDesk ready!");
 }
 
 export function deactivate() { }

@@ -253,6 +253,85 @@
           "group": "inline@1"
         }
       ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "SprintDesk",
+      "properties": {
+        "sprintdesk.taskPrefix": {
+          "type": "string",
+          "default": "task_",
+          "description": "Task ID prefix (e.g., task_ → task_100)",
+          "scope": "resource",
+          "markdownDescription": "Prefix used when generating new task IDs. Include trailing underscore if desired."
+        },
+        "sprintdesk.taskStartNumber": {
+          "type": "number",
+          "default": 100,
+          "description": "Starting number for task IDs",
+          "scope": "resource"
+        },
+"sprintdesk.taskPadding": {
+          "type": "number",
+          "default": 3,
+          "description": "Number of digits for task ID padding",
+          "scope": "resource"
+        },
+        "sprintdesk.taskMdFilenamePattern": {
+          "type": "string",
+          "default": "[task-${taskNumber}]_${tasktitle}.md",
+          "description": "Template for task .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for task .md filename. Use ${taskNumber} for task code and ${tasktitle} for title."
+        },
+        "sprintdesk.epicPrefix": {
+          "type": "string",
+          "default": "epic_",
+          "description": "Epic ID prefix",
+          "scope": "resource"
+        },
+        "sprintdesk.sprintPrefix": {
+          "type": "string",
+          "default": "sprint_",
+          "description": "Sprint ID prefix",
+          "scope": "resource"
+        },
+        "sprintdesk.defaultBacklog": {
+          "type": "string",
+          "default": "features",
+          "description": "Default backlog for new tasks",
+          "scope": "resource",
+          "markdownDescription": "Name of the backlog where new tasks are created by default."
+        },
+        "sprintdesk.defaultStatus": {
+          "type": "string",
+          "default": "waiting",
+          "description": "Default status for new tasks",
+          "enum": ["waiting", "in-progress", "done", "blocked", "cancelled"],
+          "enumDescriptions": [
+            "Not started yet",
+            "Work in progress",
+            "Completed",
+            "Blocked — requires attention",
+            "Cancelled / won't do"
+          ],
+          "scope": "resource"
+        },
+        "sprintdesk.defaultPriority": {
+          "type": "string",
+          "default": "medium",
+          "description": "Default priority for new tasks",
+          "enum": ["low", "medium", "high"],
+          "enumDescriptions": ["Low priority","Normal priority","High priority"],
+          "scope": "resource"
+        },
+        "sprintdesk.showIds": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show IDs in task labels",
+          "scope": "resource"
+        }
+      }
     }
   },
   "devDependencies": {

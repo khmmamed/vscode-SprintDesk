@@ -1,0 +1,132 @@
+import * as vscode from 'vscode';
+
+export interface Task {
+  id: string;
+  code: string;
+  title: string;
+  type: 'feature' | 'bug' | 'chore' | 'doc' | 'test';
+  status: 'waiting' | 'in-progress' | 'done' | 'blocked' | 'cancelled';
+  priority: 'high' | 'medium' | 'low';
+  epic: string | null;
+  backlog: string;
+  sprint: string | null;
+  createdAt: string;
+  updatedAt: string;
+  path?: string;
+}
+
+export interface Epic {
+  id: string;
+  name: string;
+  description: string;
+  status: 'planned' | 'in-progress' | 'completed' | 'blocked';
+  priority: 'high' | 'medium' | 'low';
+  tasks: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Backlog {
+  id: string;
+  name: string;
+  description: string;
+  tasks: string[];
+  color: string;
+}
+
+export interface Sprint {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: 'planned' | 'in-progress' | 'completed';
+  tasks: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IdsConfig {
+  task: { prefix: string; startNumber: number; padding: number };
+  epic: { prefix: string; startNumber: number; padding: number };
+  sprint: { prefix: string; startNumber: number; padding: number };
+  backlog: { prefix: string };
+}
+
+export interface DefaultsConfig {
+  backlog: string | null;
+  epic: string | null;
+  sprint: string | null;
+  status: string;
+  priority: string;
+  type: string;
+}
+
+export interface UIConfig {
+  showCompleted: boolean;
+  defaultView: 'tree' | 'table';
+  showIds: boolean;
+  dateFormat: 'iso' | 'short' | 'relative';
+}
+
+export interface DirectoriesConfig {
+  data: string;
+  tasks: string;
+  backlogs: string;
+  epics: string;
+  sprints: string;
+  templates: string;
+}
+
+export interface Config {
+  ids: IdsConfig;
+  defaults: DefaultsConfig;
+  ui: UIConfig;
+  directories: DirectoriesConfig;
+}
+
+export const DEFAULT_CONFIG: Config = {
+  ids: {
+    task: { prefix: 'task_', startNumber: 100, padding: 3 },
+    epic: { prefix: 'epic_', startNumber: 1, padding: 2 },
+    sprint: { prefix: 'sprint_', startNumber: 1, padding: 1 },
+    backlog: { prefix: '' }
+  },
+  defaults: {
+    backlog: 'features',
+    epic: null,
+    sprint: null,
+    status: 'waiting',
+    priority: 'medium',
+    type: 'feature'
+  },
+  ui: {
+    showCompleted: false,
+    defaultView: 'tree',
+    showIds: true,
+    dateFormat: 'iso'
+  },
+  directories: {
+    data: 'data',
+    tasks: 'Tasks',
+    backlogs: 'Backlogs',
+    epics: 'Epics',
+    sprints: 'Sprints',
+    templates: 'templates'
+  }
+};
+
+export interface TasksData {
+  tasks: Task[];
+}
+
+export interface EpicsData {
+  epics: Epic[];
+}
+
+export interface BacklogsData {
+  backlogs: Backlog[];
+}
+
+export interface SprintsData {
+  sprints: Sprint[];
+}

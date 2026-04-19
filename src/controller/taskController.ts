@@ -98,14 +98,10 @@ export async function handleTaskInputsController(ws?: string) {
     const assignee = await promptInput('Enter assignee (optional)', UI_CONSTANTS.QUICK_PICK.ASSIGNEE);
 
     // create task and get metadata
-    const task = await taskService.createTask(ws, {
+const task = await taskService.createTask(ws, {
       title: taskTitle,
       type: type.value as SprintDesk.TaskType,
       priority: priority.value as SprintDesk.Priority,
-      category,
-      component,
-      duration,
-      assignee,
       status: TASK_CONSTANTS.STATUS.WAITING as SprintDesk.TaskStatus,
     });
 
@@ -133,11 +129,19 @@ export async function createTask(ws?: string) {
     vscode.window.showWarningMessage('Task creation was cancelled or failed.');
     return;
   }
-  // add epic to task
-  addEpicToTask(epic!, task!.path!, ws);
+  // attach epic to task via TaskService (updates YAML + md)
+  try {
+    taskService.updateTask(task.id, { epic: epic!.title });
+  } catch (err) {
+    console.error('Failed to update task with epic via taskService:', err);
+  }
 
-  // add task to epic
-  epicController.addTaskToEpic(epic!.path!, task!.path!, ws);
+  // add task to epic (update epic file)
+  try {
+    epicController.addTaskToEpic(epic!.path!, task!.path!, ws);
+  } catch (err) {
+    console.error('Failed to add task to epic file:', err);
+  }
 
 
 }
@@ -233,7 +237,6 @@ export const updateTaskSlugContent = (
   const updatedContent = matter.stringify(newLines.join('\n'), parsed.data);
   fs.writeFileSync(taskPath, updatedContent, 'utf-8');
 };
-
 export const updateTaskBacklogs = (taskName: string, backlogName: string): void => {
   const taskPath = getTaskPath(taskName);
   const backlogPath = getBacklogPath(backlogName);

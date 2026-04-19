@@ -11,6 +11,45 @@ import {
 import matter from 'gray-matter';
 import { getBacklogTasks } from '../controller/backlogController';
 import { relativePathTaskToTaskpath } from '../utils/taskUtils';
+import { BACKLOG_CONSTANTS } from '../utils/constant';
+import { getDataService } from '../data/DataService';
+import { Backlog } from '../data/types';
+
+export async function createBacklogInteractive(): Promise<void> {
+  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!ws) {
+    vscode.window.showErrorMessage('No workspace folder open.');
+    return;
+  }
+
+  const backlogName = await vscode.window.showInputBox({
+    prompt: 'Enter backlog name',
+    placeHolder: 'e.g., Features, Bugs, Technical, MyBacklog'
+  });
+
+  if (!backlogName) return;
+
+  const dataService = getDataService(ws);
+  const backlogId = backlogName.toLowerCase().replace(/\s+/g, '-');
+
+  if (dataService.getBacklog(backlogId)) {
+    vscode.window.showWarningMessage(`Backlog "${backlogName}" already exists.`);
+    return;
+  }
+
+  const backlog: Backlog = {
+    id: backlogId,
+    name: backlogName,
+    description: '',
+    tasks: [],
+    color: '#2563eb'
+  };
+
+  dataService.addBacklog(backlog);
+  dataService.saveBacklogMd(backlog);
+
+  vscode.window.showInformationMessage(`Backlog "${backlogName}" created.`);
+}
 
 interface TreeItemLike {
   label: string;
@@ -43,7 +82,6 @@ export function getTasksFromBacklog(backlogName: string): TreeItemLike[] {
      throw new Error('No tasks found.');
   }
 }
-
 export async function removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
   const backlogFile = matter(fs.readFileSync(backlogPath, 'utf8'));
   const relativeTaskPath = path.relative(path.dirname(backlogPath), taskPath).replace(/\\/g, '/');
@@ -62,9 +100,6 @@ export async function removeTaskFromBacklog(backlogPath: string, taskPath: strin
   const updatedContent = matter.stringify(content, backlogFile.data);
   fs.writeFileSync(backlogPath, updatedContent);
 }
-
-
-
 
 // Helper: remove git conflict blocks like <<<<<<< ... ======= ... >>>>>>>
 function stripMergeMarkers(content: string): string {

@@ -24,12 +24,14 @@ export class EpicsTreeItem extends vscode.TreeItem {
 
     if (filePath) {
       // Setup epic item
+      console.log('filePath: ', filePath)
       this.contextValue = 'epic';
       this.resourceUri = vscode.Uri.file(filePath);
 
       // Count tasks in epic
       try {
         const { data } = matter.read(filePath);
+        console.log("data file: ", data)
         const taskCount = data.tasks?.length;
         this.iconPath = new vscode.ThemeIcon('milestone');
         this.description = `${UI_CONSTANTS.EMOJI.COMMON.TASK_LIST} ${taskCount ? taskCount : 0} tasks`;

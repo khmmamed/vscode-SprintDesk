@@ -4,6 +4,7 @@ export * from './sprintCommands/addSprintCommand'
 export * from './sprintCommands/openSprintFileCommand'
 export * from './sprintCommands/showSprintCalendarCommand'
 // backlog commands
+export * from './backlogCommands/addBacklogCommand'
 export * from './backlogCommands/addExistingTasksToBacklogCommand'
 export * from './backlogCommands/addTaskToBacklogCommand'
 export * from './backlogCommands/viewBacklogs'
@@ -22,3 +23,6 @@ export * from './taskCommands/viewTaskPreview'
 export * from './taskCommands/editTaskRaw'
 // webview
 export * from './webviewCommands/openWebview'
+
+// settings
+export * from './settingsCommands/openSettings'

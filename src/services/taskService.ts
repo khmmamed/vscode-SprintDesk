@@ -1,81 +1,369 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as yaml from 'js-yaml';
 import * as fileService from './fileService';
-import { PROJECT_CONSTANTS, TASK_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
-import * as epicController from '../controller/epicController';
-import * as taskController from '../controller/taskController';
+import { Task, TasksData, Config } from '../data/types';
 
-import {
-  generateTaskFile,
-  generateTaskTemplate,
-} from '../utils/taskTemplate';
-import { title } from 'process';
+const SPRINTDESK_DIR = '.SprintDesk';
+const DATA_DIR = 'data';
 
-// [vNext]: version: 0.0.2
-export async function createTask(ws: string, taskMetadata: SprintDesk.TaskMetadata): Promise< SprintDesk.TaskMetadata> {
-  if (!ws) {
-    ws = fileService.getWorkspaceRoot();
-  };
-  const tasksDir = fileService.getTasksDir(ws);
-  const totalTasks = fileService.getTasksBaseNames(tasksDir).length;
-  // get _id 
-  const _id = totalTasks === 0 ? 1 : totalTasks + 1;
-  const taskBaseName = fileService.createTaskBaseName(taskMetadata.title, _id);
-  const taskName = taskBaseName + '.md'
+class TaskService {
+  private workspaceRoot: string;
+  private configCache: Config | null = null;
 
-  const taskData: SprintDesk.TaskMetadata = {
-    _id,
-    title: taskMetadata.title,
-    type: taskMetadata.type || 'feature',
-    category: taskMetadata.category || '',
-    component: taskMetadata.component || '',
-    duration: taskMetadata.duration || '',
-    assignee: taskMetadata.assignee || '',
-    status: taskMetadata.status || 'waiting',
-    priority: taskMetadata.priority || 'medium',
-    path: fileService.createTaskRelativePath(taskBaseName),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+  constructor(workspaceRoot?: string) {
+    this.workspaceRoot = workspaceRoot || this.getDefaultWorkspaceRoot();
   }
-  // write epic file
-  fs.writeFileSync(path.join(tasksDir, taskName), generateTaskTemplate(taskData), 'utf8');
 
-  return taskData;
+  private getDefaultWorkspaceRoot(): string {
+    const ws = vscode.workspace.workspaceFolders;
+    return ws?.[0]?.uri.fsPath || '';
+  }
+
+  private getSprintDeskPath(): string {
+    return path.join(this.workspaceRoot, SPRINTDESK_DIR);
+  }
+
+  private getDataPath(): string {
+    return path.join(this.getSprintDeskPath(), DATA_DIR);
+  }
+
+  private getTasksDir(): string {
+    const config = this.loadConfig();
+    return path.join(this.getSprintDeskPath(), config.directories.tasks);
+  }
+
+  private loadConfig(): Config {
+    if (this.configCache) {
+      return this.configCache;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('sprintdesk');
+    const taskPrefix = cfg.get<string>('taskPrefix') || 'task_';
+    const taskStart = cfg.get<number>('taskStartNumber') || 100;
+    const taskPad = cfg.get<number>('taskPadding') || 3;
+    const epicPrefix = cfg.get<string>('epicPrefix') || 'epic_';
+    const sprintPrefix = cfg.get<string>('sprintPrefix') || 'sprint_';
+    const defaultBacklog = cfg.get<string>('defaultBacklog') || 'features';
+    const defaultStatus = cfg.get<string>('defaultStatus') || 'waiting';
+    const defaultPriority = cfg.get<string>('defaultPriority') || 'medium';
+    const showIds = cfg.get<boolean>('showIds') ?? true;
+    const showCompleted = cfg.get<boolean>('showCompleted') ?? false;
+
+    this.configCache = {
+      ids: {
+        task: { prefix: taskPrefix, startNumber: taskStart, padding: taskPad },
+        epic: { prefix: epicPrefix, startNumber: 1, padding: 2 },
+        sprint: { prefix: sprintPrefix, startNumber: 1, padding: 1 },
+        backlog: { prefix: '' }
+      },
+      defaults: {
+        backlog: defaultBacklog,
+        epic: null,
+        sprint: null,
+        status: defaultStatus,
+        priority: defaultPriority,
+        type: 'feature'
+      },
+      ui: {
+        showCompleted,
+        defaultView: 'tree',
+        showIds,
+        dateFormat: 'iso'
+      },
+      directories: {
+        data: 'data',
+        tasks: 'Tasks',
+        backlogs: 'Backlogs',
+        epics: 'Epics',
+        sprints: 'Sprints',
+        templates: 'templates'
+      }
+    };
+
+    return this.configCache;
+  }
+
+  private getMdFilenamePattern(): string {
+    const cfg = vscode.workspace.getConfiguration('sprintdesk');
+    return cfg.get<string>('taskMdFilenamePattern') || '[task-${taskNumber}]_${tasktitle}.md';
+  }
+
+  private generateHexId(): string {
+    return crypto.randomUUID().split('-')[0];
+  }
+
+  private generateTaskCode(): string {
+    const config = this.loadConfig();
+    const tasks = this.loadTasks();
+    const idConfig = config.ids.task;
+    let maxNum = idConfig.startNumber - 1;
+
+    tasks.forEach(t => {
+      if (t.code) {
+        const num = parseInt(t.code.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    });
+
+    const nextNum = maxNum + 1;
+    const padding = idConfig.padding;
+    return `task-${nextNum.toString().padStart(padding, '0')}`;
+  }
+
+  private slugifyTitle(title: string): string {
+    return title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  }
+
+  private getTaskMdFilename(task: Task): string {
+    const pattern = this.getMdFilenamePattern();
+    // Clean task number for filename: remove leading "task-" or "task_" if present
+    let taskNumber = (task.code || '').replace(/^task[-_]?/i, '');
+    const tasktitle = this.slugifyTitle(task.title);
+
+    return pattern
+      .replace('${taskNumber}', taskNumber)
+      .replace('${tasktitle}', tasktitle);
+  }
+
+  private getTaskMdPath(task: Task): string {
+    const tasksDir = this.getTasksDir();
+    return path.join(tasksDir, this.getTaskMdFilename(task));
+  }
+
+  private generateTaskMd(task: Task, additionalContent?: string): string {
+    const frontmatter = {
+      _id: task.id,
+      code: task.code,
+      title: task.title,
+      type: task.type,
+      status: task.status,
+      priority: task.priority,
+      epic: task.epic,
+      backlog: task.backlog,
+      sprint: task.sprint,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    };
+
+    let md = '---\n';
+    md += yaml.dump(frontmatter).replace(/^---\n/, '').replace(/\n$/, '');
+    md += '\n---\n\n';
+
+    md += `# 🧩 Task: ${task.title}\n\n`;
+
+    if (additionalContent) {
+      md += additionalContent;
+    } else {
+      md += `## 📋 Description\n\n`;
+      md += `## ✅ Acceptance Criteria\n\n`;
+    }
+
+    return md;
+  }
+
+  private saveTaskMd(task: Task, preserveUserContent: boolean = true): void {
+    const tasksDir = this.getTasksDir();
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    const newFilePath = this.getTaskMdPath(task);
+    let additionalContent: string | undefined;
+
+    if (preserveUserContent) {
+      const oldFilePath = path.join(tasksDir, `${task.id}.md`);
+      if (fs.existsSync(oldFilePath)) {
+        const existingContent = fs.readFileSync(oldFilePath, 'utf8');
+        const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
+        if (userContentMatch) {
+          additionalContent = userContentMatch[1];
+        }
+      }
+    }
+
+    const md = this.generateTaskMd(task, additionalContent);
+    try {
+      fs.writeFileSync(newFilePath, md, 'utf8');
+      console.log('[SprintDesk] Saved task markdown:', newFilePath);
+    } catch (e) {
+      console.error('[SprintDesk] Failed to save task markdown:', newFilePath, e);
+    }
+  }
+
+  private deleteTaskMd(task: Task): void {
+    const tasksDir = this.getTasksDir();
+    
+    const oldFilePath = path.join(tasksDir, `${task.id}.md`);
+    if (fs.existsSync(oldFilePath)) {
+      fs.unlinkSync(oldFilePath);
+    }
+
+    const newFilePath = this.getTaskMdPath(task);
+    if (fs.existsSync(newFilePath) && newFilePath !== oldFilePath) {
+      fs.unlinkSync(newFilePath);
+    }
+  }
+
+  // === YAML Operations ===
+  private loadTasksFromYaml(): Task[] {
+    const tasksPath = path.join(this.getDataPath(), 'tasks.yml');
+    try {
+      if (!fs.existsSync(tasksPath)) return [];
+      const content = fs.readFileSync(tasksPath, 'utf8');
+      const data = yaml.load(content) as TasksData;
+      return data.tasks || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  private saveTasksToYaml(tasks: Task[]): void {
+    const tasksPath = path.join(this.getDataPath(), 'tasks.yml');
+    fs.mkdirSync(path.dirname(tasksPath), { recursive: true });
+    fs.writeFileSync(tasksPath, yaml.dump({ tasks }), 'utf8');
+  }
+
+  // === Public CRUD Methods ===
+
+  loadTasks(): Task[] {
+    return this.loadTasksFromYaml();
+  }
+
+  getTask(taskId: string): Task | undefined {
+    const tasks = this.loadTasksFromYaml();
+    return tasks.find(t => t.id === taskId);
+  }
+
+  createTask(ws: string, taskData: {
+    title: string;
+    type?: string;
+    status?: string;
+    priority?: string;
+    backlog?: string;
+    epic?: string | null;
+  }): Task {
+    if (!ws) {
+      ws = this.workspaceRoot || this.getDefaultWorkspaceRoot();
+    }
+    this.workspaceRoot = ws;
+
+    const config = this.loadConfig();
+
+    const task: Task = {
+      id: this.generateHexId(),
+      code: this.generateTaskCode(),
+      title: taskData.title,
+      type: (taskData.type as Task['type']) || (config.defaults.type as Task['type']) || 'feature',
+      status: (taskData.status as Task['status']) || (config.defaults.status as Task['status']) || 'waiting',
+      priority: (taskData.priority as Task['priority']) || (config.defaults.priority as Task['priority']) || 'medium',
+      epic: taskData.epic || null,
+      backlog: taskData.backlog || config.defaults.backlog || 'features',
+      sprint: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    // compute and store relative path for the task markdown file
+    try {
+      const filename = this.getTaskMdFilename(task);
+      task.path = `../${config.directories.tasks}/${filename}`;
+    } catch (e) {
+      task.path = undefined;
+    }
+
+    const tasks = this.loadTasksFromYaml();
+    tasks.push(task);
+    this.saveTasksToYaml(tasks);
+    this.saveTaskMd(task);
+
+    return task;
+  }
+
+  updateTask(taskId: string, updates: Partial<Task>): void {
+    const tasks = this.loadTasksFromYaml();
+    const index = tasks.findIndex(t => t.id === taskId);
+    
+    if (index !== -1) {
+      tasks[index] = { ...tasks[index], ...updates, updatedAt: new Date().toISOString() };
+      this.saveTasksToYaml(tasks);
+      this.saveTaskMd(tasks[index]);
+    }
+  }
+
+  deleteTask(taskId: string): void {
+    const task = this.getTask(taskId);
+    if (task) {
+      this.deleteTaskMd(task);
+    }
+
+    const tasks = this.loadTasksFromYaml().filter(t => t.id !== taskId);
+    this.saveTasksToYaml(tasks);
+  }
+
+  // Create task from existing full Task data (used by migration)
+  createTaskFromData(ws: string, taskData: Task): Task {
+    if (!ws) {
+      ws = this.workspaceRoot || this.getDefaultWorkspaceRoot();
+    }
+    this.workspaceRoot = ws;
+
+    const task: Task = { ...taskData };
+    // ensure createdAt/updatedAt exist
+    task.createdAt = task.createdAt || new Date().toISOString();
+    task.updatedAt = task.updatedAt || new Date().toISOString();
+
+    const tasks = this.loadTasksFromYaml();
+    tasks.push(task);
+    this.saveTasksToYaml(tasks);
+    this.saveTaskMd(task, true);
+
+    return task;
+  }
 }
 
+let taskServiceInstance: TaskService | null = null;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* [vPrevious] */
-
-export function updateTask(filePath: string, content: string) {
-  fs.writeFileSync(filePath, content, 'utf8');
+export function getTaskService(workspaceRoot?: string): TaskService {
+  if (!taskServiceInstance) {
+    taskServiceInstance = new TaskService(workspaceRoot);
+  } else if (workspaceRoot) {
+    taskServiceInstance = new TaskService(workspaceRoot);
+  }
+  return taskServiceInstance;
 }
 
-export function deleteTask(filePath: string) {
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+export function loadTasks(): Task[] {
+  return getTaskService().loadTasks();
+}
+
+export function getTask(taskId: string): Task | undefined {
+  return getTaskService().getTask(taskId);
+}
+
+export async function createTask(ws: string, taskData: {
+  title: string;
+  type?: string;
+  status?: string;
+  priority?: string;
+  backlog?: string;
+  epic?: string | null;
+}): Promise<Task> {
+  return getTaskService(ws).createTask(ws, taskData);
+}
+
+export function updateTask(taskId: string, updates: Partial<Task>): void {
+  getTaskService().updateTask(taskId, updates);
+}
+
+export function createTaskFromData(ws: string, taskData: Task): Task {
+  return getTaskService(ws).createTaskFromData(ws, taskData);
+}
+
+export function deleteTask(taskId: string): void {
+  getTaskService().deleteTask(taskId);
 }
 
 export function readTasks(ws: string): string[] {
-  // Collect markdown files from existing task directories
   const tasksDirs = fileService.getExistingTasksDirs(ws);
   const files: string[] = [];
   for (const d of tasksDirs) {
@@ -83,21 +371,4 @@ export function readTasks(ws: string): string[] {
     files.push(...entries.map(f => path.join(d, f)));
   }
   return files;
-}
-
-export async function writeTask() {
-  // Get workspace
-  const ws = fileService.getWorkspaceRoot() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!ws) {
-    vscode.window.showErrorMessage('No workspace open');
-    return;
-  }
-
-  const task = await taskController.handleTaskInputsController(ws);
-
-  console.log('Created task: ', task);
-  // Get epic
-  const epic = await epicController.handleEpicInputsController(ws);
-
-  console.log('Selected epic: ', epic);
 }
