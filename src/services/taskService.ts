@@ -88,7 +88,7 @@ class TaskService {
 
   private getMdFilenamePattern(): string {
     const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    return cfg.get<string>('taskMdFilenamePattern') || '[task-${taskNumber}]_${tasktitle}.md';
+    return cfg.get<string>('taskNamePattern') || '[task-${taskNumber}]_${tasktitle}.md';
   }
 
   private generateHexId(): string {

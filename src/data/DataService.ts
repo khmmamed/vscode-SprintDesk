@@ -480,7 +480,7 @@ export class DataService {
     fs.mkdirSync(tasksDir, { recursive: true });
     // derive filename from user-configured pattern
     const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('taskMdFilenamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
+    const pattern = cfg.get<string>('taskNamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
     const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
     const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
     const filename = pattern
