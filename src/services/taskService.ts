@@ -124,8 +124,8 @@ class TaskService {
     const tasktitle = this.slugifyTitle(task.title);
 
     return pattern
-      .replace('${taskNumber}', taskNumber)
-      .replace('${tasktitle}', tasktitle);
+      .replace(/\$\{tasknumber\}/ig, taskNumber)
+      .replace(/\$\{tasktitle\}/ig, tasktitle);
   }
 
   private getTaskMdPath(task: Task): string {
