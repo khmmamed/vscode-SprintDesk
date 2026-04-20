@@ -48,8 +48,14 @@ import { createSprintInteractive } from './services/sprintService';
 import { createEpicInteractive } from './services/epicService';
 import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './services/backlogService';
 import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
-// controller
-import { createTask } from "./controller/taskController";
+// Tasks - import and create wrapper for API compatibility
+import { createTask as createTaskService } from "./services/taskService";
+
+const createTask = async (repoPath?: string): Promise<void> => {
+  const ws = repoPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!ws) return;
+  await createTaskService(ws, { title: 'New Task', type: 'feature', status: 'waiting', priority: 'medium' });
+};
 
 // existing tasks dir helper moved to services/fileService
 
@@ -154,12 +160,12 @@ export async function activate(context: vscode.ExtensionContext) {
   registerAddSprintCommand(context, { createSprintInteractive });
   registerAddEpicCommand(context, { createEpicInteractive });
   registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
-registerAddBacklogCommand(context, { createBacklogInteractive });
+  registerAddBacklogCommand(context, { createBacklogInteractive });
   registerAddTaskToBacklogCommand(context, { addTaskToBacklogInteractive });
   registerAddExistingTasksToBacklogCommand(context, { addExistingTasksToBacklog });
   registerAddTaskToEpicCommand(context, { epicsProvider, tasksProvider });
   registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
-  
+
   // Register repository commands
   registerCreateTaskFromRepoCommand(context, { repositoriesTreeView, tasksProvider, sprintsProvider, epicsProvider, backlogsProvider });
   registerCreateEpicFromRepoCommand(context, { repositoriesTreeView, epicsProvider, tasksProvider, sprintsProvider, backlogsProvider });
@@ -167,7 +173,7 @@ registerAddBacklogCommand(context, { createBacklogInteractive });
   registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
   registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
-registerOpenSprintFileCommand(context);
+  registerOpenSprintFileCommand(context);
   registerShowSprintCalendarCommand(context);
 
   // Settings commands
@@ -206,24 +212,24 @@ registerOpenSprintFileCommand(context);
         fileService.setWorkspaceRootOverride(repoPath);
 
         // Update all providers that support setWorkspaceRoot
-        try { (tasksProvider as any).setWorkspaceRoot(repoPath); } catch {}
-        try { (backlogsProvider as any).setWorkspaceRoot(repoPath); } catch {}
-        try { (epicsProvider as any).setWorkspaceRoot(repoPath); } catch {}
-        try { (sprintsProvider as any).setWorkspaceRoot(repoPath); } catch {}
+        try { (tasksProvider as any).setWorkspaceRoot(repoPath); } catch { }
+        try { (backlogsProvider as any).setWorkspaceRoot(repoPath); } catch { }
+        try { (epicsProvider as any).setWorkspaceRoot(repoPath); } catch { }
+        try { (sprintsProvider as any).setWorkspaceRoot(repoPath); } catch { }
       } else {
         const fileService = require('./services/fileService');
         fileService.setWorkspaceRootOverride(undefined);
-        try { (tasksProvider as any).setWorkspaceRoot(undefined); } catch {}
-        try { (backlogsProvider as any).setWorkspaceRoot(undefined); } catch {}
-        try { (epicsProvider as any).setWorkspaceRoot(undefined); } catch {}
-        try { (sprintsProvider as any).setWorkspaceRoot(undefined); } catch {}
+        try { (tasksProvider as any).setWorkspaceRoot(undefined); } catch { }
+        try { (backlogsProvider as any).setWorkspaceRoot(undefined); } catch { }
+        try { (epicsProvider as any).setWorkspaceRoot(undefined); } catch { }
+        try { (sprintsProvider as any).setWorkspaceRoot(undefined); } catch { }
       }
     } catch (err) {
       console.error('Failed to switch tasks provider workspace root on repo selection', err);
     }
   });
 
-// === Ensure .SprintDesk folder structure on activation ===
+  // === Ensure .SprintDesk folder structure on activation ===
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders) {
     return;
@@ -232,7 +238,7 @@ registerOpenSprintFileCommand(context);
   const ws = workspaceFolders[0].uri.fsPath;
   const sdPath = path.join(ws, '.SprintDesk');
 
-// Ensure all directories exist
+  // Ensure all directories exist
   const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints'];
   for (const dir of dirs) {
     const fullPath = path.join(sdPath, dir);

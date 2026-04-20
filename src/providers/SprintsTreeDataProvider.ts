@@ -2,12 +2,13 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
-import * as sprintController from '../controller/sprintController';
 import * as sprintService from '../services/sprintService';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
-import { getSprintPath } from '../controller/sprintController';
+import { getDataService } from '../data/DataService';
+import { getSprintPath } from '../services/sprintService';
+import { Task, Sprint } from '../data/types';
 
 export class SprintsTreeItem extends vscode.TreeItem {
   constructor(
@@ -178,15 +179,11 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
     await this.addTaskToSprint(target.filePath!, taskPath);
     await this.refresh();
   }
-  private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<void> {
-
-    await sprintController.addTaskToSprint(sprintPath, taskPath);
-    this.refresh();
-    void vscode.window.showInformationMessage(`Task added to sprint`);
-
+private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<void> {
+    sprintService.addTaskToSprint(sprintPath, taskPath);
   }
   private async removeTaskFromSprint(sprintPath: string, taskPath: string): Promise<void> {
-    await sprintController.removeTaskFromSprint(sprintPath, taskPath);
+    sprintService.removeTaskFromSprint(sprintPath, taskPath);
   }
   private async getTasksFromSprintName(sprintName: string): Promise<SprintsTreeItem[]> {
     const treeItemsRaw = sprintService.getTasksFromSprint(sprintName);
@@ -294,13 +291,30 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
 
     return dateRange;
   }
-  private async getSprintsTree(workspaceRoot: string): Promise<SprintsTreeItem[]> {
+private async getSprintsTree(workspaceRoot: string): Promise<SprintsTreeItem[]> {
     const sprintsDir = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.SPRINTS_DIR);
     const files = fileService.listMdFiles(sprintsDir);
 
+    const dataService = getDataService(workspaceRoot);
     const items = files.map(name => {
       const filePath = path.join(sprintsDir, name);
-      const label = this.humanizeSprintName(name);
+      let label = name;
+      try {
+        const { data } = matter.read(filePath);
+        const sprint: Sprint = {
+          id: data._id || name.replace('.md', ''),
+          name: data.name || name.replace('.md', ''),
+          startDate: data.startDate || '',
+          endDate: data.endDate || '',
+          status: (data.status as Sprint['status']) || 'planned',
+          tasks: data.tasks || [],
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt || new Date().toISOString()
+        };
+        label = dataService.getSprintFilename(sprint);
+      } catch (e) {
+        // Use filename as-is if parsing fails
+      }
       return new SprintsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
     });
 

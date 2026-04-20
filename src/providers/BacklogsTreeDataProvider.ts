@@ -3,11 +3,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
 import * as backlogService from '../services/backlogService';
-import * as backlogController from '../controller/backlogController';
 import { UI_CONSTANTS, PROJECT_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import { getBacklogPath, getTasksPath } from '../utils/backlogUtils';
 import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
+import { getDataService } from '../data/DataService';
+import { Task, Backlog } from '../data/types';
 
 
 export class BacklogsTreeItem extends vscode.TreeItem {
@@ -192,15 +193,15 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     await this.addTaskToBacklog(target.filePath!, taskPath);
     await this.refresh();
   }
-  private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<void> {
+private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<void> {
 
-    await backlogController.addTaskToBacklog(backlogPath, taskPath);
+    backlogService.addTaskToBacklog(backlogPath, taskPath);
     this.refresh();
     void vscode.window.showInformationMessage(`Task added to backlog`);
 
   }
   private async removeTaskFromBacklog(backlogPath: string, taskPath: string): Promise<void> {
-    await backlogController.removeTaskFromBacklog(backlogPath, taskPath);
+    backlogService.removeTaskFromBacklog(backlogPath, taskPath);
   }
   private async getTasksFromBacklogName(backlogName: string): Promise<BacklogsTreeItem[]> {
     const treeItems = backlogService.getTasksFromBacklog(backlogName);
@@ -302,14 +303,28 @@ export class BacklogsTreeDataProvider implements vscode.TreeDataProvider<Backlog
     return cleaned || base;
   }
 
-  // tree visualization methods
+// tree visualization methods
   private async getBacklogsTree(workspaceRoot: string): Promise<BacklogsTreeItem[]> {
     const backlogsDir = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.BACKLOGS_DIR);
     const files = fileService.listMdFiles(backlogsDir);
 
+    const dataService = getDataService(workspaceRoot);
     const items = files.map(name => {
       const filePath = path.join(backlogsDir, name);
-      const label = this.humanizeBacklogName(name);
+      let label = name;
+      try {
+        const { data } = matter.read(filePath);
+        const backlog: Backlog = {
+          id: data._id || name.replace('.md', ''),
+          name: data.name || name.replace('.md', ''),
+          description: data.description || '',
+          tasks: data.tasks || [],
+          color: data.color || '#2563eb'
+        };
+        label = dataService.getBacklogFilename(backlog);
+      } catch (e) {
+        // Use filename as-is if parsing fails
+      }
       return new BacklogsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
     });
 

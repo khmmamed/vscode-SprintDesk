@@ -326,16 +326,61 @@
           "scope": "resource",
           "markdownDescription": "Template for task .md filename. Use ${taskNumber} for task code and ${tasktitle} for title."
         },
-        "sprintdesk.epicPrefix": {
+        "sprintdesk.epicMdFilenamePattern": {
+          "type": "string",
+          "default": "[Epic]_${title}.md",
+          "description": "Template for epic .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for epic .md filename. Use ${title} for epic title."
+        },
+        "sprintdesk.sprintMdFilenamePattern": {
+          "type": "string",
+          "default": "[Sprint]_${id}.md",
+          "description": "Template for sprint .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for sprint .md filename. Use ${id} for sprint id."
+        },
+        "sprintdesk.backlogMdFilenamePattern": {
+          "type": "string",
+          "default": "[Backlog]_${name}.md",
+          "description": "Template for backlog .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for backlog .md filename. Use ${name} for backlog name."
+        },
+"sprintdesk.epicPrefix": {
           "type": "string",
           "default": "epic_",
           "description": "Epic ID prefix",
+          "scope": "resource"
+        },
+        "sprintdesk.epicStartNumber": {
+          "type": "number",
+          "default": 1,
+          "description": "Starting number for epic IDs",
+          "scope": "resource"
+        },
+        "sprintdesk.epicPadding": {
+          "type": "number",
+          "default": 2,
+          "description": "Number of digits for epic ID padding",
           "scope": "resource"
         },
         "sprintdesk.sprintPrefix": {
           "type": "string",
           "default": "sprint_",
           "description": "Sprint ID prefix",
+          "scope": "resource"
+        },
+        "sprintdesk.sprintStartNumber": {
+          "type": "number",
+          "default": 1,
+          "description": "Starting number for sprint IDs",
+          "scope": "resource"
+        },
+        "sprintdesk.sprintPadding": {
+          "type": "number",
+          "default": 1,
+          "description": "Number of digits for sprint ID padding",
           "scope": "resource"
         },
         "sprintdesk.defaultBacklog": {

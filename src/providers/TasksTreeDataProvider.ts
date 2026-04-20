@@ -3,9 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
-import * as taskController from '../controller/taskController';
+import * as taskService from '../services/taskService';
 import * as fileService from '../services/fileService';
 import { SprintDeskItem } from '../utils/SprintDeskItem';
+import { getDataService } from '../data/DataService';
+import { Task } from '../data/types';
 interface TaskData {
   _id: string;
   title: string;
@@ -22,9 +24,11 @@ interface TaskData {
 
 export class TaskTreeItem extends vscode.TreeItem {
   public readonly taskData: TaskData;
+  private taskObj?: Task;
 
   constructor(
     taskData: TaskData,
+    taskObj?: Task,
     // absolute path to the markdown file on disk (preferred)
     absoluteFilePath?: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None
@@ -99,10 +103,19 @@ export class TaskTreeItem extends vscode.TreeItem {
     }
   }
 
-  private setupVisuals(): void {
- 
+private setupVisuals(): void {
     const statusEmoji = this.getStatusEmoji(this.taskData.status);
-    this.label = `${statusEmoji} ${path.basename(this.taskData.path)} `;
+    
+    let filename = path.basename(this.taskData.path);
+    if (this.taskObj) {
+      const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (ws) {
+        const dataService = getDataService(ws);
+        filename = dataService.getTaskFilename(this.taskObj);
+      }
+    }
+    
+    this.label = `${statusEmoji} ${filename} `;
 
     // Set description with priority and epic
     const description = [this.getPriorityEmoji(this.taskData.priority)];
@@ -181,11 +194,11 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
       return [];
     }
 
-    if (!element) {
+if (!element) {
       // Root level: list all tasks under .SprintDesk/Tasks
-      const taskFiles = taskController.readTasks(ws);
+      const taskFiles = taskService.readTasks(ws);
 
-      return taskFiles.map(file => {
+      return taskFiles.map((file: string) => {
 
         try {
           // Use SprintDeskItem class to read task data
@@ -222,9 +235,25 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
             };
           }
 
+// Create Task object for filename pattern
+          const taskObj: Task = {
+            id: taskData._id,
+            code: taskData._id.replace(/^[a-zA-Z]+[-_]?/, ''),
+            title: taskData.title,
+            type: (taskData.type as Task['type']) || 'feature',
+            status: (taskData.status === 'not-started' ? 'waiting' : taskData.status as Task['status']) || 'waiting',
+            priority: (taskData.priority as Task['priority']) || 'medium',
+            epic: taskData.epic?._id || null,
+            backlog: '',
+            sprint: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            path: file
+          };
+
           // Create TreeItem with taskData and pass the absolute file path so
           // the item can open the correct file when clicked.
-          const item = new TaskTreeItem(taskData, file);
+          const item = new TaskTreeItem(taskData, taskObj, file);
 
           return item;
         } catch (error) {

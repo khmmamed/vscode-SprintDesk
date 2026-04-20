@@ -49,7 +49,11 @@ export class DataService {
     const taskStart = cfg.get<number>('taskStartNumber') || 100;
     const taskPad = cfg.get<number>('taskPadding') || 3;
     const epicPrefix = cfg.get<string>('epicPrefix') || 'epic_';
+    const epicStart = cfg.get<number>('epicStartNumber') || 1;
+    const epicPad = cfg.get<number>('epicPadding') || 2;
     const sprintPrefix = cfg.get<string>('sprintPrefix') || 'sprint_';
+    const sprintStart = cfg.get<number>('sprintStartNumber') || 1;
+    const sprintPad = cfg.get<number>('sprintPadding') || 1;
     const defaultBacklog = cfg.get<string>('defaultBacklog') || 'features';
     const defaultStatus = cfg.get<string>('defaultStatus') || 'waiting';
     const defaultPriority = cfg.get<string>('defaultPriority') || 'medium';
@@ -59,8 +63,8 @@ export class DataService {
     this.configCache = {
       ids: {
         task: { prefix: taskPrefix, startNumber: taskStart, padding: taskPad },
-        epic: { prefix: epicPrefix, startNumber: 1, padding: 2 },
-        sprint: { prefix: sprintPrefix, startNumber: 1, padding: 1 },
+        epic: { prefix: epicPrefix, startNumber: epicStart, padding: epicPad },
+        sprint: { prefix: sprintPrefix, startNumber: sprintStart, padding: sprintPad },
         backlog: { prefix: '' }
       },
       defaults: {
@@ -428,15 +432,47 @@ export class DataService {
       .replace(/^-|-$/g, '');
   }
 
-  private getTaskFilename(task: Task): string {
+  public getTaskFilename(task: Task): string {
     const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('taskNamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
+    const pattern = cfg.get<string>('taskMdFilenamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
     const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
     const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
     const filename = pattern
       .replace(/\$\{tasknumber\}/ig, taskNumber)
       .replace(/\$\{tasktitle\}/ig, taskTitleSlug);
     return filename;
+  }
+
+  public getEpicFilename(epic: Epic): string {
+    const cfg = vscode.workspace.getConfiguration('sprintdesk');
+    const pattern = cfg.get<string>('epicMdFilenamePattern') || '[Epic]_${epicNumber}_${title}.md';
+    const config = this.loadConfig();
+    const epicPrefix = config.ids.epic.prefix;
+    const epicNumber = (epic.id || '').replace(epicPrefix, '');
+    const titleSlug = this.slugifyTitle(epic.name || epic.id || 'epic');
+    return pattern
+      .replace(/\$\{epicnumber\}/ig, epicNumber)
+      .replace(/\$\{epicnumber\}/ig, epicNumber)
+      .replace(/\$\{title\}/ig, titleSlug);
+  }
+
+  public getBacklogFilename(backlog: Backlog): string {
+    const cfg = vscode.workspace.getConfiguration('sprintdesk');
+    const pattern = cfg.get<string>('backlogMdFilenamePattern') || '[Backlog]_${name}.md';
+    const nameSlug = this.slugifyTitle(backlog.name || backlog.id || 'backlog');
+    return pattern.replace(/\$\{name\}/ig, nameSlug);
+  }
+
+  public getSprintFilename(sprint: Sprint): string {
+    const cfg = vscode.workspace.getConfiguration('sprintdesk');
+    const pattern = cfg.get<string>('sprintMdFilenamePattern') || '[Sprint]_${sprintNumber}_${id}.md';
+    const config = this.loadConfig();
+    const sprintPrefix = config.ids.sprint.prefix;
+    const sprintNumber = (sprint.id || '').replace(sprintPrefix, '');
+    return pattern
+      .replace(/\$\{sprintnumber\}/ig, sprintNumber)
+      .replace(/\$\{sprintnumber\}/ig, sprintNumber)
+      .replace(/\$\{id\}/ig, sprint.id || 'sprint');
   }
 
   private generateBacklogMd(backlog: Backlog, tasks: Task[]): string {
@@ -494,7 +530,7 @@ export class DataService {
     fs.mkdirSync(tasksDir, { recursive: true });
     // derive filename from user-configured pattern
     const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('taskNamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
+    const pattern = cfg.get<string>('taskMdFilenamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
     const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
     const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
     const filename = pattern
@@ -534,7 +570,8 @@ export class DataService {
     const backlogsDir = this.getBacklogsDir();
     fs.mkdirSync(backlogsDir, { recursive: true });
 
-    const filePath = path.join(backlogsDir, `${backlog.id}.md`);
+    const filename = this.getBacklogFilename(backlog);
+    const filePath = path.join(backlogsDir, filename);
     let additionalContent: string | undefined;
 
     if (preserveUserContent && fs.existsSync(filePath)) {
@@ -557,7 +594,8 @@ export class DataService {
     const epicsDir = this.getEpicsDir();
     fs.mkdirSync(epicsDir, { recursive: true });
 
-    const filePath = path.join(epicsDir, `${epic.id}.md`);
+    const filename = this.getEpicFilename(epic);
+    const filePath = path.join(epicsDir, filename);
     let additionalContent: string | undefined;
 
     if (preserveUserContent && fs.existsSync(filePath)) {
@@ -580,7 +618,8 @@ export class DataService {
     const sprintsDir = this.getSprintsDir();
     fs.mkdirSync(sprintsDir, { recursive: true });
 
-    const filePath = path.join(sprintsDir, `${sprint.id}.md`);
+    const filename = this.getSprintFilename(sprint);
+    const filePath = path.join(sprintsDir, filename);
     let additionalContent: string | undefined;
 
     if (preserveUserContent && fs.existsSync(filePath)) {
