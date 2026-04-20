@@ -86,8 +86,9 @@ export function addTaskToSprint(sprintPath: string, taskPath: string): void {
       taskObj = dataService.getTask(tid) || { id: tid, title: tm.data?.title || path.basename(taskPath) } as any;
     }
 
-    if (sprint.tasks && sprint.tasks.includes(taskObj?.id)) {
-      console.log(`Task with ID ${taskObj?.id} already exists in sprint.`);
+    const checkTaskId = taskObj?.id || taskId;
+    if (sprint.tasks && sprint.tasks.includes(checkTaskId)) {
+      console.log(`Task with ID ${checkTaskId} already exists in sprint.`);
       return;
     }
 
