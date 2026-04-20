@@ -53,8 +53,43 @@ import { createTask as createTaskService } from "./services/taskService";
 
 const createTask = async (repoPath?: string): Promise<void> => {
   const ws = repoPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!ws) return;
-  await createTaskService(ws, { title: 'New Task', type: 'feature', status: 'waiting', priority: 'medium' });
+  if (!ws) {
+    vscode.window.showErrorMessage('No workspace folder open.');
+    return;
+  }
+
+  const title = await vscode.window.showInputBox({
+    prompt: 'Task title',
+    placeHolder: 'Enter task title...'
+  });
+  if (!title) return;
+
+  const type = await vscode.window.showQuickPick(['feature', 'bug', 'chore', 'doc', 'test'], {
+    placeHolder: 'Select task type'
+  });
+  if (!type) return;
+
+  const priority = await vscode.window.showQuickPick(['high', 'medium', 'low'], {
+    placeHolder: 'Select priority'
+  });
+  if (!priority) return;
+
+  const backlog = await vscode.window.showInputBox({
+    prompt: 'Backlog name',
+    placeHolder: 'features',
+    value: 'features'
+  });
+
+  await createTaskService(ws, {
+    title,
+    type,
+    status: 'waiting',
+    priority,
+    backlog: backlog || 'features',
+    epic: null
+  });
+
+  vscode.window.showInformationMessage(`Task "${title}" created.`);
 };
 
 // existing tasks dir helper moved to services/fileService
@@ -158,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext) {
   registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
   registerScanProjectStructureCommand(context);
   registerAddSprintCommand(context, { createSprintInteractive });
-  registerAddEpicCommand(context, { createEpicInteractive });
+  registerAddEpicCommand(context, { createEpicInteractive, epicsProvider });
   registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
   registerAddBacklogCommand(context, { createBacklogInteractive });
   registerAddTaskToBacklogCommand(context, { addTaskToBacklogInteractive });

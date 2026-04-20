@@ -55,6 +55,7 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
         const task: Task = {
           id: data._id || data.id || dataService.generateId('task'),
           code: data.code || `task-${(taskCount + 1).toString().padStart(3, '0')}`,
+          name: '',
           title: data.title || path.basename(file, '.md').replace(/^\[Task\]_/, '').replace(/_/g, ' '),
           type: data.type || 'feature',
           status: data.status || 'waiting',
@@ -65,6 +66,9 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString()
         };
+        
+        // Set name from filename
+        task.name = path.basename(file, '.md');
 
         // Use TaskService migration helper to preserve original ids/codes
         try {
@@ -131,7 +135,8 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
         const epicTasks = extractTasksFromEpicMd(filePath);
         const epic: Epic = {
           id: data._id || data.id || dataService.generateId('epic'),
-          name: data.title || path.basename(file, '.md').replace(/^\[Epic\]_/, '').replace(/_/g, ' '),
+          name: '',
+          title: data.title || path.basename(file, '.md').replace(/^\[Epic\]_/, '').replace(/_/g, ' '),
           description: data.description || '',
           status: data.status || 'planned',
           priority: data.priority || 'medium',
@@ -139,6 +144,8 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString()
         };
+        
+        epic.name = path.basename(file, '.md');
 
         dataService.addEpic(epic);
         result.epics++;

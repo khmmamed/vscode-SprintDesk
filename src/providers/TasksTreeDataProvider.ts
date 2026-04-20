@@ -10,6 +10,7 @@ import { getDataService } from '../data/DataService';
 import { Task } from '../data/types';
 interface TaskData {
   _id: string;
+  name: string;
   title: string;
   type: string;
   status: string;
@@ -18,7 +19,7 @@ interface TaskData {
     _id: string;
     title: string;
     path: string;
-  };
+  } | null;
   path: string;
 }
 
@@ -73,12 +74,14 @@ export class TaskTreeItem extends vscode.TreeItem {
     }
   }
 
-  private getStatusEmoji(status: string): string {
+private getStatusEmoji(status: string): string {
     switch (status.toLowerCase()) {
       case 'not-started': return '⏳';
+      case 'waiting': return '⏳';
       case 'in-progress': return '🔄';
       case 'done': return '✅';
       case 'blocked': return '⛔';
+      case 'cancelled': return '❌';
       default: return '⏳';
     }
   }
@@ -115,7 +118,7 @@ private setupVisuals(): void {
       }
     }
     
-    this.label = `${statusEmoji} ${filename} `;
+    this.label = `${this.taskData.name || this.taskData.title} ${statusEmoji}`;
 
     // Set description with priority and epic
     const description = [this.getPriorityEmoji(this.taskData.priority)];
@@ -188,78 +191,35 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
     return element;
   }
 
-  async getChildren(element?: TaskTreeItem): Promise<TaskTreeItem[]> {
+async getChildren(element?: TaskTreeItem): Promise<TaskTreeItem[]> {
     const ws = this.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!ws) {
       return [];
     }
 
-if (!element) {
-      // Root level: list all tasks under .SprintDesk/Tasks
-      const taskFiles = taskService.readTasks(ws);
+    if (!element) {
+      // Load tasks directly from YAML (source of truth)
+      const tasks = taskService.loadTasks();
+      
+      return tasks.map((task: Task) => {
+        // Get the MD file path from the task's path field
+        const mdPath = task.path || '';
+        
+        const taskData: TaskData = {
+          _id: task.id,
+          name: task.name || '',
+          title: task.title,
+          type: task.type,
+          status: task.status,
+          priority: task.priority,
+          epic: task.epic ? { _id: task.epic, title: task.epic, path: '' } : null,
+          path: mdPath
+        };
 
-      return taskFiles.map((file: string) => {
+        // Create TreeItem with task data and MD file path
+        const item = new TaskTreeItem(taskData, task, mdPath);
 
-        try {
-          // Use SprintDeskItem class to read task data
-          let taskData: any;
-          
-          try {
-            const taskItem = new SprintDeskItem(file);
-            const metadata = taskItem.getMetadata();
-            
-            taskData = {
-              _id: metadata._id,
-              title: metadata.title,
-              type: metadata.type,
-              status: metadata.status || 'not-started',
-              priority: metadata.priority || 'low',
-              epic: metadata.epic,
-              path: metadata.path || file // Use absolute file path if metadata.path is undefined
-            };
-            
-            console.log(`✅ Task data read using SprintDeskItem: ${file}`);
-          } catch (sprintDeskError) {
-            console.error('❌ Failed to read task data with SprintDeskItem, falling back to original method:', sprintDeskError);
-            
-            // Fallback to original method
-            const { data } = matter.read(file);
-            taskData = {
-              _id: data._id,
-              title: data.title,
-              type: data.type,
-              status: data.status || 'not-started',
-              priority: data.priority || 'low',
-              epic: data.epic,
-              path: data.path || file // Use absolute file path if data.path is undefined
-            };
-          }
-
-// Create Task object for filename pattern
-          const taskObj: Task = {
-            id: taskData._id,
-            code: taskData._id.replace(/^[a-zA-Z]+[-_]?/, ''),
-            title: taskData.title,
-            type: (taskData.type as Task['type']) || 'feature',
-            status: (taskData.status === 'not-started' ? 'waiting' : taskData.status as Task['status']) || 'waiting',
-            priority: (taskData.priority as Task['priority']) || 'medium',
-            epic: taskData.epic?._id || null,
-            backlog: '',
-            sprint: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            path: file
-          };
-
-          // Create TreeItem with taskData and pass the absolute file path so
-          // the item can open the correct file when clicked.
-          const item = new TaskTreeItem(taskData, taskObj, file);
-
-          return item;
-        } catch (error) {
-          console.error(`Error creating task item:`, error);
-          return null;
-        }
+        return item;
       }).filter(item => item !== null) as TaskTreeItem[];
     }
 

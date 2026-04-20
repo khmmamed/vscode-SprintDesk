@@ -298,31 +298,15 @@ private async updateTaskEpic(taskName: string, epicName: string): Promise<void> 
       .trim();
     return cleaned || base;
   }
-  // tree visualization methods
+// tree visualization methods
   private async getEpicsTree(workspaceRoot: string): Promise<EpicsTreeItem[]> {
-    const epicsDir = path.join(workspaceRoot, PROJECT_CONSTANTS.SPRINTDESK_DIR, PROJECT_CONSTANTS.EPICS_DIR);
-    const files = fileService.listMdFiles(epicsDir);
+    // Load epics from YAML (source of truth)
+    const epics = epicService.getEpics(workspaceRoot);
 
-const dataService = getDataService(workspaceRoot);
-    const items = files.map(name => {
-      const filePath = path.join(epicsDir, name);
-      let label = name;
-      try {
-        const { data } = matter.read(filePath);
-        const epic: Epic = {
-          id: data._id || name.replace('.md', ''),
-          name: data.title || name.replace('.md', ''),
-          description: data.description || '',
-          status: (data.status as Epic['status']) || 'planned',
-          priority: (data.priority as Epic['priority']) || 'medium',
-          tasks: data.tasks || [],
-          createdAt: data.createdAt || new Date().toISOString(),
-          updatedAt: data.updatedAt || new Date().toISOString()
-        };
-        label = dataService.getEpicFilename(epic);
-      } catch (e) {
-        // Use filename as-is if parsing fails
-      }
+    const items = epics.map(epic => {
+      const filePath = epic.path || '';
+      const label = epic.name || epic.title;
+
       return new EpicsTreeItem(label, vscode.TreeItemCollapsibleState.Collapsed, [], filePath);
     });
 

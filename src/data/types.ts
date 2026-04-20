@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 export interface Task {
   id: string;
   code: string;
+  name: string;
   title: string;
   type: 'feature' | 'bug' | 'chore' | 'doc' | 'test';
   status: 'waiting' | 'in-progress' | 'done' | 'blocked' | 'cancelled';
@@ -18,6 +19,7 @@ export interface Task {
 export interface Epic {
   id: string;
   name: string;
+  title: string;
   description: string;
   status: 'planned' | 'in-progress' | 'completed' | 'blocked';
   priority: 'high' | 'medium' | 'low';

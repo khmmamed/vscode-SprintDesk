@@ -15,7 +15,8 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
   const epicId = crypto.randomUUID();
   const epic: Epic = {
     id: epicId,
-    name: title,
+    name: '',
+    title: title,
     description: epicMetadata.description || '',
     status: 'planned',
     priority: 'medium',
@@ -24,6 +25,8 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
     updatedAt: new Date().toISOString()
   };
 
+  // Set name from filename
+  epic.name = dataService.getEpicFilename(epic).replace(/\.md$/, '');
   epic.path = path.join(dataService.getEpicsDir(), dataService.getEpicFilename(epic));
 
   dataService.addEpic(epic);
@@ -31,7 +34,7 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
 
   return {
     _id: epic.id as any,
-    title: epic.name,
+    title: epic.title,
     status: epic.status as SprintDesk.EpicStatus,
     priority: epic.priority as SprintDesk.Priority,
     createdAt: epic.createdAt,
@@ -50,7 +53,8 @@ export function createEpic(name: string): string {
   const epicId = crypto.randomUUID();
   const epic: Epic = {
     id: epicId,
-    name,
+    name: '',
+    title: name,
     description: '',
     status: 'planned',
     priority: 'medium',
@@ -59,6 +63,7 @@ export function createEpic(name: string): string {
     updatedAt: new Date().toISOString()
   };
 
+  epic.name = dataService.getEpicFilename(epic).replace(/\.md$/, '');
   epic.path = path.join(dataService.getEpicsDir(), dataService.getEpicFilename(epic));
 
   dataService.addEpic(epic);

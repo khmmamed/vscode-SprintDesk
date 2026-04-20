@@ -48,6 +48,7 @@ class TaskService {
     const task: Task = {
       id: taskId,
       code: taskCode,
+      name: '', // Will be set after generating filename
       title: taskData.title,
       type: (taskData.type as Task['type']) || (config.defaults.type as Task['type']) || 'feature',
       status: (taskData.status as Task['status']) || (config.defaults.status as Task['status']) || 'waiting',
@@ -59,7 +60,10 @@ class TaskService {
       updatedAt: new Date().toISOString()
     };
 
-    task.path = path.join(dataService.getTasksDir(), dataService.getTaskFilename(task));
+    // Generate name from filename
+    const filename = dataService.getTaskFilename(task);
+    task.name = filename.replace(/\.md$/, '');
+    task.path = path.join(dataService.getTasksDir(), filename);
 
     dataService.addTask(task);
     dataService.saveTaskMd(task);
@@ -90,6 +94,9 @@ class TaskService {
     task.createdAt = task.createdAt || new Date().toISOString();
     task.updatedAt = task.updatedAt || new Date().toISOString();
     
+    if (!task.name) {
+      task.name = dataService.getTaskFilename(task).replace(/\.md$/, '');
+    }
     if (!task.path) {
       task.path = path.join(dataService.getTasksDir(), dataService.getTaskFilename(task));
     }

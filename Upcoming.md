@@ -1,16 +1,15 @@
-## Sprints files
-| Emoji  | Status   | Meaning                                                        |
-| -----  | -------- | -------------------------------------------------------------- |
-| 🟡    | waiting  | Not started yet                                                |
-| 🔵    | started  | In progress, with timestamp when work began                    |
-| 🟢    | finished | Completed but not yet reviewed                                 |
-| 🟠    | reopened | Task completed earlier but reopened for further work           |
-| ⚫    | closed   | Fully done, reviewed, and accepted into the sprint deliverable |
-
-pattern to parse status start 
-#### 📋 Tasks
-- 📌 [add-barcode-to-product](../tasks/[Task]_add-barcode-to-product_[Epic]_creation-product.md) 🟡 {status: waiting}
-- 📌 [register-sidebar-view](../tasks/[Task]_register-sidebar-view_[Epic]_VSCode-ActivityUI.md) 🔵 {status: started, started_at: 2025-08-11T09:35:00Z}
-- 📌 [sidebar-react-ui](../tasks/[Task]_sidebar-react-ui_[Epic]_VSCode-ActivityUI.md) 🟢 {status: finished, finished_at: 2025-08-11T14:20:00Z}
-- 📌 [sidebar-message-passing](../tasks/[Task]_sidebar-message-passing_[Epic]_VSCode-ActivityUI.md) 🟠 {status: reopened, reopened_at: 2025-08-12T08:15:00Z}
-- 📌 [sidebar-data-persistence](../tasks/[Task]_sidebar-data-persistence_[Epic]_VSCode-ActivityUI.md) ⚫ {status: closed, closed_at: 2025-08-16T17:00:00Z}
+we want this naming pattern epic [{PROJECT code}-epicNumber}]_{Category}_{title} for tasks [{Project code}-{epicNumber}.{taskNumber}]_{title} 
+example: 
+epics:
+[SPD-101]_SEO_Add-Meta-Tags-to-Product-Pages
+[SPD-102]_SEO_Implement-Schema-org-JSON-LD
+[SPD-103]_SEO_Fix-SSR-for-Store-Products
+[SPD-104]_SEO_Add-Canonical-URLs
+[SPD-105]_SEO_Add-Open-Graph-Tags
+[SPD-106]_SEO_Add-Structured-Data for-Doctors
+[SPD-107]_SEO_Fix-Missing-H1-Tags
+[SPD-108]_SEO_Add-Sitemap-Generation
+tasks :
+[SPD-101.1]_Add-title=and-description-metadata
+[SPD-101.2]_Add-canonical=URL-tags
+[SPD-101.3]_Add-robots=meta-tags
