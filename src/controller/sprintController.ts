@@ -93,13 +93,14 @@ export function addTaskToSprint(sprintPath: string, taskPath: string): void {
 
     // add task id to sprint and persist via DataService
     sprint.tasks = sprint.tasks || [];
-    sprint.tasks.push(taskObj?.id);
-    dataService.updateSprint(String(sprint.id!), { tasks: sprint.tasks });
+    sprint.tasks.push(taskObj?.id || taskId);
+    dataService.updateSprint(sprintId, { tasks: sprint.tasks });
     dataService.saveSprintMd(sprint);
 
     // update task.sprint and persist
-    if (taskObj && taskObj.id) {
-      dataService.updateTask(String(taskObj.id!), { sprint: String(sprint.id!) });
+    if (taskObj) {
+      const tid = taskObj.id || taskId;
+      dataService.updateTask(tid, { sprint: sprintId });
       dataService.saveTaskMd(taskObj as any);
     }
   } catch (e) {
@@ -128,12 +129,13 @@ export function removeTaskFromSprint(sprintPath: string, taskPath: string): void
     }
 
     sprint.tasks = tasks;
-    dataService.updateSprint(String(sprint.id!), { tasks: sprint.tasks });
+    dataService.updateSprint(sprintId, { tasks: sprint.tasks });
     dataService.saveSprintMd(sprint);
 
     const taskObj = dataService.getTask(taskId);
     if (taskObj) {
-      dataService.updateTask(String(taskObj.id!), { sprint: '' });
+      const tid = taskObj.id || taskId;
+      dataService.updateTask(tid, { sprint: '' });
       dataService.saveTaskMd(taskObj as any);
     }
   } catch (e) {
