@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { getDataService } from '../data/DataService';
 import * as fileService from './fileService';
 import { Task } from '../data/types';
@@ -41,9 +42,12 @@ class TaskService {
     const dataService = getDataService(this.workspaceRoot);
     const config = dataService.loadConfig();
 
+    const taskId = crypto.randomUUID();
+    const taskCode = dataService.generateId('task');
+
     const task: Task = {
-      id: dataService.generateId('task'),
-      code: dataService.generateId('task'),
+      id: taskId,
+      code: taskCode,
       title: taskData.title,
       type: (taskData.type as Task['type']) || (config.defaults.type as Task['type']) || 'feature',
       status: (taskData.status as Task['status']) || (config.defaults.status as Task['status']) || 'waiting',
@@ -54,6 +58,8 @@ class TaskService {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+
+    task.path = path.join(dataService.getTasksDir(), dataService.getTaskFilename(task));
 
     dataService.addTask(task);
     dataService.saveTaskMd(task);
@@ -76,9 +82,17 @@ class TaskService {
 
   createTaskFromData(taskData: Task): Task {
     const dataService = getDataService(this.workspaceRoot);
+    const config = dataService.loadConfig();
     const task: Task = { ...taskData };
+    
+    task.id = task.id || crypto.randomUUID();
+    task.code = task.code || dataService.generateId('task');
     task.createdAt = task.createdAt || new Date().toISOString();
     task.updatedAt = task.updatedAt || new Date().toISOString();
+    
+    if (!task.path) {
+      task.path = path.join(dataService.getTasksDir(), dataService.getTaskFilename(task));
+    }
 
     dataService.addTask(task);
     dataService.saveTaskMd(task, true);

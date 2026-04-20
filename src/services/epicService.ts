@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import * as fileService from './fileService';
 import { PROJECT_CONSTANTS } from '../utils/constant';
 import { getDataService } from '../data/DataService';
@@ -11,7 +12,7 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
   if (!title) throw new Error('Epic title is required');
 
   const dataService = getDataService(ws);
-  const epicId = dataService.generateId('epic');
+  const epicId = crypto.randomUUID();
   const epic: Epic = {
     id: epicId,
     name: title,
@@ -22,6 +23,8 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+
+  epic.path = path.join(dataService.getEpicsDir(), dataService.getEpicFilename(epic));
 
   dataService.addEpic(epic);
   dataService.saveEpicMd(epic);
@@ -35,7 +38,7 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
     updatedAt: epic.updatedAt,
     totalTasks: 0,
     completedTasks: 0,
-    path: path.join(fileService.getEpicsDir(ws), `${epic.id}.md`)
+    path: epic.path
   };
 }
 
@@ -44,7 +47,7 @@ export function createEpic(name: string): string {
   if (!ws) throw new Error('No workspace');
 
   const dataService = getDataService(ws);
-  const epicId = dataService.generateId('epic');
+  const epicId = crypto.randomUUID();
   const epic: Epic = {
     id: epicId,
     name,
@@ -56,10 +59,12 @@ export function createEpic(name: string): string {
     updatedAt: new Date().toISOString()
   };
 
+  epic.path = path.join(dataService.getEpicsDir(), dataService.getEpicFilename(epic));
+
   dataService.addEpic(epic);
   dataService.saveEpicMd(epic);
 
-  return path.join(fileService.getEpicsDir(ws), `${epic.id}.md`);
+  return epic.path;
 }
 
 export function addTaskToEpic(epicTitleOrPath: string, taskNameOrPath: string) {

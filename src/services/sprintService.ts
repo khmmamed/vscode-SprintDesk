@@ -27,11 +27,12 @@ export function createSprint(nameParts: { d1: string; mo1: string; d2: string; m
     updatedAt: new Date().toISOString()
   };
 
+  sprint.path = path.join(dataService.getSprintsDir(), dataService.getSprintFilename(sprint));
+
   dataService.addSprint(sprint);
   dataService.saveSprintMd(sprint);
 
-  const sprintFilename = dataService.getSprintFilename(sprint);
-  return path.join(fileService.getSprintsDir(ws), sprintFilename);
+  return sprint.path;
 }
 
 export async function createSprintInteractive() {

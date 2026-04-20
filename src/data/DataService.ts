@@ -109,7 +109,7 @@ export class DataService {
       padding = idConfig.padding;
       const tasks = this.loadTasks();
       tasks.forEach(t => {
-        const num = parseInt(t.id.replace(prefix, ''));
+        const num = parseInt(String(t.code || '').replace(prefix, ''));
         if (!isNaN(num) && num > maxNum) maxNum = num;
       });
     } else if (type === 'epic') {

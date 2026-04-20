@@ -24,6 +24,7 @@ export interface Epic {
   tasks: string[];
   createdAt: string;
   updatedAt: string;
+  path?: string;
 }
 
 export interface Backlog {
@@ -32,6 +33,7 @@ export interface Backlog {
   description: string;
   tasks: string[];
   color: string;
+  path?: string;
 }
 
 export interface Sprint {
@@ -43,6 +45,7 @@ export interface Sprint {
   tasks: string[];
   createdAt: string;
   updatedAt: string;
+  path?: string;
 }
 
 export interface IdsConfig {

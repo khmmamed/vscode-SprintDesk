@@ -37,6 +37,8 @@ export async function createBacklogInteractive(): Promise<void> {
     color: '#2563eb'
   };
 
+  backlog.path = path.join(dataService.getBacklogsDir(), `${backlog.id}.md`);
+
   dataService.addBacklog(backlog);
   dataService.saveBacklogMd(backlog);
 
