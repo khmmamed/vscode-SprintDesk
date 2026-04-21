@@ -19,7 +19,8 @@ export class BacklogsTreeItem extends vscode.TreeItem {
     public readonly filePath?: string,
     public readonly taskPath?: string,
     public readonly sourceBacklogPath?: string,
-    public readonly backlogId?: string
+    public readonly backlogId?: string,
+    public readonly taskId?: string
   ) {
     super(label, collapsibleState);
 
@@ -234,7 +235,8 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
         undefined,
         item.path,
         undefined,
-        backlogId
+        backlogId,
+        item.id
       );
       if (item.command) {
         treeItem.command = item.command;
@@ -253,7 +255,8 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
         undefined,
         item.path,
         undefined,
-        backlogId
+        backlogId,
+        item.id
       );
       if (item.command) {
         treeItem.command = item.command;
@@ -267,21 +270,15 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
     try {
       if (source.length > 0) {
         const taskItem = source[0];
-        if (!taskItem.taskPath) {
-          throw new Error('No task path found for drag operation');
-        }
-
-        const { data: taskMetadata } = matter.read(taskItem.taskPath);
-        const taskId = taskMetadata._id || taskMetadata.id;
 
         const taskData = {
-          _id: taskId,
+          _id: taskItem.taskId,
           type: 'task',
           label: taskItem.label,
           path: taskItem.taskPath,
           backlog: {
             type: 'backlog',
-            backlogId: taskItem.backlogId || taskItem.sourceBacklogPath
+            backlogId: taskItem.backlogId
           }
         };
 
@@ -304,34 +301,42 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
         throw new Error('Invalid drop target: must be a backlog');
       }
 
-      // Try text/plain first (our custom format from handleDrag)
+      const backlogMimeType = 'application/vnd.code.tree.sprintdesk-backlogs';
+      const dataItem = dataTransfer.get(backlogMimeType);
+      
+      if (dataItem && dataItem.value) {
+        const handleData = JSON.parse(dataItem.value as string);
+        if (handleData._id) {
+          await this.handleTaskDropFromBacklogs(target, handleData);
+          return;
+        }
+      }
+
       const textItem = dataTransfer.get('text/plain');
       if (textItem && textItem.value) {
         try {
           const handleData = JSON.parse(textItem.value as string);
-          if (handleData._id) {
+          if (handleData._id && handleData.backlog?.backlogId) {
+            await this.handleTaskDropFromBacklogs(target, handleData);
+            return;
+          } else if (handleData._id) {
             await this.handleTaskDropFromTasks(target, handleData);
             return;
           }
         } catch (e) {
-          // Ignore parse errors
         }
       }
 
-      // Fallback: try to parse VS Code tree internal format
       const taskSources = {
         tasks: 'application/vnd.code.tree.sprintdesk-tasks',
-        backlogs: 'application/vnd.code.tree.sprintdesk-backlogs',
         epics: 'application/vnd.code.tree.sprintdesk-epics',
         sprints: 'application/vnd.code.tree.sprintdesk-sprints'
       };
 
       for (const [source, mimeType] of Object.entries(taskSources)) {
-        const dataItem = dataTransfer.get(mimeType);
-        if (dataItem && dataItem.value) {
-          const handleData = JSON.parse(dataItem.value as string);
-          
-          // Handle VS Code tree internal format (itemHandles)
+        const item = dataTransfer.get(mimeType);
+        if (item && item.value) {
+          const handleData = JSON.parse(item.value as string);
           let taskId = handleData._id;
           if (!taskId && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
             const raw = String(handleData.itemHandles[0] || '');
@@ -346,9 +351,6 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
             switch (source) {
               case 'tasks':
                 await this.handleTaskDropFromTasks(target, { _id: taskId });
-                return;
-              case 'backlogs':
-                await this.handleTaskDropFromBacklogs(target, { _id: taskId });
                 return;
               case 'epics':
                 await this.handleTaskDropFromEpics(target, { _id: taskId });

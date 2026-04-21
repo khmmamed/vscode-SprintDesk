@@ -200,33 +200,35 @@ export function deleteSprint(sprintId: string): void {
   dataService.deleteSprint(sprintId);
 }
 
-export function getTasksFromSprint(sprintId: string): { label: string; path: string }[] {
+export function getTasksFromSprint(sprintId: string): { label: string; path: string; id: string }[] {
   const ws = fileService.getWorkspaceRoot();
   const dataService = getDataService(ws);
   const sprint = dataService.getSprint(sprintId);
-  if (!sprint) return [];
+  if (!sprint || !sprint.tasks) return [];
   
   const tasks = dataService.loadTasks();
   const tasksDir = dataService.getTasksDir();
   
   return tasks.filter(t => sprint.tasks.includes(t.id)).map(t => ({
     label: t.title,
-    path: path.join(tasksDir, dataService.getTaskFilename(t))
+    path: path.join(tasksDir, dataService.getTaskFilename(t)),
+    id: t.id
   }));
 }
 
-export function getTasksFromSprintById(sprintId: string): { label: string; path: string }[] {
+export function getTasksFromSprintById(sprintId: string): { label: string; path: string; id: string }[] {
   const ws = fileService.getWorkspaceRoot();
   const dataService = getDataService(ws);
   const sprint = dataService.getSprint(sprintId);
-  if (!sprint) return [];
+  if (!sprint || !sprint.tasks) return [];
   
   const tasks = dataService.loadTasks();
   const tasksDir = dataService.getTasksDir();
   
   return tasks.filter(t => sprint.tasks.includes(t.id)).map(t => ({
     label: t.title,
-    path: path.join(tasksDir, dataService.getTaskFilename(t))
+    path: path.join(tasksDir, dataService.getTaskFilename(t)),
+    id: t.id
   }));
 }
 
@@ -300,6 +302,10 @@ export function addTaskToSprintById(sprintId: string, taskId: string): void {
   
   const task = dataService.getTask(taskId);
   if (!task) return;
+  
+  if (!sprint.tasks) {
+    sprint.tasks = [];
+  }
   
   if (!sprint.tasks.includes(task.id)) {
     sprint.tasks.push(task.id);

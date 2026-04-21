@@ -1,10 +1,16 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as fileService from './fileService';
 import { PROJECT_CONSTANTS } from '../utils/constant';
 import { getDataService } from '../data/DataService';
 import { Epic } from '../data/types';
+
+function getDs() {
+  const ws = fileService.getWorkspaceRoot();
+  return ws ? getDataService(ws) : undefined;
+}
 
 export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Promise<SprintDesk.EpicMetadata> {
   const ws = fileService.getWorkspaceRoot();
@@ -151,8 +157,24 @@ export function addTaskToEpicById(epicId: string, taskId: string) {
 
   const taskObj = dataService.loadTasks().find(t => t.id === taskId);
   if (taskObj) {
+    const oldEpicId = taskObj.epic;
+    const oldEpic = oldEpicId ? epics.find(e => e.name === oldEpicId || e.id === oldEpicId) : undefined;
+    
+    const newCode = updateTaskCodeForNewEpic(oldEpic, epic, taskObj, dataService);
+    if (newCode !== taskObj.code) {
+      renameTaskFile(taskObj, newCode, dataService);
+      taskObj.code = newCode;
+      taskObj.number = parseInt(newCode.split('.')[1]) || taskObj.number;
+    }
+    
     taskObj.epic = epic.name;
-    dataService.updateTask(taskId, { epic: epic.name });
+    dataService.updateTask(taskId, { 
+      epic: epic.name,
+      code: taskObj.code,
+      number: taskObj.number,
+      name: taskObj.name,
+      path: taskObj.path
+    });
     dataService.saveTaskMd(taskObj);
   }
 }
@@ -264,6 +286,42 @@ export function removeTaskFromEpicByName(epicName: string, taskId: string) {
   }
 }
 
+function updateTaskCodeForNewEpic(oldEpic: Epic | undefined, newEpic: Epic, task: any, dataService: any): string {
+  const config = dataService.loadConfig();
+  
+  let newNumber: number;
+  if (oldEpic && oldEpic.id === newEpic.id) {
+    newNumber = task.number;
+  } else {
+    const currentTasks = newEpic.tasks || [];
+    let maxNum = 0;
+    for (const tid of currentTasks) {
+      const t = dataService.getTask(tid);
+      if (t && t.number && t.number > maxNum) maxNum = t.number;
+    }
+    newNumber = maxNum > 0 ? maxNum + 1 : config.ids.task.startNumber;
+  }
+  
+  const newCode = `${newEpic.code}.${newNumber}`;
+  return newCode;
+}
+
+function renameTaskFile(task: any, newCode: string, dataService: any): void {
+  const ws = fileService.getWorkspaceRoot();
+  const tasksDir = fileService.getTasksDir(ws);
+  const oldPath = task.path;
+  
+  const titleSlug = dataService.slugifyTitle(task.title || 'untitled');
+  const newFilename = `[${newCode}]_${titleSlug}.md`;
+  const newPath = path.join(tasksDir, newFilename);
+  
+  if (oldPath && fs.existsSync(oldPath)) {
+    fs.renameSync(oldPath, newPath);
+    task.path = newPath;
+    task.name = newFilename;
+  }
+}
+
 export function getEpics(ws: string): Epic[] {
   const dataService = getDataService(ws);
   return dataService.loadEpics();
@@ -343,5 +401,3 @@ export function getTasksFromEpicById(epicId: string): { label: string; path: str
     };
   });
 }
-
-import * as fs from 'fs';

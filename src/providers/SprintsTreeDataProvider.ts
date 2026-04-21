@@ -18,7 +18,8 @@ export class SprintsTreeItem extends vscode.TreeItem {
     public readonly filePath?: string,
     public readonly taskPath?: string,
     public readonly sourceSprintPath?: string,
-    public readonly sprintId?: string
+    public readonly sprintId?: string,
+    public readonly taskId?: string
   ) {
     super(label, collapsibleState);
 
@@ -203,7 +204,8 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
         undefined,
         item.path,
         undefined,
-        sprintId
+        sprintId,
+        item.id
       );
       if (item.command) {
         treeItem.command = item.command;
@@ -222,7 +224,8 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
         undefined,
         item.path,
         undefined,
-        sprintId
+        sprintId,
+        item.id
       );
       if (item.command) {
         treeItem.command = item.command;
@@ -236,15 +239,9 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
     try {
       if (source.length > 0) {
         const taskItem = source[0];
-        if (!taskItem.taskPath) {
-          throw new Error('No task path found for drag operation');
-        }
-
-        const { data: taskMetadata } = matter.read(taskItem.taskPath);
-        const taskId = taskMetadata._id || taskMetadata.id;
 
         const taskData = {
-          _id: taskId,
+          _id: taskItem.taskId,
           type: 'task',
           label: taskItem.label,
           path: taskItem.taskPath,
@@ -266,32 +263,45 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
       void vscode.window.showErrorMessage('Failed to start drag: ' + (error as Error).message);
     }
   }
+
   async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     try {
       if (!target?.filePath || target.contextValue !== 'sprint') {
         throw new Error('Invalid drop target: must be a sprint');
       }
 
-      // Try text/plain first (our custom format from handleDrag)
+      // Try sprint MIME type first (dragging from another sprint)
+      const sprintMimeType = 'application/vnd.code.tree.sprintdesk-sprints';
+      const sprintItem = dataTransfer.get(sprintMimeType);
+      if (sprintItem && sprintItem.value) {
+        const handleData = JSON.parse(sprintItem.value as string);
+        if (handleData._id) {
+          await this.handleTaskDropFromSprints(target, handleData);
+          return;
+        }
+      }
+
+      // Try text/plain
       const textItem = dataTransfer.get('text/plain');
       if (textItem && textItem.value) {
         try {
           const handleData = JSON.parse(textItem.value as string);
-          if (handleData._id) {
+          if (handleData._id && handleData.sprint?.sprintId) {
+            await this.handleTaskDropFromSprints(target, handleData);
+            return;
+          } else if (handleData._id) {
             await this.handleTaskDropFromTasks(target, handleData);
             return;
           }
         } catch (e) {
-          // Ignore parse errors
         }
       }
 
-      // Fallback: try to parse VS Code tree internal format
+      // Fallback: try other sources
       const taskSources = {
         tasks: 'application/vnd.code.tree.sprintdesk-tasks',
         backlogs: 'application/vnd.code.tree.sprintdesk-backlogs',
-        epics: 'application/vnd.code.tree.sprintdesk-epics',
-        sprints: 'application/vnd.code.tree.sprintdesk-sprints'
+        epics: 'application/vnd.code.tree.sprintdesk-epics'
       };
 
       for (const [source, mimeType] of Object.entries(taskSources)) {
@@ -299,7 +309,6 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
         if (dataItem && dataItem.value) {
           const handleData = JSON.parse(dataItem.value as string);
           
-          // Handle VS Code tree internal format (itemHandles)
           let taskId = handleData._id;
           if (!taskId && handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
             const raw = String(handleData.itemHandles[0] || '');
@@ -320,9 +329,6 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
                 return;
               case 'epics':
                 await this.handleTaskDropFromEpics(target, { _id: taskId });
-                return;
-              case 'sprints':
-                await this.handleTaskDropFromSprints(target, { _id: taskId });
                 return;
             }
           }

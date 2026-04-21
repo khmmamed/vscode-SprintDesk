@@ -213,7 +213,7 @@ export function getTasksFromBacklog(backlogId: string): any[] {
   const ws = fileService.getWorkspaceRoot();
   const dataService = getDataService(ws);
   const backlog = dataService.getBacklog(backlogId);
-  if (!backlog) return [];
+  if (!backlog || !backlog.tasks) return [];
   
   const tasks = dataService.loadTasks();
   const tasksDir = dataService.getTasksDir();
@@ -223,6 +223,7 @@ export function getTasksFromBacklog(backlogId: string): any[] {
     return {
       label: t.title,
       path: taskPath,
+      id: t.id,
       collapsibleState: vscode.TreeItemCollapsibleState.None,
       command: {
         command: 'vscode.open',
@@ -237,7 +238,7 @@ export function getTasksFromBacklogById(backlogId: string): any[] {
   const ws = fileService.getWorkspaceRoot();
   const dataService = getDataService(ws);
   const backlog = dataService.getBacklog(backlogId);
-  if (!backlog) return [];
+  if (!backlog || !backlog.tasks) return [];
   
   const tasks = dataService.loadTasks();
   const tasksDir = dataService.getTasksDir();
@@ -247,6 +248,7 @@ export function getTasksFromBacklogById(backlogId: string): any[] {
     return {
       label: t.title,
       path: taskPath,
+      id: t.id,
       collapsibleState: vscode.TreeItemCollapsibleState.None,
       command: {
         command: 'vscode.open',
