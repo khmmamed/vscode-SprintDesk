@@ -80,13 +80,31 @@ const createTask = async (repoPath?: string): Promise<void> => {
     value: 'features'
   });
 
+  // Get existing epics for selection
+  const { getDataService } = require('./data/DataService');
+  const dataService = getDataService(ws);
+  const epics = dataService.loadEpics();
+
+  let epicSelection: string | undefined;
+  if (epics.length > 0) {
+    const epicOptions = [{ label: '(None)', value: null }, ...epics.map((e: any) => ({
+      label: `[${e.code}] ${e.title}`,
+      value: e.id
+    }))];
+
+    const selectedEpic = await vscode.window.showQuickPick(epicOptions, {
+      placeHolder: 'Select epic (optional)'
+    });
+    epicSelection = selectedEpic?.value ?? null;
+  }
+
   await createTaskService(ws, {
     title,
     type,
     status: 'waiting',
     priority,
     backlog: backlog || 'features',
-    epic: null
+    epic: epicSelection
   });
 
   vscode.window.showInformationMessage(`Task "${title}" created.`);
@@ -199,7 +217,6 @@ export async function activate(context: vscode.ExtensionContext) {
   registerAddTaskToBacklogCommand(context, { addTaskToBacklogInteractive });
   registerAddExistingTasksToBacklogCommand(context, { addExistingTasksToBacklog });
   registerAddTaskToEpicCommand(context, { epicsProvider, tasksProvider });
-  registerAddExistingTasksToSprintCommand(context, { addExistingTasksToSprint });
 
   // Register repository commands
   registerCreateTaskFromRepoCommand(context, { repositoriesTreeView, tasksProvider, sprintsProvider, epicsProvider, backlogsProvider });
@@ -265,34 +282,38 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   // === Ensure .SprintDesk folder structure on activation ===
-  const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (!workspaceFolders) {
-    return;
-  }
-
-  const ws = workspaceFolders[0].uri.fsPath;
-  const sdPath = path.join(ws, '.SprintDesk');
-
-  // Ensure all directories exist
-  const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints'];
-  for (const dir of dirs) {
-    const fullPath = path.join(sdPath, dir);
-    if (!fs.existsSync(fullPath)) {
-      fs.mkdirSync(fullPath, { recursive: true });
+  try {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders) {
+      return;
     }
-  }
 
-  // Ensure data files exist
-  const dataFiles = ['tasks.yml', 'backlogs.yml', 'epics.yml', 'sprints.yml'];
-  for (const file of dataFiles) {
-    const dataPath = path.join(sdPath, 'data', file);
-    if (!fs.existsSync(dataPath)) {
-      const key = file.replace('.yml', '');
-      fs.writeFileSync(dataPath, `${key}: []`, 'utf8');
+    const ws = workspaceFolders[0].uri.fsPath;
+    const sdPath = path.join(ws, '.SprintDesk');
+
+    // Ensure all directories exist
+    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints'];
+    for (const dir of dirs) {
+      const fullPath = path.join(sdPath, dir);
+      if (!fs.existsSync(fullPath)) {
+        fs.mkdirSync(fullPath, { recursive: true });
+      }
     }
-  }
 
-  vscode.window.showInformationMessage("📦 SprintDesk ready!");
+    // Ensure data files exist
+    const dataFiles = ['tasks.yml', 'backlogs.yml', 'epics.yml', 'sprints.yml'];
+    for (const file of dataFiles) {
+      const dataPath = path.join(sdPath, 'data', file);
+      if (!fs.existsSync(dataPath)) {
+        const key = file.replace('.yml', '');
+        fs.writeFileSync(dataPath, `${key}: []`, 'utf8');
+      }
+    }
+
+    vscode.window.showInformationMessage("📦 SprintDesk ready!");
+  } catch (err) {
+    console.error('Failed to create SprintDesk folder structure:', err);
+  }
 }
 
 export function deactivate() { }

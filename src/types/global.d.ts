@@ -40,6 +40,7 @@ declare global {
         interface EpicMetadata {
             _id?: number;
             title: string;
+            category?: string;
             description?: string;
             priority?: Priority;
             status?: EpicStatus;

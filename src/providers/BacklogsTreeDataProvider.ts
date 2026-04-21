@@ -316,12 +316,13 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
         const { data } = matter.read(filePath);
         const backlog: Backlog = {
           id: data._id || name.replace('.md', ''),
+          title: data.title || '',
           name: data.name || name.replace('.md', ''),
           description: data.description || '',
           tasks: data.tasks || [],
           color: data.color || '#2563eb'
         };
-        label = dataService.getBacklogFilename(backlog);
+        label = backlog.title || data.name || name.replace('.md', '');
       } catch (e) {
         // Use filename as-is if parsing fails
       }

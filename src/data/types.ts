@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 export interface Task {
   id: string;
+  number: number;
   code: string;
   name: string;
   title: string;
@@ -18,8 +19,11 @@ export interface Task {
 
 export interface Epic {
   id: string;
+  number: number;
+  code: string;
   name: string;
   title: string;
+  category: string;
   description: string;
   status: 'planned' | 'in-progress' | 'completed' | 'blocked';
   priority: 'high' | 'medium' | 'low';
@@ -31,6 +35,7 @@ export interface Epic {
 
 export interface Backlog {
   id: string;
+  title: string;
   name: string;
   description: string;
   tasks: string[];
@@ -40,6 +45,8 @@ export interface Backlog {
 
 export interface Sprint {
   id: string;
+  number: number;
+  title: string;
   name: string;
   startDate: string;
   endDate: string;
@@ -83,6 +90,7 @@ export interface DirectoriesConfig {
 }
 
 export interface Config {
+  projectPrefix: string;
   ids: IdsConfig;
   defaults: DefaultsConfig;
   ui: UIConfig;
@@ -90,6 +98,7 @@ export interface Config {
 }
 
 export const DEFAULT_CONFIG: Config = {
+  projectPrefix: 'SPD',
   ids: {
     task: { prefix: 'task_', startNumber: 100, padding: 3 },
     epic: { prefix: 'epic_', startNumber: 1, padding: 2 },

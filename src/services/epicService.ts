@@ -11,12 +11,20 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
   const title = epicMetadata.title || await vscode.window.showInputBox({ prompt: 'Epic Title' });
   if (!title) throw new Error('Epic title is required');
 
+  const category = epicMetadata.category || await vscode.window.showInputBox({ prompt: 'Epic Category (e.g., SEO, FE, BE)', placeHolder: 'MISC' }) || 'MISC';
+
   const dataService = getDataService(ws);
   const epicId = crypto.randomUUID();
+  const epicNumber = dataService.generateNextNumber('epic');
+  const epicCode = dataService.generateCode('epic', epicNumber);
+
   const epic: Epic = {
     id: epicId,
+    number: epicNumber,
+    code: epicCode,
     name: '',
     title: title,
+    category: category,
     description: epicMetadata.description || '',
     status: 'planned',
     priority: 'medium',
@@ -25,8 +33,7 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
     updatedAt: new Date().toISOString()
   };
 
-  // Set name from filename
-  epic.name = dataService.getEpicFilename(epic).replace(/\.md$/, '');
+  epic.name = `[${epicCode}]_${category}_${dataService.slugifyTitle(title)}`;
   epic.path = path.join(dataService.getEpicsDir(), dataService.getEpicFilename(epic));
 
   dataService.addEpic(epic);
@@ -45,16 +52,23 @@ export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Prom
   };
 }
 
-export function createEpic(name: string): string {
+export function createEpic(name: string, category?: string): string {
   const ws = fileService.getWorkspaceRoot();
   if (!ws) throw new Error('No workspace');
 
   const dataService = getDataService(ws);
   const epicId = crypto.randomUUID();
+  const epicNumber = dataService.generateNextNumber('epic');
+  const epicCode = dataService.generateCode('epic', epicNumber);
+  const epicCategory = category || 'MISC';
+
   const epic: Epic = {
     id: epicId,
+    number: epicNumber,
+    code: epicCode,
     name: '',
     title: name,
+    category: epicCategory,
     description: '',
     status: 'planned',
     priority: 'medium',
@@ -63,7 +77,7 @@ export function createEpic(name: string): string {
     updatedAt: new Date().toISOString()
   };
 
-  epic.name = dataService.getEpicFilename(epic).replace(/\.md$/, '');
+  epic.name = `[${epicCode}]_${epicCategory}_${dataService.slugifyTitle(name)}`;
   epic.path = path.join(dataService.getEpicsDir(), dataService.getEpicFilename(epic));
 
   dataService.addEpic(epic);
@@ -118,7 +132,14 @@ export function addTaskToEpic(epicTitleOrPath: string, taskNameOrPath: string) {
 export async function createEpicInteractive() {
   const epicName = await vscode.window.showInputBox({ prompt: 'Epic title' });
   if (!epicName) return;
-  createEpic(epicName);
+
+  const category = await vscode.window.showInputBox({
+    prompt: 'Epic category (e.g., SEO, FE, BE)',
+    placeHolder: 'MISC'
+  });
+  const epicCategory = category || 'MISC';
+
+  createEpic(epicName, epicCategory);
   vscode.window.showInformationMessage('Epic created.');
 }
 

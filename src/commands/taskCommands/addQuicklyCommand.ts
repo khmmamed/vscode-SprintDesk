@@ -50,7 +50,11 @@ export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
       try {
         epicService.addTaskToEpic(epicTitle, taskTitle);
       } catch (e) {
-        epicService.createEpic(epicTitle);
+        const category = await vscode.window.showInputBox({
+          prompt: 'Epic category (e.g., SEO, FE, BE)',
+          placeHolder: 'MISC'
+        }) || 'MISC';
+        epicService.createEpic(epicTitle, category);
       }
     }
 

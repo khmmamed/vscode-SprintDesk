@@ -21,7 +21,7 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "webpack",
+    "compile": "webpack --mode development --config ./webpack/extension.config.js",
     "watch": "npm-run-all --parallel watch:*",
     "watch:ext": "webpack --mode development --watch --config ./webpack/extension.config.js",
     "watch:wv": "webpack serve --mode development --config ./webpack/webview.config.js",
@@ -116,6 +116,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "sprintdesk.addBacklog",
+        "title": "SprintDesk: Add Backlog",
+        "icon": "$(add)"
+      },
+      {
         "command": "sprintdesk.addTaskToBacklog",
         "title": "SprintDesk: Add Task to Backlog",
         "icon": "$(add)"
@@ -204,10 +209,14 @@
           "when": "view == sprintdesk-sprints",
           "group": "navigation"
         },
-
         {
           "command": "sprintdesk.addEpic",
           "when": "view == sprintdesk-epics",
+          "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.addBacklog",
+          "when": "view == sprintdesk-backlogs",
           "group": "navigation"
         },
         {
@@ -300,57 +309,16 @@
       "type": "object",
       "title": "SprintDesk",
       "properties": {
-        "sprintdesk.taskPrefix": {
+        "sprintdesk.projectPrefix": {
           "type": "string",
-          "default": "task_",
-          "description": "Task ID prefix (e.g., task_ → task_100)",
-          "scope": "resource",
-          "markdownDescription": "Prefix used when generating new task IDs. Include trailing underscore if desired."
-        },
-        "sprintdesk.taskStartNumber": {
-          "type": "number",
-          "default": 100,
-          "description": "Starting number for task IDs",
+          "default": "SPD",
+          "description": "Project prefix used for code display (e.g., SPD-101)",
           "scope": "resource"
         },
-"sprintdesk.taskPadding": {
-          "type": "number",
-          "default": 3,
-          "description": "Number of digits for task ID padding",
-          "scope": "resource"
-        },
-        "sprintdesk.taskMdFilenamePattern": {
-          "type": "string",
-          "default": "[task-${taskNumber}]_${tasktitle}.md",
-          "description": "Template for task .md filename",
-          "scope": "resource",
-          "markdownDescription": "Template for task .md filename. Use ${taskNumber} for task code and ${tasktitle} for title."
-        },
-        "sprintdesk.epicMdFilenamePattern": {
-          "type": "string",
-          "default": "[Epic]_${title}.md",
-          "description": "Template for epic .md filename",
-          "scope": "resource",
-          "markdownDescription": "Template for epic .md filename. Use ${title} for epic title."
-        },
-        "sprintdesk.sprintMdFilenamePattern": {
-          "type": "string",
-          "default": "[Sprint]_${id}.md",
-          "description": "Template for sprint .md filename",
-          "scope": "resource",
-          "markdownDescription": "Template for sprint .md filename. Use ${id} for sprint id."
-        },
-        "sprintdesk.backlogMdFilenamePattern": {
-          "type": "string",
-          "default": "[Backlog]_${name}.md",
-          "description": "Template for backlog .md filename",
-          "scope": "resource",
-          "markdownDescription": "Template for backlog .md filename. Use ${name} for backlog name."
-        },
-"sprintdesk.epicPrefix": {
+        "sprintdesk.epicPrefix": {
           "type": "string",
           "default": "epic_",
-          "description": "Epic ID prefix",
+          "description": "Epic ID prefix (for internal use)",
           "scope": "resource"
         },
         "sprintdesk.epicStartNumber": {
@@ -364,6 +332,46 @@
           "default": 2,
           "description": "Number of digits for epic ID padding",
           "scope": "resource"
+        },
+        "sprintdesk.epicMdFilenamePattern": {
+          "type": "string",
+          "default": "[Epic]_${title}.md",
+          "description": "Template for epic .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for epic .md filename. Use ${title} for epic title."
+        },
+        "sprintdesk.taskPrefix": {
+          "type": "string",
+          "default": "task_",
+          "description": "Task ID prefix (e.g., task_ → task_100)",
+          "scope": "resource",
+          "markdownDescription": "Prefix used when generating new task IDs. Include trailing underscore if desired."
+        },
+        "sprintdesk.taskStartNumber": {
+          "type": "number",
+          "default": 100,
+          "description": "Starting number for task IDs",
+          "scope": "resource"
+        },
+        "sprintdesk.taskPadding": {
+          "type": "number",
+          "default": 3,
+          "description": "Number of digits for task ID padding",
+          "scope": "resource"
+        },
+        "sprintdesk.taskMdFilenamePattern": {
+          "type": "string",
+          "default": "[task-${taskNumber}]_${tasktitle}.md",
+          "description": "Template for task .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for task .md filename. Use ${taskNumber} for task code and ${tasktitle} for title."
+        },
+        "sprintdesk.backlogMdFilenamePattern": {
+          "type": "string",
+          "default": "[Backlog]_${name}.md",
+          "description": "Template for backlog .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for backlog .md filename. Use ${name} for backlog name."
         },
         "sprintdesk.sprintPrefix": {
           "type": "string",
@@ -383,6 +391,13 @@
           "description": "Number of digits for sprint ID padding",
           "scope": "resource"
         },
+        "sprintdesk.sprintMdFilenamePattern": {
+          "type": "string",
+          "default": "[Sprint]_${id}.md",
+          "description": "Template for sprint .md filename",
+          "scope": "resource",
+          "markdownDescription": "Template for sprint .md filename. Use ${id} for sprint id."
+        },
         "sprintdesk.defaultBacklog": {
           "type": "string",
           "default": "features",
@@ -394,7 +409,13 @@
           "type": "string",
           "default": "waiting",
           "description": "Default status for new tasks",
-          "enum": ["waiting", "in-progress", "done", "blocked", "cancelled"],
+          "enum": [
+            "waiting",
+            "in-progress",
+            "done",
+            "blocked",
+            "cancelled"
+          ],
           "enumDescriptions": [
             "Not started yet",
             "Work in progress",
@@ -408,8 +429,16 @@
           "type": "string",
           "default": "medium",
           "description": "Default priority for new tasks",
-          "enum": ["low", "medium", "high"],
-          "enumDescriptions": ["Low priority","Normal priority","High priority"],
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "enumDescriptions": [
+            "Low priority",
+            "Normal priority",
+            "High priority"
+          ],
           "scope": "resource"
         },
         "sprintdesk.showIds": {
@@ -425,6 +454,7 @@
     "@estruyf/vscode": "^1.1.0",
     "@types/d3-dispatch": "^2.0.0",
     "@types/glob": "^7.2.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/minimatch": "^5.1.2",
     "@types/mocha": "^9.1.1",
     "@types/node": "16.x",

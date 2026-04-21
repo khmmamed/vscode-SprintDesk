@@ -303,6 +303,8 @@ private async getSprintsTree(workspaceRoot: string): Promise<SprintsTreeItem[]> 
         const { data } = matter.read(filePath);
         const sprint: Sprint = {
           id: data._id || name.replace('.md', ''),
+          number: data.number || 0,
+          title: data.title || name.replace('.md', ''),
           name: data.name || name.replace('.md', ''),
           startDate: data.startDate || '',
           endDate: data.endDate || '',

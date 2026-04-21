@@ -1,26 +1,33 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import * as fileService from './fileService';
 import { getDataService } from '../data/DataService';
 import * as taskService from './taskService';
 import { PROJECT_CONSTANTS, SPRINT_CONSTANTS } from '../utils/constant';
 import { Sprint } from '../data/types';
 
-export function createSprint(nameParts: { d1: string; mo1: string; d2: string; mo2: string; yy: string; yyyy: string }): string {
+export function createSprint(nameParts: { d1: string; mo1: string; d2: string; mo2: string; yy: string; yyyy: string; title?: string }): string {
   const ws = fileService.getWorkspaceRoot();
   if (!ws) throw new Error('No workspace');
-  
-  const { d1, mo1, d2, mo2, yy, yyyy } = nameParts;
-  const shortStart = `${d1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo1}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
-  const shortEnd = `${d2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${mo2}${SPRINT_CONSTANTS.SEPARATOR.DATE}${yy}`;
+
+  const { d1, mo1, d2, mo2, yy, yyyy, title } = nameParts;
 
   const dataService = getDataService(ws);
-  const sprintId = dataService.generateId('sprint');
+  const sprintNumber = dataService.generateNextNumber('sprint');
+  const config = dataService.loadConfig();
+  const sprintPrefix = config.ids.sprint.prefix;
+
+  const sprintTitle = title || `${d1}-${mo1}-${yy} ➜ ${d2}-${mo2}-${yy}`;
+  const sprintName = `[${sprintPrefix}-${sprintNumber}]_${sprintTitle}`;
+
   const sprint: Sprint = {
-    id: sprintId,
-    name: `Sprint : ${shortStart} ➜ ${shortEnd}`,
-    startDate: `${d1}${mo1}${yyyy}`,
-    endDate: `${d2}${mo2}${yyyy}`,
+    id: crypto.randomUUID(),
+    number: sprintNumber,
+    title: sprintTitle,
+    name: sprintName,
+    startDate: `${d1}-${mo1}-${yyyy}`,
+    endDate: `${d2}-${mo2}-${yyyy}`,
     status: 'planned',
     tasks: [],
     createdAt: new Date().toISOString(),
@@ -37,23 +44,28 @@ export function createSprint(nameParts: { d1: string; mo1: string; d2: string; m
 
 export async function createSprintInteractive() {
   const input = await vscode.window.showInputBox({
-    prompt: 'Enter sprint as: @sprint dd-mm_dd-mm_yy or dd-mm_dd-mm_yyyy',
-    placeHolder: '@sprint 11-08_16-08_25'
+    prompt: 'Enter: @from DD-MM @to DD-MM @year YYYY @title Title',
+    placeHolder: '@from 23-04 @to 30-04 @year 2026 @title Starting'
   });
   if (!input) return;
-  
-  const m = input.match(/@sprint\s+(\d{2})-(\d{2})_(\d{2})-(\d{2})_(\d{2}|\d{4})\b/i);
-  if (!m) {
-    vscode.window.showErrorMessage('Format must be: @sprint dd-mm_dd-mm_yy or dd-mm_dd-mm_yyyy');
+
+  const fromMatch = input.match(/@from\s+(\d{2})-(\d{2})/i);
+  const toMatch = input.match(/@to\s+(\d{2})-(\d{2})/i);
+  const yearMatch = input.match(/@year\s+(\d{4})/i);
+  const titleMatch = input.match(/@title\s+(.+)/i);
+
+  if (!fromMatch || !toMatch) {
+    vscode.window.showErrorMessage('Format: @from DD-MM @to DD-MM @year YYYY @title Title');
     return;
   }
-  
-  const d1 = m[1], mo1 = m[2], d2 = m[3], mo2 = m[4];
-  let yy = m[5];
-  const yyyy = yy.length === 2 ? `${SPRINT_CONSTANTS.SEPARATOR.YEAR_PREFIX}${yy}` : yy;
-  if (yy.length === 4) yy = yy.slice(-2);
-  
-  createSprint({ d1, mo1, d2, mo2, yy, yyyy });
+
+  const d1 = fromMatch[1], mo1 = fromMatch[2];
+  const d2 = toMatch[1], mo2 = toMatch[2];
+  const yy = new Date().getFullYear().toString().slice(-2);
+  const yyyy = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
+
+  const title = titleMatch ? titleMatch[1].trim() : undefined;
+  createSprint({ d1, mo1, d2, mo2, yy, yyyy, title });
   vscode.window.showInformationMessage('Sprint created.');
 }
 

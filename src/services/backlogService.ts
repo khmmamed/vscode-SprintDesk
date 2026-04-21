@@ -14,35 +14,37 @@ export async function createBacklogInteractive(): Promise<void> {
     return;
   }
 
-  const backlogName = await vscode.window.showInputBox({
-    prompt: 'Enter backlog name',
-    placeHolder: 'e.g., Features, Bugs, Technical, MyBacklog'
+  const backlogTitle = await vscode.window.showInputBox({
+    prompt: 'Enter backlog title',
+    placeHolder: 'e.g., FEATURES, BUGS, TECHNICAL'
   });
 
-  if (!backlogName) return;
+  if (!backlogTitle) return;
 
+  const titleUpper = backlogTitle.toUpperCase().trim();
+  const backlogId = titleUpper.toLowerCase().replace(/\s+/g, '-');
   const dataService = getDataService(ws);
-  const backlogId = backlogName.toLowerCase().replace(/\s+/g, '-');
 
   if (dataService.getBacklog(backlogId)) {
-    vscode.window.showWarningMessage(`Backlog "${backlogName}" already exists.`);
+    vscode.window.showWarningMessage(`Backlog "${titleUpper}" already exists.`);
     return;
   }
 
   const backlog: Backlog = {
     id: backlogId,
-    name: backlogName,
+    title: titleUpper,
+    name: `[Backlog]_${titleUpper}`,
     description: '',
     tasks: [],
     color: '#2563eb'
   };
 
-  backlog.path = path.join(dataService.getBacklogsDir(), `${backlog.id}.md`);
+  backlog.path = path.join(dataService.getBacklogsDir(), `${backlog.name}.md`);
 
   dataService.addBacklog(backlog);
   dataService.saveBacklogMd(backlog);
 
-  vscode.window.showInformationMessage(`Backlog "${backlogName}" created.`);
+  vscode.window.showInformationMessage(`Backlog "${titleUpper}" created.`);
 }
 
 export function getBacklogs(ws: string): Backlog[] {

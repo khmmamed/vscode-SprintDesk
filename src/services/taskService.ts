@@ -43,12 +43,21 @@ class TaskService {
     const config = dataService.loadConfig();
 
     const taskId = crypto.randomUUID();
-    const taskCode = dataService.generateId('task');
+    const taskNumber = dataService.generateNextNumber('task');
+
+    let epicCode: string | undefined;
+    if (taskData.epic) {
+      const epic = dataService.getEpic(taskData.epic);
+      epicCode = epic?.code;
+    }
+
+    const taskCode = dataService.generateCode('task', taskNumber, epicCode);
 
     const task: Task = {
       id: taskId,
+      number: taskNumber,
       code: taskCode,
-      name: '', // Will be set after generating filename
+      name: '',
       title: taskData.title,
       type: (taskData.type as Task['type']) || (config.defaults.type as Task['type']) || 'feature',
       status: (taskData.status as Task['status']) || (config.defaults.status as Task['status']) || 'waiting',
@@ -60,10 +69,8 @@ class TaskService {
       updatedAt: new Date().toISOString()
     };
 
-    // Generate name from filename
-    const filename = dataService.getTaskFilename(task);
-    task.name = filename.replace(/\.md$/, '');
-    task.path = path.join(dataService.getTasksDir(), filename);
+    task.name = `[${taskCode}]_${dataService.slugifyTitle(taskData.title)}`;
+    task.path = path.join(dataService.getTasksDir(), dataService.getTaskFilename(task));
 
     dataService.addTask(task);
     dataService.saveTaskMd(task);
@@ -88,17 +95,31 @@ class TaskService {
     const dataService = getDataService(this.workspaceRoot);
     const config = dataService.loadConfig();
     const task: Task = { ...taskData };
-    
+
     task.id = task.id || crypto.randomUUID();
-    task.code = task.code || dataService.generateId('task');
+
+    if (!task.number) {
+      task.number = dataService.generateNextNumber('task');
+    }
+
+    let epicCode: string | undefined;
+    if (task.epic) {
+      const epic = dataService.getEpic(task.epic);
+      epicCode = epic?.code;
+    }
+
+    if (!task.code) {
+      task.code = dataService.generateCode('task', task.number, epicCode);
+    }
+
     task.createdAt = task.createdAt || new Date().toISOString();
     task.updatedAt = task.updatedAt || new Date().toISOString();
-    
+
     if (!task.name) {
-      task.name = dataService.getTaskFilename(task).replace(/\.md$/, '');
+      task.name = `[${task.code}]_${dataService.slugifyTitle(task.title || 'untitled')}`;
     }
     if (!task.path) {
-      task.path = path.join(dataService.getTasksDir(), dataService.getTaskFilename(task));
+      task.path = path.join(dataService.getTasksDir(), `[${task.code}]_${dataService.slugifyTitle(task.title || 'untitled')}.md`);
     }
 
     dataService.addTask(task);

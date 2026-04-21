@@ -52,9 +52,11 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
         }
 
         const taskCount = dataService.loadTasks().length;
+        const taskNumber = taskCount + 1;
         const task: Task = {
-          id: data._id || data.id || dataService.generateId('task'),
-          code: data.code || `task-${(taskCount + 1).toString().padStart(3, '0')}`,
+          id: data._id || data.id || crypto.randomUUID(),
+          number: taskNumber,
+          code: data.code || `task_${taskNumber}`,
           name: '',
           title: data.title || path.basename(file, '.md').replace(/^\[Task\]_/, '').replace(/_/g, ' '),
           type: data.type || 'feature',
@@ -103,9 +105,11 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
         }
 
         const backlogTasks = extractTasksFromBacklogMd(filePath);
+        const backlogTitle = data.title || path.basename(file, '.md').replace(/^\[Backlog\]_/, '').replace(/_/g, ' ').toUpperCase();
         const backlog: Backlog = {
           id,
-          name: data.title || path.basename(file, '.md').replace(/^\[Backlog\]_/, '').replace(/_/g, ' '),
+          title: backlogTitle,
+          name: `[Backlog]_${backlogTitle}`,
           description: data.description || '',
           tasks: backlogTasks,
           color: data.color || '#2563eb'
@@ -133,10 +137,16 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
         }
 
         const epicTasks = extractTasksFromEpicMd(filePath);
+        const epicCount = dataService.loadEpics().length;
+        const epicNumber = epicCount + 1;
+        const epicCode = `epic_${epicNumber}`;
         const epic: Epic = {
-          id: data._id || data.id || dataService.generateId('epic'),
+          id: data._id || data.id || crypto.randomUUID(),
+          number: epicNumber,
+          code: epicCode,
           name: '',
           title: data.title || path.basename(file, '.md').replace(/^\[Epic\]_/, '').replace(/_/g, ' '),
+          category: data.category || 'MISC',
           description: data.description || '',
           status: data.status || 'planned',
           priority: data.priority || 'medium',
@@ -144,8 +154,8 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString()
         };
-        
-        epic.name = path.basename(file, '.md');
+
+        epic.name = `[${epicCode}]_${epic.category}_${dataService.slugifyTitle(epic.title)}`;
 
         dataService.addEpic(epic);
         result.epics++;
@@ -174,9 +184,13 @@ export async function migrateFromMdFiles(workspaceRoot: string): Promise<Migrati
         }
 
         const sprintTasks = extractTasksFromSprintMd(filePath);
+        const sprintTitle = data.title || path.basename(file, '.md').replace(/^\[Sprint\]_/, '').replace(/_/g, ' ');
+        const sprintNumber = parseInt(id.replace('sprint_', '')) || (existingSprints.length + 1);
         const sprint: Sprint = {
           id,
-          name: data.title || path.basename(file, '.md').replace(/^\[Sprint\]_/, '').replace(/_/g, ' '),
+          number: sprintNumber,
+          title: sprintTitle,
+          name: data.name || path.basename(file, '.md'),
           startDate: data.startDate || '',
           endDate: data.endDate || '',
           status: data.status || 'planned',

@@ -34,6 +34,10 @@ export function registerCreateEpicFromRepoCommand(context: vscode.ExtensionConte
         const epicTitle = await promptInput('Enter epic title', 'New Epic');
         if (!epicTitle) return;
 
+        // Get category
+        const category = await promptInput('Enter epic category (e.g., SEO, FE, BE)', 'MISC');
+        const epicCategory = category || 'MISC';
+
         // Get priority
         const priorityOptions = [
           { label: 'High', value: 'high' },
@@ -59,14 +63,22 @@ export function registerCreateEpicFromRepoCommand(context: vscode.ExtensionConte
           fs.mkdirSync(epicsDir, { recursive: true });
         }
 
+        // Get epic number from DataService
+        const { getDataService } = require('../../data/DataService');
+        const dataService = getDataService(repoPath);
+        const epicNumber = dataService.generateNextNumber('epic');
+        const epicCode = dataService.generateCode('epic', epicNumber);
+        const titleSlug = dataService.slugifyTitle(epicTitle);
+
         // Generate epic metadata
         const epicId = generateEpicId(epicTitle);
-        const epicFileName = `${PROJECT_CONSTANTS.FILE_PREFIX.EPIC}${epicId}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
+        const epicFileName = `[${epicCode}]_${epicCategory}_${titleSlug}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
         const epicPath = path.join(epicsDir, epicFileName);
 
         const epicData = {
           _id: Date.now(), // Use timestamp as number ID
           title: epicTitle,
+          category: epicCategory,
           description: description || '',
           priority: selectedPriority.value as SprintDesk.Priority,
           status: 'planned' as SprintDesk.EpicStatus,

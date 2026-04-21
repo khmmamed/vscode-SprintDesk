@@ -26,6 +26,10 @@ export class DataService {
     this.configCache = null;
   }
 
+  clearConfigCache(): void {
+    this.configCache = null;
+  }
+
   private getSprintDeskPath(): string {
     return path.join(this.workspaceRoot, SPRINTDESK_DIR);
   }
@@ -59,8 +63,10 @@ export class DataService {
     const defaultPriority = cfg.get<string>('defaultPriority') || 'medium';
     const showIds = cfg.get<boolean>('showIds') ?? true;
     const showCompleted = cfg.get<boolean>('showCompleted') ?? false;
+    const projectPrefix = cfg.get<string>('projectPrefix') || 'SPD';
 
     this.configCache = {
+      projectPrefix,
       ids: {
         task: { prefix: taskPrefix, startNumber: taskStart, padding: taskPad },
         epic: { prefix: epicPrefix, startNumber: epicStart, padding: epicPad },
@@ -94,7 +100,56 @@ export class DataService {
     return this.configCache;
   }
 
-  // === Generate Next ID ===
+  // === Generate Next Number ===
+  generateNextNumber(type: 'task' | 'epic' | 'sprint' | 'backlog'): number {
+    const config = this.loadConfig();
+    let maxNum = 0;
+
+    if (type === 'task') {
+      maxNum = config.ids.task.startNumber - 1;
+      const tasks = this.loadTasks();
+      tasks.forEach(t => {
+        if (t.number && t.number > maxNum) maxNum = t.number;
+      });
+    } else if (type === 'epic') {
+      maxNum = config.ids.epic.startNumber - 1;
+      const epics = this.loadEpics();
+      epics.forEach(e => {
+        if (e.number && e.number > maxNum) maxNum = e.number;
+      });
+    } else if (type === 'sprint') {
+      maxNum = config.ids.sprint.startNumber - 1;
+      const sprints = this.loadSprints();
+      sprints.forEach(s => {
+        if (s.number && s.number > maxNum) maxNum = s.number;
+      });
+    } else if (type === 'backlog') {
+      const backlogs = this.loadBacklogs();
+      backlogs.forEach(b => {
+        const num = parseInt(b.id.replace(/^\D+/, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+    }
+
+    return maxNum + 1;
+  }
+
+  // === Generate Code ===
+  generateCode(type: 'task' | 'epic', number: number, epicCode?: string): string {
+    const config = this.loadConfig();
+
+    if (type === 'epic') {
+      return `${config.projectPrefix}-${number}`;
+    } else if (type === 'task') {
+      if (epicCode) {
+        return `${epicCode}.${number}`;
+      }
+      return `${config.projectPrefix}-${number}`;
+    }
+    return '';
+  }
+
+  // === Generate Next ID (legacy, returns code) ===
   generateId(type: 'task' | 'epic' | 'sprint' | 'backlog'): string {
     const config = this.loadConfig();
 
@@ -421,7 +476,7 @@ export class DataService {
     return md;
   }
 
-  private slugifyTitle(title: string): string {
+  public slugifyTitle(title: string): string {
     return (title || '')
       .toString()
       .trim()
@@ -433,46 +488,26 @@ export class DataService {
   }
 
   public getTaskFilename(task: Task): string {
-    const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('taskMdFilenamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
-    const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
-    const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
-    const filename = pattern
-      .replace(/\$\{tasknumber\}/ig, taskNumber)
-      .replace(/\$\{tasktitle\}/ig, taskTitleSlug);
-    return filename;
+    const code = task.code || task.id || 'task_1';
+    const titleSlug = this.slugifyTitle(task.title || task.title || 'untitled');
+    return `[${code}]_${titleSlug}.md`;
   }
 
   public getEpicFilename(epic: Epic): string {
-    const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('epicMdFilenamePattern') || '[Epic]_${epicNumber}_${title}.md';
-    const config = this.loadConfig();
-    const epicPrefix = config.ids.epic.prefix;
-    const epicNumber = (epic.id || '').replace(epicPrefix, '');
-    const titleSlug = this.slugifyTitle(epic.name || epic.id || 'epic');
-    return pattern
-      .replace(/\$\{epicnumber\}/ig, epicNumber)
-      .replace(/\$\{epicnumber\}/ig, epicNumber)
-      .replace(/\$\{title\}/ig, titleSlug);
+    const code = epic.code || epic.id || 'epic_1';
+    const category = epic.category || 'MISC';
+    const titleSlug = this.slugifyTitle(epic.title || epic.title || 'untitled');
+    return `[${code}]_${category}_${titleSlug}.md`;
   }
 
   public getBacklogFilename(backlog: Backlog): string {
-    const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('backlogMdFilenamePattern') || '[Backlog]_${name}.md';
-    const nameSlug = this.slugifyTitle(backlog.name || backlog.id || 'backlog');
-    return pattern.replace(/\$\{name\}/ig, nameSlug);
+    const title = backlog.title || backlog.id || 'backlog';
+    return `[Backlog]_${title.toUpperCase()}.md`;
   }
 
   public getSprintFilename(sprint: Sprint): string {
-    const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('sprintMdFilenamePattern') || '[Sprint]_${sprintNumber}_${id}.md';
-    const config = this.loadConfig();
-    const sprintPrefix = config.ids.sprint.prefix;
-    const sprintNumber = (sprint.id || '').replace(sprintPrefix, '');
-    return pattern
-      .replace(/\$\{sprintnumber\}/ig, sprintNumber)
-      .replace(/\$\{sprintnumber\}/ig, sprintNumber)
-      .replace(/\$\{id\}/ig, sprint.id || 'sprint');
+    const name = sprint.name || '[sprint_1_unknown]';
+    return `${name}.md`;
   }
 
   private generateBacklogMd(backlog: Backlog, tasks: Task[]): string {
@@ -528,15 +563,8 @@ export class DataService {
   saveTaskMd(task: Task, preserveUserContent: boolean = true): void {
     const tasksDir = this.getTasksDir();
     fs.mkdirSync(tasksDir, { recursive: true });
-    // derive filename from user-configured pattern
-    const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const pattern = cfg.get<string>('taskMdFilenamePattern') || '[Task-${taskNumber}]_${tasktitle}.md';
-    const taskNumber = (task.code || task.id || '').toString().replace(/^task[-_]?/i, '');
-    const taskTitleSlug = this.slugifyTitle(task.title || task.code || task.id || 'task');
-    const filename = pattern
-      .replace(/\$\{tasknumber\}/ig, taskNumber)
-      .replace(/\$\{tasktitle\}/ig, taskTitleSlug);
 
+    const filename = this.getTaskFilename(task);
     const newFilePath = path.join(tasksDir, filename);
     const oldFilePath = path.join(tasksDir, `${task.id}.md`);
 
