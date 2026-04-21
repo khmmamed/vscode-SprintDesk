@@ -160,7 +160,7 @@ export function addTaskToEpicById(epicId: string, taskId: string) {
     const oldEpicId = taskObj.epic;
     const oldEpic = oldEpicId ? epics.find(e => e.name === oldEpicId || e.id === oldEpicId) : undefined;
     
-    const newCode = updateTaskCodeForNewEpic(oldEpic, epic, taskObj, dataService);
+    const newCode = updateTaskCodeForNewEpic(oldEpic, epic, taskObj, dataService, taskId);
     if (newCode !== taskObj.code) {
       renameTaskFile(taskObj, newCode, dataService);
       taskObj.code = newCode;
@@ -286,16 +286,16 @@ export function removeTaskFromEpicByName(epicName: string, taskId: string) {
   }
 }
 
-function updateTaskCodeForNewEpic(oldEpic: Epic | undefined, newEpic: Epic, task: any, dataService: any): string {
+function updateTaskCodeForNewEpic(oldEpic: Epic | undefined, newEpic: Epic, task: any, dataService: any, currentTaskId: string): string {
   const config = dataService.loadConfig();
   
   let newNumber: number;
   if (oldEpic && oldEpic.id === newEpic.id) {
     newNumber = task.number;
   } else {
-    const currentTasks = newEpic.tasks || [];
+    const existingTasks = (newEpic.tasks || []).filter((tid: string) => tid !== currentTaskId);
     let maxNum = 0;
-    for (const tid of currentTasks) {
+    for (const tid of existingTasks) {
       const t = dataService.getTask(tid);
       if (t && t.number && t.number > maxNum) maxNum = t.number;
     }
