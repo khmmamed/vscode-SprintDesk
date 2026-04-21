@@ -162,12 +162,14 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
   public handleDrop(): void { }
 
   public handleDrag(source: readonly TaskTreeItem[], dataTransfer: vscode.DataTransfer): void {
+    void vscode.window.showInformationMessage('Tasks handleDrag called!');
+    console.log('===== Tasks handleDrag START =====');
     if (!source[0]) return;
 
     const taskItem = source[0];
     const taskData = taskItem.taskData;
+    console.log('taskData._id:', taskData._id);
 
-    // Create a direct task data transfer without wrapping
     const transferData = {
       _id: taskData._id,
       title: taskData.title,
@@ -178,8 +180,15 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
       path: taskData.path
     };
 
+    const jsonString = JSON.stringify(transferData);
+    console.log('Setting drag data:', jsonString);
+
     dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks',
-      new vscode.DataTransferItem(JSON.stringify(transferData))
+      new vscode.DataTransferItem(jsonString)
+    );
+    
+    dataTransfer.set('text/plain',
+      new vscode.DataTransferItem(jsonString)
     );
   }
 

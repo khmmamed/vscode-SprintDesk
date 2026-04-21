@@ -212,8 +212,11 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
           throw new Error('No task path found for drag operation');
         }
 
-        // Create a consistent task data object
+        const { data: taskMetadata } = matter.read(taskItem.taskPath);
+        const taskId = taskMetadata._id || taskMetadata.id;
+
         const taskData = {
+          _id: taskId,
           type: 'task',
           label: taskItem.label,
           taskName: removeEmojiFromTaskLabel(taskItem.label),
@@ -235,6 +238,8 @@ private async addTaskToSprint(sprintPath: string, taskPath: string): Promise<voi
     }
   }
   async handleDrop(target: SprintsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    void vscode.window.showInformationMessage('Sprints handleDrop called!');
+    console.log('===== Sprints handleDrop START =====');
     try {
       if (!target?.filePath || target.contextValue !== 'sprint') {
         throw new Error('Invalid drop target: must be a sprint');

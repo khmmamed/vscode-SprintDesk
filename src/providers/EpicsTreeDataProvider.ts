@@ -130,55 +130,53 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
   }
 
   private async handleTaskDropFromTasks(target: EpicsTreeItem, handleData: any): Promise<void> {
-    let taskFilePath: string | undefined;
-    let taskName: string | undefined;
-
-    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
-      const raw = String(handleData.itemHandles[0] || '');
-      const parts = raw.split(' ');
-      taskName = fileService.getTaskBaseName(parts[1]);
+    console.log('handleTaskDropFromTasks handleData:', handleData);
+    const taskId = handleData._id;
+    if (!taskId) {
+      throw new Error('No task ID found in drop data');
     }
-    const taskPath = fileService.createTaskRelativePath(taskName!);
 
-    await this.addTaskToEpic(target.filePath!, taskPath);
+    const epicName = path.basename(target.filePath!, '.md');
+    await epicService.addTaskToEpicByName(epicName, taskId);
+    this.refresh();
   }
   private async handleTaskDropFromBacklogs(target: EpicsTreeItem, handleData: any): Promise<void> {
-    let taskFilePath: string | undefined;
-    let taskName: string | undefined;
-    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
-      const raw = String(handleData.itemHandles[0] || '');
-      const parts = raw.split(' ');
-      taskName = parts[1] || parts.pop() || raw;
+    const taskId = handleData._id;
+    if (!taskId) {
+      throw new Error('No task ID found in drop data');
     }
-    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
- 
-    await this.addTaskToEpic(target.filePath!, taskPath);
+
+    const epicName = path.basename(target.filePath!, '.md');
+    await epicService.addTaskToEpicByName(epicName, taskId);
     this.refresh();
   }
   private async handleTaskDropFromEpics(target: EpicsTreeItem, handleData: any): Promise<void> {
-    // Move between epics
-    const { taskName, epic } = handleData;
+    const taskId = handleData._id;
+    if (!taskId) {
+      throw new Error('No task ID found in drop data');
+    }
 
-    const taskPath = getTaskPath(taskName);
-    const epicPath = getEpicPath(epic.epicName);
-    console.log(path.basename(target.filePath!))
-    await this.addTaskToEpic(target.filePath!, taskPath);
-    await this.removeTaskFromEpic(epicPath, taskPath);
-    await this.updateTaskEpic(taskName, path.basename(target.filePath!));
+    const sourceEpicName = handleData.epic?.epicName 
+      ? path.basename(handleData.epic.epicName, '.md')
+      : null;
 
-    await this.refresh();
+    const targetEpicName = path.basename(target.filePath!, '.md');
+    
+    if (sourceEpicName) {
+      await epicService.removeTaskFromEpicByName(sourceEpicName, taskId);
+    }
+    
+    await epicService.addTaskToEpicByName(targetEpicName, taskId);
+    this.refresh();
   }
   private async handleTaskDropFromSprints(target: EpicsTreeItem, handleData: any): Promise<void> {
-    let taskFilePath: string | undefined;
-    let taskName: string | undefined;
-    if (handleData.itemHandles && Array.isArray(handleData.itemHandles) && handleData.itemHandles.length > 0) {
-      const raw = String(handleData.itemHandles[0] || '');
-      const parts = raw.split(' ');
-      taskName = parts[1] || parts.pop() || raw;
+    const taskId = handleData._id;
+    if (!taskId) {
+      throw new Error('No task ID found in drop data');
     }
-    const taskPath = getTaskPath(taskName || path.basename(taskFilePath || ''));
 
-    await this.addTaskToEpic(target.filePath!, taskPath);
+    const epicName = path.basename(target.filePath!, '.md');
+    await epicService.addTaskToEpicByName(epicName, taskId);
     this.refresh();
   }
 private async addTaskToEpic(epicPath: string, taskPath: string): Promise<void> {
@@ -226,8 +224,11 @@ private async updateTaskEpic(taskName: string, epicName: string): Promise<void> 
           throw new Error('No task path found for drag operation');
         }
 
-        // Create a consistent task data object
+        const { data: taskMetadata } = matter.read(taskItem.taskPath);
+        const taskId = taskMetadata._id || taskMetadata.id;
+
         const taskData = {
+          _id: taskId,
           type: 'task',
           label: taskItem.label,
           taskName: removeEmojiFromTaskLabel(taskItem.label),
@@ -249,12 +250,35 @@ private async updateTaskEpic(taskName: string, epicName: string): Promise<void> 
     }
   }
   async handleDrop(target: EpicsTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    void vscode.window.showInformationMessage('Epics handleDrop called!');
+    console.log('===== EPICS handleDrop START =====');
     try {
+      console.log('target:', target?.label, target?.filePath);
+      console.log('dataTransfer type:', typeof dataTransfer);
+      console.log('dataTransfer keys:', Object.keys(dataTransfer));
+      
+      // Check ALL available MIME types
+      const allTypes = [
+        'application/vnd.code.tree.sprintdesk-tasks',
+        'application/vnd.code.tree.sprintdesk-backlogs', 
+        'application/vnd.code.tree.sprintdesk-epics',
+        'application/vnd.code.tree.sprintdesk-sprints',
+        'text/plain',
+        'text/uri-list'
+      ];
+      
+      for (const mimeType of allTypes) {
+        const item = dataTransfer.get(mimeType);
+        if (item) {
+          console.log(`FOUND MIME type: ${mimeType}, value:`, item.value);
+        }
+      }
+      
       if (!target?.filePath || target.contextValue !== 'epic') {
         throw new Error('Invalid drop target: must be an epic');
       }
 
-      const taskSources = {
+      const taskSources: { [key: string]: string } = {
         tasks: 'application/vnd.code.tree.sprintdesk-tasks',
         backlogs: 'application/vnd.code.tree.sprintdesk-backlogs',
         epics: 'application/vnd.code.tree.sprintdesk-epics',
@@ -262,24 +286,43 @@ private async updateTaskEpic(taskName: string, epicName: string): Promise<void> 
       };
 
       for (const [source, mimeType] of Object.entries(taskSources)) {
-        const dataItem = dataTransfer.get(mimeType);
-        if (dataItem) {
-          const handleData = JSON.parse(dataItem.value as string);
-          switch (source) {
-            case 'tasks':
-              await this.handleTaskDropFromTasks(target, handleData);
-              break;
-            case 'backlogs':
-              await this.handleTaskDropFromBacklogs(target, handleData);
-              break;
-            case 'epics':
-              await this.handleTaskDropFromEpics(target, handleData);
-              break;
-            case 'sprints':
-              await this.handleTaskDropFromSprints(target, handleData);
-              break;
+        try {
+          const dataItem = dataTransfer.get(mimeType);
+          console.log(`Checking ${source}:`, dataItem);
+          if (dataItem && dataItem.value) {
+            const handleData = JSON.parse(dataItem.value as string);
+            console.log(`Drop from ${source}:`, handleData);
+            switch (source) {
+              case 'tasks':
+                await this.handleTaskDropFromTasks(target, handleData);
+                return;
+              case 'backlogs':
+                await this.handleTaskDropFromBacklogs(target, handleData);
+                return;
+              case 'epics':
+                await this.handleTaskDropFromEpics(target, handleData);
+                return;
+              case 'sprints':
+                await this.handleTaskDropFromSprints(target, handleData);
+                return;
+            }
           }
-          return;
+        } catch (e) {
+          console.log(`Error checking ${source}:`, e);
+        }
+      }
+
+      const textItem = dataTransfer.get('text/plain');
+      if (textItem && textItem.value) {
+        try {
+          const handleData = JSON.parse(textItem.value as string);
+          console.log('Drop from text/plain:', handleData);
+          if (handleData._id) {
+            await this.handleTaskDropFromTasks(target, handleData);
+            return;
+          }
+        } catch (e) {
+          console.log('Failed to parse text/plain:', e);
         }
       }
 

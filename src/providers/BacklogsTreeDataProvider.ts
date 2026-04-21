@@ -230,8 +230,11 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
           throw new Error('No task path found for drag operation');
         }
 
-        // Create a consistent task data object
+        const { data: taskMetadata } = matter.read(taskItem.taskPath);
+        const taskId = taskMetadata._id || taskMetadata.id;
+
         const taskData = {
+          _id: taskId,
           type: 'task',
           label: taskItem.label,
           taskName: removeEmojiFromTaskLabel(taskItem.label),

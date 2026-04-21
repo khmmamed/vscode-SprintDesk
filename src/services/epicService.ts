@@ -129,6 +129,54 @@ export function addTaskToEpic(epicTitleOrPath: string, taskNameOrPath: string) {
   }
 }
 
+export function addTaskToEpicById(epicId: string, taskId: string) {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const epics = dataService.loadEpics();
+  const epic = epics.find(e => e.id === epicId || e.name === epicId);
+  if (!epic) return;
+
+  if (!epic.tasks.includes(taskId)) {
+    epic.tasks.push(taskId);
+  }
+
+  dataService.updateEpic(epic.id, { tasks: epic.tasks, updatedAt: new Date().toISOString() });
+  dataService.saveEpicMd(epic);
+
+  const taskObj = dataService.loadTasks().find(t => t.id === taskId);
+  if (taskObj) {
+    taskObj.epic = epic.name;
+    dataService.updateTask(taskId, { epic: epic.name });
+    dataService.saveTaskMd(taskObj);
+  }
+}
+
+export function addTaskToEpicByName(epicName: string, taskId: string) {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const epics = dataService.loadEpics();
+  const epic = epics.find(e => e.name === epicName);
+  if (!epic) return;
+
+  if (!epic.tasks.includes(taskId)) {
+    epic.tasks.push(taskId);
+  }
+
+  dataService.updateEpic(epic.id, { tasks: epic.tasks, updatedAt: new Date().toISOString() });
+  dataService.saveEpicMd(epic);
+
+  const taskObj = dataService.loadTasks().find(t => t.id === taskId);
+  if (taskObj) {
+    taskObj.epic = epic.name;
+    dataService.updateTask(taskId, { epic: epic.name });
+    dataService.saveTaskMd(taskObj);
+  }
+}
+
 export async function createEpicInteractive() {
   const epicName = await vscode.window.showInputBox({ prompt: 'Epic title' });
   if (!epicName) return;
@@ -163,6 +211,48 @@ export function removeTaskFromEpic(epicTitleOrPath: string, taskPath: string) {
   dataService.saveEpicMd(epic);
 
   const task = dataService.getTask(taskName);
+  if (task) {
+    task.epic = '';
+    dataService.updateTask(task.id, { epic: '' });
+    dataService.saveTaskMd(task);
+  }
+}
+
+export function removeTaskFromEpicById(epicId: string, taskId: string) {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const epics = dataService.loadEpics();
+  const epic = epics.find(e => e.id === epicId || e.name === epicId);
+  if (!epic) return;
+
+  epic.tasks = epic.tasks.filter(t => t !== taskId);
+  dataService.updateEpic(epic.id, { tasks: epic.tasks, updatedAt: new Date().toISOString() });
+  dataService.saveEpicMd(epic);
+
+  const task = dataService.getTask(taskId);
+  if (task) {
+    task.epic = '';
+    dataService.updateTask(task.id, { epic: '' });
+    dataService.saveTaskMd(task);
+  }
+}
+
+export function removeTaskFromEpicByName(epicName: string, taskId: string) {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const epics = dataService.loadEpics();
+  const epic = epics.find(e => e.name === epicName);
+  if (!epic) return;
+
+  epic.tasks = epic.tasks.filter(t => t !== taskId);
+  dataService.updateEpic(epic.id, { tasks: epic.tasks, updatedAt: new Date().toISOString() });
+  dataService.saveEpicMd(epic);
+
+  const task = dataService.getTask(taskId);
   if (task) {
     task.epic = '';
     dataService.updateTask(task.id, { epic: '' });
