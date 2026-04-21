@@ -1,0 +1,30 @@
+{
+  "name": "sprintdesk-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for SprintDesk task management - exposes CRUD and query operations for AI agents",
+  "author": "SprintDesk",
+  "repository": "https://github.com/khmmamed/vscode-SprintDesk",
+  "homepage": "https://github.com/khmmamed/vscode-SprintDesk",
+  "capabilities": {
+    "tools": true,
+    "resources": false
+  },
+  "tools": {
+    "categories": {
+      "tasks": "Task CRUD operations",
+      "epics": "Epic CRUD operations",
+      "sprints": "Sprint CRUD operations",
+      "backlogs": "Backlog CRUD operations",
+      "queries": "Query and search operations",
+      "moves": "Move tasks between epics/sprints/backlogs"
+    }
+  },
+  "configuration": {
+    "workspace": "auto-detect",
+    "dataDir": ".SprintDesk"
+  },
+  "endpoints": {
+    "stdio": "built-in via extension",
+    "http": "optional"
+  }
+}

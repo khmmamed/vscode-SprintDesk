@@ -231,6 +231,84 @@ export async function activate(context: vscode.ExtensionContext) {
   // Settings commands
   registerOpenSettingsCommand(context);
 
+  // MCP server command
+  let mcpServer: any = null;
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sprintdesk.startMcp', async () => {
+      if (mcpServer) {
+        vscode.window.showInformationMessage('MCP server already running on port 3847');
+        return;
+      }
+      
+      const http = require('http');
+      const { handleToolCall, ALL_TOOLS } = require('./mcp/handlers');
+      
+      const server = http.createServer(async (req: any, res: any) => {
+        const url = req.url?.split('?')[0] || '/';
+        
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
+          res.end();
+          return;
+        }
+        
+        if (req.method === 'GET' && url === '/health') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ok', server: 'sprintdesk-mcp' }));
+          return;
+        }
+        
+        if (req.method === 'GET' && url === '/tools') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ tools: ALL_TOOLS.map((t: any) => t.name) }));
+          return;
+        }
+        
+        if (req.method === 'POST' && url === '/mcp') {
+          let body = '';
+          req.on('data', (chunk: string) => body += chunk);
+          req.on('end', async () => {
+            try {
+              const request = JSON.parse(body);
+              const { id, method, params } = request;
+              
+              if (method === 'tools/list') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { tools: ALL_TOOLS } }));
+                return;
+              }
+              
+              if (method === 'tools/call') {
+                const toolName = params?.name;
+                const toolArgs = params?.arguments || {};
+                const result = await handleToolCall(toolName, toolArgs);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { content: result.content } }));
+                return;
+              }
+              
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } }));
+            } catch (e: any) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ jsonrpc: '2.0', id: 0, error: { code: -32700, message: e.message } }));
+            }
+          });
+          return;
+        }
+        
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+      });
+      
+      const PORT = 3847;
+      server.listen(PORT, () => {
+        mcpServer = server;
+        vscode.window.showInformationMessage(`🚀 MCP server running on port ${PORT}`);
+      });
+    })
+  );
+
   // When user selects a repository in the repositories tree, switch the Tasks provider to read from that repo
   repositoriesTreeView.onDidChangeSelection(e => {
     try {
@@ -292,7 +370,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const sdPath = path.join(ws, '.SprintDesk');
 
     // Ensure all directories exist
-    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints'];
+    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp'];
     for (const dir of dirs) {
       const fullPath = path.join(sdPath, dir);
       if (!fs.existsSync(fullPath)) {
@@ -308,6 +386,51 @@ export async function activate(context: vscode.ExtensionContext) {
         const key = file.replace('.yml', '');
         fs.writeFileSync(dataPath, `${key}: []`, 'utf8');
       }
+    }
+
+    // Ensure MCP files exist
+    const mcpManifestPath = path.join(sdPath, 'mcp', 'manifest.json');
+    if (!fs.existsSync(mcpManifestPath)) {
+      const manifest = {
+        name: 'sprintdesk-mcp',
+        version: '1.0.0',
+        description: 'MCP server for SprintDesk task management',
+        capabilities: { tools: true, resources: false }
+      };
+      fs.writeFileSync(mcpManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    }
+
+    const mcpReadmePath = path.join(sdPath, 'mcp', 'README.md');
+    if (!fs.existsSync(mcpReadmePath)) {
+      const readme = `# SprintDesk MCP Server
+
+Local MCP server for integrating SprintDesk with AI agents like Copilot, Claude, etc.
+
+## Available Tools
+
+### Task Tools
+- sprintdesk_createTask, sprintdesk_getTask, sprintdesk_updateTask, sprintdesk_deleteTask
+- sprintdesk_listTasks, sprintdesk_searchTasks
+
+### Epic Tools  
+- sprintdesk_createEpic, sprintdesk_getEpic, sprintdesk_updateEpic, sprintdesk_deleteEpic
+- sprintdesk_listEpics, sprintdesk_getTasksByEpic, sprintdesk_addTaskToEpic
+
+### Sprint Tools
+- sprintdesk_createSprint, sprintdesk_getSprint, sprintdesk_updateSprint, sprintdesk_deleteSprint
+- sprintdesk_listSprints, sprintdesk_getTasksBySprint, sprintdesk_addTaskToSprint
+
+### Backlog Tools
+- sprintdesk_createBacklog, sprintdesk_getBacklog, sprintdesk_listBacklogs, sprintdesk_addTaskToBacklog
+
+### Move Tools
+- sprintdesk_moveTaskToEpic, sprintdesk_moveTaskToSprint, sprintdesk_moveTaskToBacklog
+
+## Usage
+
+AI agents can discover and use these tools through the MCP protocol when this extension is active.
+`;
+      fs.writeFileSync(mcpReadmePath, readme, 'utf8');
     }
 
     vscode.window.showInformationMessage("📦 SprintDesk ready!");

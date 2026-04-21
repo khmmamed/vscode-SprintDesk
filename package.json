@@ -33,7 +33,8 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "clean": "rimraf dist",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "mcp": "node --loader ts-node/esm src/mcp/server.ts"
   },
   "contributes": {
     "keybindings": [
@@ -129,6 +130,11 @@
         "command": "sprintdesk.refresh",
         "title": "SprintDesk: Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "sprintdesk.startMcp",
+        "title": "SprintDesk: Start MCP Server",
+        "icon": "$(server)"
       },
       {
         "command": "sprintdesk.addExistingTasksToSprint",
