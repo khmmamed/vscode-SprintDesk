@@ -74,7 +74,7 @@ export class TaskTreeItem extends vscode.TreeItem {
     }
   }
 
-private getStatusEmoji(status: string): string {
+  private getStatusEmoji(status: string): string {
     switch (status.toLowerCase()) {
       case 'not-started': return '⏳';
       case 'waiting': return '⏳';
@@ -106,9 +106,9 @@ private getStatusEmoji(status: string): string {
     }
   }
 
-private setupVisuals(): void {
+  private setupVisuals(): void {
     const statusEmoji = this.getStatusEmoji(this.taskData.status);
-    
+
     let filename = path.basename(this.taskData.path);
     if (this.taskObj) {
       const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -117,7 +117,7 @@ private setupVisuals(): void {
         filename = dataService.getTaskFilename(this.taskObj);
       }
     }
-    
+
     this.label = `${this.taskData.name || this.taskData.title} ${statusEmoji}`;
 
     // Set description with priority and epic
@@ -162,13 +162,10 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
   public handleDrop(): void { }
 
   public handleDrag(source: readonly TaskTreeItem[], dataTransfer: vscode.DataTransfer): void {
-    void vscode.window.showInformationMessage('Tasks handleDrag called!');
-    console.log('===== Tasks handleDrag START =====');
     if (!source[0]) return;
 
     const taskItem = source[0];
     const taskData = taskItem.taskData;
-    console.log('taskData._id:', taskData._id);
 
     const transferData = {
       _id: taskData._id,
@@ -181,12 +178,11 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
     };
 
     const jsonString = JSON.stringify(transferData);
-    console.log('Setting drag data:', jsonString);
 
     dataTransfer.set('application/vnd.code.tree.sprintdesk-tasks',
       new vscode.DataTransferItem(jsonString)
     );
-    
+
     dataTransfer.set('text/plain',
       new vscode.DataTransferItem(jsonString)
     );
@@ -200,7 +196,7 @@ export class TasksTreeDataProvider implements vscode.TreeDataProvider<TaskTreeIt
     return element;
   }
 
-async getChildren(element?: TaskTreeItem): Promise<TaskTreeItem[]> {
+  async getChildren(element?: TaskTreeItem): Promise<TaskTreeItem[]> {
     const ws = this.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!ws) {
       return [];
@@ -209,11 +205,11 @@ async getChildren(element?: TaskTreeItem): Promise<TaskTreeItem[]> {
     if (!element) {
       // Load tasks directly from YAML (source of truth)
       const tasks = taskService.loadTasks();
-      
+
       return tasks.map((task: Task) => {
         // Get the MD file path from the task's path field
         const mdPath = task.path || '';
-        
+
         const taskData: TaskData = {
           _id: task.id,
           name: task.name || '',

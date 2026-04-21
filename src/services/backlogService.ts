@@ -169,7 +169,71 @@ export function removeTaskFromBacklog(backlogPath: string, taskPath: string): vo
   dataService.saveTaskMd(task);
 }
 
+export function addTaskToBacklogById(backlogId: string, taskId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const backlog = dataService.getBacklog(backlogId);
+  if (!backlog) return;
+  
+  const task = dataService.getTask(taskId);
+  if (!task) return;
+  
+  if (!backlog.tasks.includes(task.id)) {
+    backlog.tasks.push(task.id);
+    dataService.updateBacklog(backlog.id, { tasks: backlog.tasks });
+    dataService.saveBacklogMd(backlog);
+  }
+  
+  dataService.updateTask(task.id, { backlog: backlog.id });
+  dataService.saveTaskMd(task);
+}
+
+export function removeTaskFromBacklogById(backlogId: string, taskId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const backlog = dataService.getBacklog(backlogId);
+  if (!backlog) return;
+  
+  const task = dataService.getTask(taskId);
+  if (!task) return;
+  
+  backlog.tasks = backlog.tasks.filter(t => t !== task.id);
+  dataService.updateBacklog(backlog.id, { tasks: backlog.tasks });
+  dataService.saveBacklogMd(backlog);
+  
+  dataService.updateTask(task.id, { backlog: '' });
+  dataService.saveTaskMd(task);
+}
+
 export function getTasksFromBacklog(backlogId: string): any[] {
+  const ws = fileService.getWorkspaceRoot();
+  const dataService = getDataService(ws);
+  const backlog = dataService.getBacklog(backlogId);
+  if (!backlog) return [];
+  
+  const tasks = dataService.loadTasks();
+  const tasksDir = dataService.getTasksDir();
+  
+  return tasks.filter(t => backlog.tasks.includes(t.id)).map(t => {
+    const taskPath = path.join(tasksDir, dataService.getTaskFilename(t));
+    return {
+      label: t.title,
+      path: taskPath,
+      collapsibleState: vscode.TreeItemCollapsibleState.None,
+      command: {
+        command: 'vscode.open',
+        title: 'Open Task',
+        arguments: [vscode.Uri.file(taskPath)]
+      }
+    };
+  });
+}
+
+export function getTasksFromBacklogById(backlogId: string): any[] {
   const ws = fileService.getWorkspaceRoot();
   const dataService = getDataService(ws);
   const backlog = dataService.getBacklog(backlogId);

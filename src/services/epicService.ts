@@ -138,6 +138,10 @@ export function addTaskToEpicById(epicId: string, taskId: string) {
   const epic = epics.find(e => e.id === epicId || e.name === epicId);
   if (!epic) return;
 
+  if (!epic.tasks) {
+    epic.tasks = [];
+  }
+  
   if (!epic.tasks.includes(taskId)) {
     epic.tasks.push(taskId);
   }
@@ -225,7 +229,7 @@ export function removeTaskFromEpicById(epicId: string, taskId: string) {
   const dataService = getDataService(ws);
   const epics = dataService.loadEpics();
   const epic = epics.find(e => e.id === epicId || e.name === epicId);
-  if (!epic) return;
+  if (!epic || !epic.tasks) return;
 
   epic.tasks = epic.tasks.filter(t => t !== taskId);
   dataService.updateEpic(epic.id, { tasks: epic.tasks, updatedAt: new Date().toISOString() });
@@ -301,7 +305,7 @@ export function readEpic(filePath: string): string {
   return fs.readFileSync(filePath, 'utf8');
 }
 
-export function getTasksFromEpic(epicName: string): { label: string; path: string; }[] {
+export function getTasksFromEpic(epicName: string): { label: string; path: string; id: string }[] {
   const ws = fileService.getWorkspaceRoot();
   const dataService = getDataService(ws);
   const epic = dataService.loadEpics().find(e => e.name === epicName || e.id === epicName);
@@ -315,7 +319,27 @@ export function getTasksFromEpic(epicName: string): { label: string; path: strin
     const filename = dataService.getTaskFilename(t);
     return {
       label: t.title,
-      path: require('path').join(tasksDir, filename)
+      path: require('path').join(tasksDir, filename),
+      id: t.id
+    };
+  });
+}
+
+export function getTasksFromEpicById(epicId: string): { label: string; path: string; id: string }[] {
+  const ws = fileService.getWorkspaceRoot();
+  const dataService = getDataService(ws);
+  const epic = dataService.loadEpics().find(e => e.id === epicId);
+  if (!epic) return [];
+  
+  const tasks = dataService.loadTasks();
+  const tasksDir = dataService.getTasksDir();
+  
+  return tasks.filter(t => epic.tasks.includes(t.id)).map(t => {
+    const filename = dataService.getTaskFilename(t);
+    return {
+      label: t.title,
+      path: require('path').join(tasksDir, filename),
+      id: t.id
     };
   });
 }

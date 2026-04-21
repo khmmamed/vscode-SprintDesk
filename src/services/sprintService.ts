@@ -215,6 +215,21 @@ export function getTasksFromSprint(sprintId: string): { label: string; path: str
   }));
 }
 
+export function getTasksFromSprintById(sprintId: string): { label: string; path: string }[] {
+  const ws = fileService.getWorkspaceRoot();
+  const dataService = getDataService(ws);
+  const sprint = dataService.getSprint(sprintId);
+  if (!sprint) return [];
+  
+  const tasks = dataService.loadTasks();
+  const tasksDir = dataService.getTasksDir();
+  
+  return tasks.filter(t => sprint.tasks.includes(t.id)).map(t => ({
+    label: t.title,
+    path: path.join(tasksDir, dataService.getTaskFilename(t))
+  }));
+}
+
 export function getSprintPath(sprintName: string): string {
   const ws = fileService.getWorkspaceRoot();
   const dataService = getDataService(ws);
@@ -265,6 +280,46 @@ export function removeTaskFromSprint(sprintPath: string, taskPath: string): void
   
   const tasks = dataService.loadTasks();
   const task = tasks.find(t => t.id === taskName);
+  if (!task) return;
+  
+  sprint.tasks = sprint.tasks.filter(t => t !== task.id);
+  dataService.updateSprint(sprint.id, { tasks: sprint.tasks });
+  dataService.saveSprintMd(sprint);
+  
+  dataService.updateTask(task.id, { sprint: null });
+  dataService.saveTaskMd(task);
+}
+
+export function addTaskToSprintById(sprintId: string, taskId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const sprint = dataService.getSprint(sprintId);
+  if (!sprint) return;
+  
+  const task = dataService.getTask(taskId);
+  if (!task) return;
+  
+  if (!sprint.tasks.includes(task.id)) {
+    sprint.tasks.push(task.id);
+    dataService.updateSprint(sprint.id, { tasks: sprint.tasks });
+    dataService.saveSprintMd(sprint);
+  }
+  
+  dataService.updateTask(task.id, { sprint: sprint.name });
+  dataService.saveTaskMd(task);
+}
+
+export function removeTaskFromSprintById(sprintId: string, taskId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  const sprint = dataService.getSprint(sprintId);
+  if (!sprint) return;
+  
+  const task = dataService.getTask(taskId);
   if (!task) return;
   
   sprint.tasks = sprint.tasks.filter(t => t !== task.id);
