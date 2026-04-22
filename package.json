@@ -9,7 +9,7 @@
     "type": "git"
   },
   "engines": {
-    "vscode": "^1.71.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "Other"
@@ -163,7 +163,7 @@
         "command": "sprintdesk.createSprintFromRepo",
         "title": "SprintDesk: Create Sprint from Repository"
       },
-{
+      {
         "command": "sprintdesk.createBacklogFromRepo",
         "title": "SprintDesk: Create Backlog from Repository"
       },
@@ -215,7 +215,7 @@
           "id": "sprintdesk-epics",
           "name": "Epics"
         },
-{
+        {
           "id": "sprintdesk-tasks",
           "name": "Tasks"
         },
@@ -263,7 +263,7 @@
           "when": "view == sprintdesk-repositories",
           "group": "navigation@1"
         },
-{
+        {
           "command": "sprintdesk.refresh",
           "when": "view =~ /^sprintdesk-/",
           "group": "navigation@9"
@@ -492,7 +492,13 @@
           "scope": "resource"
         }
       }
-    }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "sprintdesk-mcp",
+        "label": "SprintDesk MCP Server"
+      }
+    ]
   },
   "devDependencies": {
     "@estruyf/vscode": "^1.1.0",
@@ -505,7 +511,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/uuid": "^8.3.4",
-    "@types/vscode": "^1.71.0",
+    "@types/vscode": "^1.99.0",
     "@types/webpack": "^5.28.1",
     "@types/webpack-dev-server": "^4.7.2",
     "@typescript-eslint/eslint-plugin": "^5.31.0",

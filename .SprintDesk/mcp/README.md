@@ -6,6 +6,42 @@ Local MCP server for integrating SprintDesk with AI agents like Copilot, Claude,
 
 This MCP exposes all SprintDesk task management operations to AI agents through JSON-RPC 2.0 protocol. AI agents can use these tools to perform CRUD operations on tasks, epics, sprints, and backlogs.
 
+## Connection
+
+### HTTP Server (when VSCode extension is running)
+- **URL**: `http://localhost:3847/mcp`
+- **Port**: 3847
+- Auto-starts when VSCode extension loads
+
+### stdio Server (standalone)
+```bash
+cd <workspace-root>
+npm run mcp
+```
+
+## Quick Start
+
+### Using curl
+```bash
+# List all tools
+curl -X POST http://localhost:3847/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+
+# Create a task
+curl -X POST http://localhost:3847/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sprintdesk_createTask","arguments":{"title":"My task","type":"feature"}}}'
+
+# List tasks
+curl -X POST http://localhost:3847/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"sprintdesk_listTasks","arguments":{}}}'
+
+# Health check
+curl http://localhost:3847/health
+```
+
 ## Available Tools
 
 ### Task Tools
@@ -54,6 +90,20 @@ This MCP exposes all SprintDesk task management operations to AI agents through 
 | `sprintdesk_moveTaskToEpic` | Move task to epic (auto-renames task code) |
 | `sprintdesk_moveTaskToSprint` | Move task to sprint |
 | `sprintdesk_moveTaskToBacklog` | Move task to backlog |
+
+### Team Tools
+| Tool | Description |
+|------|-------------|
+| `sprintdesk_listTeam` | List all team members |
+| `sprintdesk_syncTeamFromGit` | Sync team from git authors |
+| `sprintdesk_addTeamMember` | Add a team member |
+| `sprintdesk_removeTeamMember` | Remove a team member |
+
+### History Tools
+| Tool | Description |
+|------|-------------|
+| `sprintdesk_getHistory` | Get history for an item or all items |
+| `sprintdesk_trackChange` | Track a change (internal) |
 
 ## Example AI Prompts
 
@@ -135,4 +185,27 @@ This MCP exposes all SprintDesk task management operations to AI agents through 
 
 ## Integration with AI Agents
 
-The MCP server is automatically available when this VS Code extension is active. AI agents using MCP protocol can discover and use these tools through the extension's MCP capabilities.
+The MCP server is automatically available when this VS Code extension is active. AI agents can connect via:
+
+1. **HTTP** to `http://localhost:3847/mcp`
+2. **stdio** by running `npm run mcp` in the workspace
+
+### Using with Claude Desktop
+
+Add this to your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "sprintdesk": {
+      "command": "npm",
+      "args": ["run", "mcp"],
+      "cwd": "<path-to-your-workspace>"
+    }
+  }
+}
+```
+
+### Using with VSCode Copilot
+
+The extension exposes MCP tools directly. Just prompt the agent to use SprintDesk tools.

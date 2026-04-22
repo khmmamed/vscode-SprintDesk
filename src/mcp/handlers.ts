@@ -612,3 +612,8 @@ export async function handleToolCall(toolName: string, args: any): Promise<Handl
   }
   return handler(args);
 }
+
+export const ALL_TOOLS = Object.keys(HANDLERS).map(name => ({
+  name,
+  description: `SprintDesk ${name.replace('sprintdesk_', '')} operation`
+}));

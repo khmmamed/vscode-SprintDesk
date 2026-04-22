@@ -273,7 +273,14 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
 
   // MCP server - auto-start on extension load
   const http = require('http');
-  const { handleToolCall, ALL_TOOLS } = require('./mcp/handlers');
+  const mcpHandlers = require('./mcp/handlers');
+  const { handleToolCall } = mcpHandlers;
+  
+  // Build tools list from handlers
+  const ALL_TOOLS = Object.keys(mcpHandlers.HANDLERS || {}).map(name => ({
+    name,
+    description: `SprintDesk ${name.replace('sprintdesk_', '')} operation`
+  }));
   
   let mcpServer: any = null;
   
@@ -347,7 +354,27 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
   
   // Start MCP server automatically
   startMcpServer();
-  
+
+  // Register MCP server definition for VS Code native MCP integration
+  const didChangeEmitter = new vscode.EventEmitter<void>();
+  context.subscriptions.push(
+    vscode.lm.registerMcpServerDefinitionProvider('sprintdesk-mcp', {
+      onDidChangeMcpServerDefinitions: didChangeEmitter.event,
+      provideMcpServerDefinitions: async () => {
+        const serverDef = new vscode.McpHttpServerDefinition(
+          'SprintDesk MCP',
+          vscode.Uri.parse('http://localhost:3847/mcp'),
+          {},
+          '1.0.0'
+        );
+        return [serverDef];
+      },
+      resolveMcpServerDefinition: async (server) => {
+        return server;
+      }
+    })
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand('sprintdesk.startMcp', async () => {
       if (mcpServer) {
@@ -437,17 +464,36 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
       }
     }
 
-    // Ensure MCP files exist
+// Ensure MCP files exist
     const mcpManifestPath = path.join(sdPath, 'mcp', 'manifest.json');
-    if (!fs.existsSync(mcpManifestPath)) {
-      const manifest = {
-        name: 'sprintdesk-mcp',
-        version: '1.0.0',
-        description: 'MCP server for SprintDesk task management',
-        capabilities: { tools: true, resources: false }
-      };
-      fs.writeFileSync(mcpManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-    }
+    const mcpManifest = {
+      name: 'sprintdesk-mcp',
+      version: '1.0.0',
+      description: 'MCP server for SprintDesk task management - exposes CRUD and query operations for AI agents',
+      author: 'SprintDesk',
+      repository: 'https://github.com/khmmamed/vscode-SprintDesk',
+      homepage: 'https://github.com/khmmamed/vscode-SprintDesk',
+      capabilities: { tools: true, resources: false },
+      connection: {
+        http: { url: 'http://localhost:3847/mcp', methods: ['POST'] },
+        stdio: { command: 'npm run mcp', cwd: '<workspace-root>' }
+      },
+      tools: {
+        task: ['sprintdesk_createTask', 'sprintdesk_getTask', 'sprintdesk_updateTask', 'sprintdesk_deleteTask', 'sprintdesk_listTasks', 'sprintdesk_searchTasks'],
+        epic: ['sprintdesk_createEpic', 'sprintdesk_getEpic', 'sprintdesk_updateEpic', 'sprintdesk_deleteEpic', 'sprintdesk_listEpics', 'sprintdesk_getTasksByEpic', 'sprintdesk_addTaskToEpic'],
+        sprint: ['sprintdesk_createSprint', 'sprintdesk_getSprint', 'sprintdesk_updateSprint', 'sprintdesk_deleteSprint', 'sprintdesk_listSprints', 'sprintdesk_getTasksBySprint', 'sprintdesk_addTaskToSprint'],
+        backlog: ['sprintdesk_createBacklog', 'sprintdesk_getBacklog', 'sprintdesk_listBacklogs', 'sprintdesk_addTaskToBacklog'],
+        team: ['sprintdesk_listTeam', 'sprintdesk_syncTeamFromGit', 'sprintdesk_addTeamMember', 'sprintdesk_removeTeamMember'],
+        history: ['sprintdesk_getHistory', 'sprintdesk_trackChange'],
+        move: ['sprintdesk_moveTaskToEpic', 'sprintdesk_moveTaskToSprint', 'sprintdesk_moveTaskToBacklog']
+      },
+      usage: {
+        http_curl: "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}'",
+        http_call: "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_listTasks\",\"arguments\":{}}}'",
+        stdio: 'cd <workspace> && npm run mcp'
+      }
+    };
+    fs.writeFileSync(mcpManifestPath, JSON.stringify(mcpManifest, null, 2), 'utf8');
 
     const mcpReadmePath = path.join(sdPath, 'mcp', 'README.md');
     if (!fs.existsSync(mcpReadmePath)) {
