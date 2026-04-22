@@ -43,6 +43,8 @@ import { TasksTreeDataProvider } from './providers/TasksTreeDataProvider';
 import { BacklogsTreeDataProvider } from './providers/BacklogsTreeDataProvider';
 import { EpicsTreeDataProvider } from './providers/EpicsTreeDataProvider';
 import { RepositoriesTreeDataProvider } from './providers/RepositoriesTreeDataProvider';
+import { TeamTreeDataProvider, teamTreeDataProvider } from './providers/team/TeamTreeDataProvider';
+import { HistoryTreeDataProvider, historyTreeDataProvider } from './providers/history/HistoryTreeDataProvider';
 // Services
 import { createSprintInteractive } from './services/sprintService';
 import { createEpicInteractive } from './services/epicService';
@@ -174,8 +176,11 @@ export async function activate(context: vscode.ExtensionContext) {
   const backlogsProvider = new BacklogsTreeDataProvider();
   const repositoriesProvider = new RepositoriesTreeDataProvider();
 
-  const tasksProvider = new TasksTreeDataProvider();
+const tasksProvider = new TasksTreeDataProvider();
   const epicsProvider = new EpicsTreeDataProvider();
+
+  const teamProvider = teamTreeDataProvider;
+  const historyProvider = historyTreeDataProvider;
 
   // Create and register sprints tree view with drag and drop support
   const sprintsTreeView = vscode.window.createTreeView('sprintdesk-sprints', {
@@ -202,10 +207,20 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(tasksTreeView);
 
-  const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositories', {
+const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositories', {
     treeDataProvider: repositoriesProvider
   });
   context.subscriptions.push(repositoriesTreeView);
+
+  const teamTreeView = vscode.window.createTreeView('sprintdesk-team', {
+    treeDataProvider: teamProvider
+  });
+  context.subscriptions.push(teamTreeView);
+
+  const historyTreeView = vscode.window.createTreeView('sprintdesk-history', {
+    treeDataProvider: historyProvider
+  });
+  context.subscriptions.push(historyTreeView);
 
   // Register delegated commands (one file per command)
   registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
@@ -223,89 +238,123 @@ export async function activate(context: vscode.ExtensionContext) {
   registerCreateEpicFromRepoCommand(context, { repositoriesTreeView, epicsProvider, tasksProvider, sprintsProvider, backlogsProvider });
   registerCreateSprintFromRepoCommand(context, { repositoriesTreeView, sprintsProvider, tasksProvider, epicsProvider, backlogsProvider });
   registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
-  registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider });
+registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider, teamProvider, historyProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
   registerOpenSprintFileCommand(context);
   registerShowSprintCalendarCommand(context);
 
-  // Settings commands
+  // Team and History commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sprintdesk.viewTeam', async () => {
+      teamProvider.refresh();
+    }),
+    vscode.commands.registerCommand('sprintdesk.syncTeamFromGit', async () => {
+      const { syncTeamFromGit } = require('./services/team/teamService');
+      const members = await syncTeamFromGit();
+      vscode.window.showInformationMessage(`Team synced: ${members.length} members`);
+      teamProvider.refresh();
+    }),
+    vscode.commands.registerCommand('sprintdesk.viewHistory', async () => {
+      historyProvider.refresh();
+    }),
+    vscode.commands.registerCommand('sprintdesk.getItemHistory', async () => {
+      const itemId = await vscode.window.showInputBox({ prompt: 'Enter item ID' });
+      const itemType = await vscode.window.showQuickPick(['task', 'epic', 'sprint', 'backlog'], { placeHolder: 'Select item type' });
+      if (itemId && itemType) {
+        const { getHistoryForItem } = require('./services/history/historyService');
+        const history = getHistoryForItem(itemId, itemType);
+        vscode.window.showInformationMessage(`Found ${history.internal.length} internal and ${history.git.length} git entries`);
+      }
+    })
+  );
+
+// Settings commands
   registerOpenSettingsCommand(context);
 
-  // MCP server command
+  // MCP server - auto-start on extension load
+  const http = require('http');
+  const { handleToolCall, ALL_TOOLS } = require('./mcp/handlers');
+  
   let mcpServer: any = null;
+  
+  const startMcpServer = () => {
+    if (mcpServer) return;
+    
+    const server = http.createServer(async (req: any, res: any) => {
+      const url = req.url?.split('?')[0] || '/';
+      
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
+        res.end();
+        return;
+      }
+      
+      if (req.method === 'GET' && url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', server: 'sprintdesk-mcp' }));
+        return;
+      }
+      
+      if (req.method === 'GET' && url === '/tools') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ tools: ALL_TOOLS.map((t: any) => t.name) }));
+        return;
+      }
+      
+      if (req.method === 'POST' && url === '/mcp') {
+        let body = '';
+        req.on('data', (chunk: string) => body += chunk);
+        req.on('end', async () => {
+          try {
+            const request = JSON.parse(body);
+            const { id, method, params } = request;
+            
+            if (method === 'tools/list') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { tools: ALL_TOOLS } }));
+              return;
+            }
+            
+            if (method === 'tools/call') {
+              const toolName = params?.name;
+              const toolArgs = params?.arguments || {};
+              const result = await handleToolCall(toolName, toolArgs);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { content: result.content } }));
+              return;
+            }
+            
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } }));
+          } catch (e: any) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: 0, error: { code: -32700, message: e.message } }));
+          }
+        });
+        return;
+      }
+      
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+    
+    const PORT = 3847;
+    server.listen(PORT, () => {
+      mcpServer = server;
+      console.log(`🚀 MCP server running on port ${PORT}`);
+    });
+  };
+  
+  // Start MCP server automatically
+  startMcpServer();
+  
   context.subscriptions.push(
     vscode.commands.registerCommand('sprintdesk.startMcp', async () => {
       if (mcpServer) {
         vscode.window.showInformationMessage('MCP server already running on port 3847');
         return;
       }
-      
-      const http = require('http');
-      const { handleToolCall, ALL_TOOLS } = require('./mcp/handlers');
-      
-      const server = http.createServer(async (req: any, res: any) => {
-        const url = req.url?.split('?')[0] || '/';
-        
-        if (req.method === 'OPTIONS') {
-          res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
-          res.end();
-          return;
-        }
-        
-        if (req.method === 'GET' && url === '/health') {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ status: 'ok', server: 'sprintdesk-mcp' }));
-          return;
-        }
-        
-        if (req.method === 'GET' && url === '/tools') {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ tools: ALL_TOOLS.map((t: any) => t.name) }));
-          return;
-        }
-        
-        if (req.method === 'POST' && url === '/mcp') {
-          let body = '';
-          req.on('data', (chunk: string) => body += chunk);
-          req.on('end', async () => {
-            try {
-              const request = JSON.parse(body);
-              const { id, method, params } = request;
-              
-              if (method === 'tools/list') {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { tools: ALL_TOOLS } }));
-                return;
-              }
-              
-              if (method === 'tools/call') {
-                const toolName = params?.name;
-                const toolArgs = params?.arguments || {};
-                const result = await handleToolCall(toolName, toolArgs);
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { content: result.content } }));
-                return;
-              }
-              
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } }));
-            } catch (e: any) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', id: 0, error: { code: -32700, message: e.message } }));
-            }
-          });
-          return;
-        }
-        
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Not found' }));
-      });
-      
-      const PORT = 3847;
-      server.listen(PORT, () => {
-        mcpServer = server;
-        vscode.window.showInformationMessage(`🚀 MCP server running on port ${PORT}`);
-      });
+      startMcpServer();
     })
   );
 

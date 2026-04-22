@@ -71,6 +71,7 @@ export const PRIORITY_EMOJI = {
  */
 export const PROJECT_CONSTANTS = {
     SPRINTDESK_DIR: ".SprintDesk",
+    DATA_DIR: "data",
     BACKLOGS_DIR: "Backlogs",
     EPICS_DIR: "Epics",
     SPRINTS_DIR: "Sprints",

@@ -163,9 +163,29 @@
         "command": "sprintdesk.createSprintFromRepo",
         "title": "SprintDesk: Create Sprint from Repository"
       },
-      {
+{
         "command": "sprintdesk.createBacklogFromRepo",
         "title": "SprintDesk: Create Backlog from Repository"
+      },
+      {
+        "command": "sprintdesk.viewTeam",
+        "title": "SprintDesk: View Team",
+        "icon": "$(account)"
+      },
+      {
+        "command": "sprintdesk.syncTeamFromGit",
+        "title": "SprintDesk: Sync Team from Git",
+        "icon": "$(git-fetch)"
+      },
+      {
+        "command": "sprintdesk.viewHistory",
+        "title": "SprintDesk: View History",
+        "icon": "$(history)"
+      },
+      {
+        "command": "sprintdesk.getItemHistory",
+        "title": "SprintDesk: Get Item History",
+        "icon": "$(clock)"
       }
     ],
     "viewsContainers": {
@@ -195,9 +215,17 @@
           "id": "sprintdesk-epics",
           "name": "Epics"
         },
-        {
+{
           "id": "sprintdesk-tasks",
           "name": "Tasks"
+        },
+        {
+          "id": "sprintdesk-team",
+          "name": "Team"
+        },
+        {
+          "id": "sprintdesk-history",
+          "name": "History"
         }
       ]
     },
@@ -235,10 +263,20 @@
           "when": "view == sprintdesk-repositories",
           "group": "navigation@1"
         },
-        {
+{
           "command": "sprintdesk.refresh",
           "when": "view =~ /^sprintdesk-/",
           "group": "navigation@9"
+        },
+        {
+          "command": "sprintdesk.syncTeamFromGit",
+          "when": "view == sprintdesk-team",
+          "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.getItemHistory",
+          "when": "view == sprintdesk-history",
+          "group": "navigation"
         }
       ],
       "editor/context": [

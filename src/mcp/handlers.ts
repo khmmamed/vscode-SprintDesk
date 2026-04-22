@@ -3,6 +3,8 @@ import * as taskService from '../services/taskService';
 import * as epicService from '../services/epicService';
 import * as sprintService from '../services/sprintService';
 import * as backlogService from '../services/backlogService';
+import * as teamService from '../services/team/teamService';
+import * as historyService from '../services/history/historyService';
 import { getDataService } from '../data/DataService';
 
 interface HandlerResult {
@@ -485,6 +487,88 @@ async function handle_sprintdesk_moveTaskToBacklog(args: any): Promise<HandlerRe
   return res(`Task ${task.code} moved to backlog ${backlog.name}`);
 }
 
+// Team handlers
+async function handle_sprintdesk_listTeam(_args: any): Promise<HandlerResult> {
+  const members = teamService.loadTeamMembers();
+  return res(JSON.stringify(members, null, 2));
+}
+
+async function handle_sprintdesk_syncTeamFromGit(_args: any): Promise<HandlerResult> {
+  const ws = getWs();
+  if (!ws) return res('No workspace found', true);
+  
+  try {
+    const members = await teamService.syncTeamFromGit();
+    return res(`Team synced: ${members.length} members found`);
+  } catch (e: any) {
+    return res(`Error: ${e.message}`, true);
+  }
+}
+
+async function handle_sprintdesk_addTeamMember(args: any): Promise<HandlerResult> {
+  const ws = getWs();
+  if (!ws) return res('No workspace found', true);
+  
+  try {
+    const member = teamService.addTeamMember({
+      name: args.name,
+      email: args.email,
+      role: args.role || 'developer',
+      avatar: args.avatar
+    });
+    return res(JSON.stringify(member, null, 2));
+  } catch (e: any) {
+    return res(`Error: ${e.message}`, true);
+  }
+}
+
+async function handle_sprintdesk_removeTeamMember(args: any): Promise<HandlerResult> {
+  const ws = getWs();
+  if (!ws) return res('No workspace found', true);
+  
+  const removed = teamService.removeTeamMember(args.id || args.email);
+  if (removed) {
+    return res('Team member removed');
+  }
+  return res('Team member not found', true);
+}
+
+async function handle_sprintdesk_getHistory(args: any): Promise<HandlerResult> {
+  const ws = getWs();
+  if (!ws) return res('No workspace found', true);
+  
+  const itemId = args.itemId;
+  const itemType = args.itemType;
+  const limit = args.limit || 50;
+  
+  if (itemId && itemType) {
+    const history = historyService.getHistoryForItem(itemId, itemType, limit);
+    return res(JSON.stringify(history, null, 2));
+  }
+  
+  const allHistory = historyService.getAllHistory(limit);
+  return res(JSON.stringify(allHistory, null, 2));
+}
+
+async function handle_sprintdesk_trackChange(args: any): Promise<HandlerResult> {
+  const ws = getWs();
+  if (!ws) return res('No workspace found', true);
+  
+  try {
+    const entry = historyService.trackChange(
+      args.itemId,
+      args.itemType,
+      args.action,
+      args.field,
+      args.oldValue,
+      args.newValue
+    );
+    return res(JSON.stringify(entry, null, 2));
+  } catch (e: any) {
+    return res(`Error: ${e.message}`, true);
+  }
+}
+
 export const HANDLERS: Record<string, (args: any) => Promise<HandlerResult>> = {
   sprintdesk_createTask: handle_sprintdesk_createTask,
   sprintdesk_getTask: handle_sprintdesk_getTask,
@@ -510,9 +594,15 @@ export const HANDLERS: Record<string, (args: any) => Promise<HandlerResult>> = {
   sprintdesk_getBacklog: handle_sprintdesk_getBacklog,
   sprintdesk_listBacklogs: handle_sprintdesk_listBacklogs,
   sprintdesk_addTaskToBacklog: handle_sprintdesk_addTaskToBacklog,
-  sprintdesk_moveTaskToEpic: handle_sprintdesk_moveTaskToEpic,
+sprintdesk_moveTaskToEpic: handle_sprintdesk_moveTaskToEpic,
   sprintdesk_moveTaskToSprint: handle_sprintdesk_moveTaskToSprint,
   sprintdesk_moveTaskToBacklog: handle_sprintdesk_moveTaskToBacklog,
+  sprintdesk_listTeam: handle_sprintdesk_listTeam,
+  sprintdesk_syncTeamFromGit: handle_sprintdesk_syncTeamFromGit,
+  sprintdesk_addTeamMember: handle_sprintdesk_addTeamMember,
+  sprintdesk_removeTeamMember: handle_sprintdesk_removeTeamMember,
+  sprintdesk_getHistory: handle_sprintdesk_getHistory,
+  sprintdesk_trackChange: handle_sprintdesk_trackChange,
 };
 
 export async function handleToolCall(toolName: string, args: any): Promise<HandlerResult> {

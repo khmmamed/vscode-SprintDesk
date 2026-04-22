@@ -144,3 +144,36 @@ export interface BacklogsData {
 export interface SprintsData {
   sprints: Sprint[];
 }
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  role?: 'lead' | 'developer' | 'reviewer' | 'observer';
+  gitAuthor?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HistoryEntry {
+  id: string;
+  itemId: string;
+  itemType: 'task' | 'epic' | 'backlog' | 'sprint';
+  action: 'create' | 'update' | 'delete' | 'move' | 'assign';
+  field?: string;
+  oldValue?: string;
+  newValue?: string;
+  author: string;
+  authorEmail?: string;
+  commitHash?: string;
+  timestamp: string;
+}
+
+export interface TeamData {
+  members: TeamMember[];
+}
+
+export interface HistoryData {
+  entries: HistoryEntry[];
+}
