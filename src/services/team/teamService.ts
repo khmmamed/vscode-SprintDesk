@@ -157,3 +157,12 @@ export function getTeamByRole(role: TeamMember['role']): TeamMember[] {
   const members = loadTeamMembers();
   return members.filter(m => m.role === role);
 }
+
+export function getAgents(): TeamMember[] {
+  return getTeamByRole('agent');
+}
+
+export function getAgent(id: string): TeamMember | undefined {
+  const agents = getAgents();
+  return agents.find(a => a.id === id || a.name === id);
+}

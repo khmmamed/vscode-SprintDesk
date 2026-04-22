@@ -172,6 +172,11 @@
         "title": "SprintDesk: View Team",
         "icon": "$(account)"
       },
+{
+        "command": "sprintdesk.runAgent",
+        "title": "SprintDesk: Run Agent",
+        "icon": "$(play)"
+      },
       {
         "command": "sprintdesk.syncTeamFromGit",
         "title": "SprintDesk: Sync Team from Git",
@@ -274,6 +279,11 @@
           "group": "navigation"
         },
         {
+          "command": "sprintdesk.addAgent",
+          "when": "view == sprintdesk-team",
+          "group": "navigation"
+        },
+        {
           "command": "sprintdesk.getItemHistory",
           "when": "view == sprintdesk-history",
           "group": "navigation"
@@ -346,6 +356,11 @@
           "command": "sprintdesk.createBacklogFromRepo",
           "when": "view == sprintdesk-repositories && viewItem == repository",
           "group": "create@4"
+        },
+        {
+          "command": "sprintdesk.runAgent",
+          "when": "view == sprintdesk-team",
+          "group": "inline@0"
         }
       ]
     },

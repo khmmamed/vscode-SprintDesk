@@ -14,16 +14,24 @@ export class TeamTreeItem extends vscode.TreeItem {
   ) {
     super(member.name, collapsibleState);
     this.member = member;
-    this.contextValue = 'teamMember';
+    this.contextValue = member.role === 'agent' ? 'agent' : 'teamMember';
 
-    this.tooltip = `${member.name} <${member.email}>\nRole: ${member.role || 'developer'}`;
-    
-    this.iconPath = new vscode.ThemeIcon('account');
-    
-    if (member.role === 'lead') {
-      this.description = 'Lead';
-    } else if (member.role === 'reviewer') {
-      this.description = 'Reviewer';
+    if (member.role === 'agent') {
+      this.tooltip = `${member.name}\nTool: ${member.agentConfig?.tool || 'not configured'}`;
+      if (member.agentConfig?.tool === 'ollama' && member.agentConfig?.model) {
+        this.tooltip += ` (${member.agentConfig.model})`;
+      }
+      this.iconPath = new vscode.ThemeIcon('robot');
+      this.description = 'Agent';
+    } else {
+      this.tooltip = `${member.name} <${member.email}>\nRole: ${member.role || 'developer'}`;
+      this.iconPath = new vscode.ThemeIcon('account');
+      
+      if (member.role === 'lead') {
+        this.description = 'Lead';
+      } else if (member.role === 'reviewer') {
+        this.description = 'Reviewer';
+      }
     }
   }
 }
@@ -77,6 +85,7 @@ export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeIte
       developer: [],
       reviewer: [],
       observer: [],
+      agent: [],
       unassigned: []
     };
 
@@ -90,7 +99,7 @@ export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeIte
 
     const items: TeamTreeItem[] = [];
     
-    for (const role of ['lead', 'developer', 'reviewer', 'observer'] as const) {
+    for (const role of ['lead', 'developer', 'reviewer', 'observer', 'agent'] as const) {
       for (const member of roleGroups[role]) {
         items.push(new TeamTreeItem(member));
       }
@@ -101,6 +110,10 @@ export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeIte
 
   getMembers(): TeamMember[] {
     return teamService.loadTeamMembers();
+  }
+
+  getAgents(): TeamMember[] {
+    return teamService.getAgents();
   }
 }
 

@@ -50,6 +50,7 @@ import { createSprintInteractive } from './services/sprintService';
 import { createEpicInteractive } from './services/epicService';
 import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './services/backlogService';
 import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
+import * as teamService from './services/team/teamService';
 // Tasks - import and create wrapper for API compatibility
 import { createTask as createTaskService } from "./services/taskService";
 
@@ -264,6 +265,65 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
         const { getHistoryForItem } = require('./services/history/historyService');
         const history = getHistoryForItem(itemId, itemType);
         vscode.window.showInformationMessage(`Found ${history.internal.length} internal and ${history.git.length} git entries`);
+      }
+    }),
+vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
+      if (item?.member?.role === 'agent') {
+        const { runAgentInteractive } = require('./services/agentRunner');
+        await runAgentInteractive(item.member);
+      } else {
+        const agents = teamService.getAgents();
+        if (agents.length > 0) {
+          const selected = await vscode.window.showQuickPick(
+            agents.map(a => ({ label: a.name, member: a })),
+            { placeHolder: 'Select an agent to run' }
+          );
+          if (selected?.member) {
+            const { runAgentInteractive } = require('./services/agentRunner');
+            await runAgentInteractive(selected.member);
+          }
+        } else {
+          vscode.window.showWarningMessage('No agents found. Add an agent first.');
+        }
+      }
+    }),
+    vscode.commands.registerCommand('sprintdesk.addAgent', async () => {
+      const { addTeamMember } = require('./services/team/teamService');
+      
+      const name = await vscode.window.showInputBox({ prompt: 'Enter agent name (e.g., opencode, ollama)' });
+      if (!name) return;
+
+      const tool = await vscode.window.showQuickPick(
+        ['opencode', 'ollama', 'claude-code', 'custom'],
+        { placeHolder: 'Select agent tool' }
+      );
+      if (!tool) return;
+
+      let agentConfig: any = { tool };
+      
+      if (tool === 'ollama') {
+        const model = await vscode.window.showInputBox({ prompt: 'Enter model name (e.g., llama3, codellama)' });
+        if (model) agentConfig.model = model;
+      }
+      
+      if (tool === 'custom') {
+        const command = await vscode.window.showInputBox({ 
+          prompt: 'Enter custom command (use {task_path}, {task_dir}, {description} as placeholders)'
+        });
+        if (command) agentConfig.command = command;
+      }
+
+      try {
+        const member = addTeamMember({
+          name,
+          email: `${name}@agent.local`,
+          role: 'agent',
+          agentConfig
+        });
+        teamProvider.refresh();
+        vscode.window.showInformationMessage(`Agent ${name} added successfully!`);
+      } catch (e: any) {
+        vscode.window.showErrorMessage(`Failed to add agent: ${e.message}`);
       }
     })
   );

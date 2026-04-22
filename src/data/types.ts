@@ -12,6 +12,7 @@ export interface Task {
   epic: string | null;
   backlog: string;
   sprint: string | null;
+  assignee?: string;
   createdAt: string;
   updatedAt: string;
   path?: string;
@@ -145,12 +146,19 @@ export interface SprintsData {
   sprints: Sprint[];
 }
 
+export interface AgentConfig {
+  tool: 'opencode' | 'ollama' | 'claude-code' | 'custom';
+  command?: string;
+  model?: string;
+}
+
 export interface TeamMember {
   id: string;
   name: string;
   email: string;
   avatar?: string;
-  role?: 'lead' | 'developer' | 'reviewer' | 'observer';
+  role?: 'lead' | 'developer' | 'reviewer' | 'observer' | 'agent';
+  agentConfig?: AgentConfig;
   gitAuthor?: string;
   createdAt: string;
   updatedAt: string;

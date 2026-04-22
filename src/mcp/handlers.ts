@@ -6,6 +6,7 @@ import * as backlogService from '../services/backlogService';
 import * as teamService from '../services/team/teamService';
 import * as historyService from '../services/history/historyService';
 import { getDataService } from '../data/DataService';
+import { Task } from '../data/types';
 
 interface HandlerResult {
   content: Array<{ type: 'text'; text: string }>;
@@ -514,7 +515,8 @@ async function handle_sprintdesk_addTeamMember(args: any): Promise<HandlerResult
       name: args.name,
       email: args.email,
       role: args.role || 'developer',
-      avatar: args.avatar
+      avatar: args.avatar,
+      agentConfig: args.agentConfig
     });
     return res(JSON.stringify(member, null, 2));
   } catch (e: any) {
@@ -531,6 +533,39 @@ async function handle_sprintdesk_removeTeamMember(args: any): Promise<HandlerRes
     return res('Team member removed');
   }
   return res('Team member not found', true);
+}
+
+async function handle_sprintdesk_runAgent(args: any): Promise<HandlerResult> {
+  const ws = getWs();
+  if (!ws) return res('No workspace found', true);
+  
+  const agentId = args.agentId;
+  const taskCode = args.taskCode;
+  
+  if (!agentId || !taskCode) {
+    return res('agentId and taskCode required', true);
+  }
+  
+  try {
+    const { runAgent } = require('../services/agentRunner');
+    const { getDataService } = require('../data/DataService');
+    const dataService = getDataService(ws);
+    const task = dataService.getTask(taskCode) || dataService.loadTasks().find((t: Task) => t.code === taskCode);
+    
+    if (!task) {
+      return res(`Task ${taskCode} not found`, true);
+    }
+    
+    const agent = teamService.getAgent(agentId);
+    if (!agent) {
+      return res(`Agent ${agentId} not found`, true);
+    }
+    
+    const result = await runAgent(agent, task);
+    return res(JSON.stringify(result, null, 2));
+  } catch (e: any) {
+    return res(`Error: ${e.message}`, true);
+  }
 }
 
 async function handle_sprintdesk_getHistory(args: any): Promise<HandlerResult> {
@@ -601,6 +636,7 @@ sprintdesk_moveTaskToEpic: handle_sprintdesk_moveTaskToEpic,
   sprintdesk_syncTeamFromGit: handle_sprintdesk_syncTeamFromGit,
   sprintdesk_addTeamMember: handle_sprintdesk_addTeamMember,
   sprintdesk_removeTeamMember: handle_sprintdesk_removeTeamMember,
+  sprintdesk_runAgent: handle_sprintdesk_runAgent,
   sprintdesk_getHistory: handle_sprintdesk_getHistory,
   sprintdesk_trackChange: handle_sprintdesk_trackChange,
 };

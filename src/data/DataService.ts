@@ -247,8 +247,12 @@ export class DataService {
     }
   }
 
-  getTask(taskId: string): Task | undefined {
+getTask(taskId: string): Task | undefined {
     return this.loadTasks().find(t => t.id === taskId);
+  }
+
+  getTaskByCode(code: string): Task | undefined {
+    return this.loadTasks().find(t => t.code === code);
   }
 
   // === Epics ===
