@@ -288,11 +288,16 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
       }
     }),
     vscode.commands.registerCommand('sprintdesk.addAgent', async () => {
-      const { addTeamMember } = require('./services/team/teamService');
+      const { addTeamMember, saveAgentRole } = require('./services/team/teamService');
       
-      const name = await vscode.window.showInputBox({ prompt: 'Enter agent name (e.g., opencode, ollama)' });
+      const name = await vscode.window.showInputBox({ prompt: 'Enter agent name (e.g., opencode, mohamed)' });
       if (!name) return;
 
+      const roleDesc = await vscode.window.showInputBox({ 
+        prompt: 'Enter agent role description (e.g., Senior Developer - creates features)',
+        placeHolder: 'Agent role description'
+      });
+      
       const tool = await vscode.window.showQuickPick(
         ['opencode', 'ollama', 'claude-code', 'custom'],
         { placeHolder: 'Select agent tool' }
@@ -300,28 +305,49 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
       if (!tool) return;
 
       let agentConfig: any = { tool };
+      let model: string | undefined;
+      let command: string | undefined;
       
       if (tool === 'ollama') {
-        const model = await vscode.window.showInputBox({ prompt: 'Enter model name (e.g., llama3, codellama)' });
-        if (model) agentConfig.model = model;
+        model = await vscode.window.showInputBox({ prompt: 'Enter model name (e.g., llama3, codellama)' });
       }
       
       if (tool === 'custom') {
-        const command = await vscode.window.showInputBox({ 
+        command = await vscode.window.showInputBox({ 
           prompt: 'Enter custom command (use {task_path}, {task_dir}, {description} as placeholders)'
         });
-        if (command) agentConfig.command = command;
       }
+      
+      if (model) agentConfig.model = model;
+      if (command) agentConfig.command = command;
+
+      const promptTemplate = await vscode.window.showInputBox({
+        prompt: 'Enter prompt template (optional, use {roleFile}, {taskFile}, {taskTitle}, {taskDir})',
+        value: "Read your role from {roleFile} and work on task {taskFile}"
+      });
 
       try {
+        // Save to team.yml
         const member = addTeamMember({
           name,
           email: `${name}@agent.local`,
           role: 'agent',
           agentConfig
         });
+        
+        // Save role JSON file
+        saveAgentRole({
+          name,
+          role: roleDesc || 'AI Agent',
+          tool: tool as any,
+          workingDir: '',
+          promptTemplate: promptTemplate || '',
+          model,
+          command
+        });
+        
         teamProvider.refresh();
-        vscode.window.showInformationMessage(`Agent ${name} added successfully!`);
+        vscode.window.showInformationMessage(`Agent ${name} added! Role file: .SprintDesk/teams/${name}.json`);
       } catch (e: any) {
         vscode.window.showErrorMessage(`Failed to add agent: ${e.message}`);
       }
@@ -505,8 +531,8 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     const ws = workspaceFolders[0].uri.fsPath;
     const sdPath = path.join(ws, '.SprintDesk');
 
-    // Ensure all directories exist
-    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp'];
+// Ensure all directories exist
+    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp', 'teams'];
     for (const dir of dirs) {
       const fullPath = path.join(sdPath, dir);
       if (!fs.existsSync(fullPath)) {

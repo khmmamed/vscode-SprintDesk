@@ -152,6 +152,16 @@ export interface AgentConfig {
   model?: string;
 }
 
+export interface AgentRole {
+  name: string;
+  role: string;
+  tool: 'opencode' | 'ollama' | 'claude-code' | 'custom';
+  workingDir?: string;
+  promptTemplate?: string;
+  model?: string;
+  command?: string;
+}
+
 export interface TeamMember {
   id: string;
   name: string;

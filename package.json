@@ -172,7 +172,12 @@
         "title": "SprintDesk: View Team",
         "icon": "$(account)"
       },
-{
+      {
+        "command": "sprintdesk.addAgent",
+        "title": "SprintDesk: Add Agent",
+        "icon": "$(robot)"
+      },
+      {
         "command": "sprintdesk.runAgent",
         "title": "SprintDesk: Run Agent",
         "icon": "$(play)"
