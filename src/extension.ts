@@ -43,6 +43,8 @@ import { TasksTreeDataProvider } from './providers/TasksTreeDataProvider';
 import { BacklogsTreeDataProvider } from './providers/BacklogsTreeDataProvider';
 import { EpicsTreeDataProvider } from './providers/EpicsTreeDataProvider';
 import { RepositoriesTreeDataProvider } from './providers/RepositoriesTreeDataProvider';
+import { RepositoryStateService } from './services/repositoryState';
+import * as fileService from './services/fileService';
 import { TeamTreeDataProvider, teamTreeDataProvider } from './providers/team/TeamTreeDataProvider';
 import { HistoryTreeDataProvider, historyTreeDataProvider } from './providers/history/HistoryTreeDataProvider';
 // Services
@@ -147,7 +149,8 @@ class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Register existing commands (delegated to `src/commands`)
+  const repoState = new RepositoryStateService(context.globalState);
+
   registerOpenWebviewCommand(context);
   registerViewTasksCommand(context);
   registerViewTaskPreviewCommand(context);
@@ -159,7 +162,6 @@ export async function activate(context: vscode.ExtensionContext) {
   registerViewProjectStructureCommand(context);
   registerViewEpicsCommand(context);
 
-  // Register WebviewViewProviders for non-tree views
   const treeViewIds = ['sprintdesk-repositories', 'sprintdesk-epics', 'sprintdesk-tasks', 'sprintdesk-sprints', 'sprintdesk-backlogs'];
   const webviewIds = SIDEBAR_VIEW_IDS.filter(id => !treeViewIds.includes(id));
 
@@ -172,12 +174,11 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  // Tree providers
   const sprintsProvider = new SprintsTreeDataProvider();
   const backlogsProvider = new BacklogsTreeDataProvider();
-  const repositoriesProvider = new RepositoriesTreeDataProvider();
+  const repositoriesProvider = new RepositoriesTreeDataProvider(repoState);
 
-const tasksProvider = new TasksTreeDataProvider();
+  const tasksProvider = new TasksTreeDataProvider();
   const epicsProvider = new EpicsTreeDataProvider();
 
   const teamProvider = teamTreeDataProvider;
@@ -471,55 +472,69 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     })
   );
 
-  // When user selects a repository in the repositories tree, switch the Tasks provider to read from that repo
+// When user selects a repository in the repositories tree, switch all providers to that repo
   repositoriesTreeView.onDidChangeSelection(e => {
     try {
       const sel = (e.selection && e.selection[0]) as any;
-      // Try to read our repo path from the selection -- either 'fullPath' (our custom item) or resourceUri
       let selectedPath = sel?.fullPath ?? sel?.resourceUri?.fsPath;
       let repoPath: string | undefined = undefined;
       if (selectedPath) {
-        const path = require('path');
-        // If the selected path is a repo node or category, it already points to the repo root
         if (sel?.nodeType === 'repo' || sel?.nodeType === 'category') {
           repoPath = sel.fullPath || sel.resourceUri?.fsPath;
         } else {
-          // File node selected: try to locate the repository root by trimming at the .SprintDesk segment
           const parts = String(selectedPath).split(path.sep);
           const sdIndex = parts.indexOf('.SprintDesk');
           if (sdIndex > 0) {
             repoPath = parts.slice(0, sdIndex).join(path.sep);
           } else {
-            // fallback: assume parent 3 levels up (repo/.SprintDesk/<category>/file.md)
             repoPath = path.resolve(selectedPath, '..', '..', '..');
           }
         }
       }
 
-      // If a repository is selected, set override; if selection is empty, clear override
       if (repoPath) {
-        // Persist override to fileService so services also pick it up
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const fileService = require('./services/fileService');
+        repoState.setActiveRepo(repoPath);
         fileService.setWorkspaceRootOverride(repoPath);
-
-        // Update all providers that support setWorkspaceRoot
-        try { (tasksProvider as any).setWorkspaceRoot(repoPath); } catch { }
-        try { (backlogsProvider as any).setWorkspaceRoot(repoPath); } catch { }
-        try { (epicsProvider as any).setWorkspaceRoot(repoPath); } catch { }
-        try { (sprintsProvider as any).setWorkspaceRoot(repoPath); } catch { }
+        (tasksProvider as any).setWorkspaceRoot?.(repoPath);
+        (backlogsProvider as any).setWorkspaceRoot?.(repoPath);
+        (epicsProvider as any).setWorkspaceRoot?.(repoPath);
+        (sprintsProvider as any).setWorkspaceRoot?.(repoPath);
+        (teamProvider as any).setWorkspaceRoot?.(repoPath);
+        (historyProvider as any).setWorkspaceRoot?.(repoPath);
       } else {
-        const fileService = require('./services/fileService');
+        repoState.setActiveRepo(undefined);
         fileService.setWorkspaceRootOverride(undefined);
-        try { (tasksProvider as any).setWorkspaceRoot(undefined); } catch { }
-        try { (backlogsProvider as any).setWorkspaceRoot(undefined); } catch { }
-        try { (epicsProvider as any).setWorkspaceRoot(undefined); } catch { }
-        try { (sprintsProvider as any).setWorkspaceRoot(undefined); } catch { }
+        (tasksProvider as any).setWorkspaceRoot?.(undefined);
+        (backlogsProvider as any).setWorkspaceRoot?.(undefined);
+        (epicsProvider as any).setWorkspaceRoot?.(undefined);
+        (sprintsProvider as any).setWorkspaceRoot?.(undefined);
+        (teamProvider as any).setWorkspaceRoot?.(undefined);
+        (historyProvider as any).setWorkspaceRoot?.(undefined);
       }
     } catch (err) {
-      console.error('Failed to switch tasks provider workspace root on repo selection', err);
+      console.error('Failed to switch providers on repo selection', err);
     }
   });
+
+  // Listen for workspace folder changes
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(e => {
+      repositoriesProvider.updateWorkspaceRoots();
+      repositoriesProvider.refresh();
+    })
+  );
+
+  // Restore active repo on startup
+  const activeRepo = repoState.getActiveRepo();
+  if (activeRepo) {
+    fileService.setWorkspaceRootOverride(activeRepo);
+    (tasksProvider as any).setWorkspaceRoot?.(activeRepo);
+    (backlogsProvider as any).setWorkspaceRoot?.(activeRepo);
+    (epicsProvider as any).setWorkspaceRoot?.(activeRepo);
+    (sprintsProvider as any).setWorkspaceRoot?.(activeRepo);
+    (teamProvider as any).setWorkspaceRoot?.(activeRepo);
+    (historyProvider as any).setWorkspaceRoot?.(activeRepo);
+  }
 
   // === Ensure .SprintDesk folder structure on activation ===
   try {

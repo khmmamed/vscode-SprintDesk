@@ -670,8 +670,31 @@ getTask(taskId: string): Task | undefined {
     fs.writeFileSync(filePath, md, 'utf8');
   }
 
-  refresh(): void {
+refresh(): void {
     this.configCache = null;
+  }
+
+  getItemMdPath(type: 'task' | 'epic' | 'sprint' | 'backlog', id: string): string {
+    switch (type) {
+      case 'task': {
+        const task = this.getTask(id);
+        return task ? path.join(this.getTasksDir(), this.getTaskFilename(task)) : '';
+      }
+      case 'epic': {
+        const epic = this.getEpic(id);
+        return epic ? path.join(this.getEpicsDir(), this.getEpicFilename(epic)) : '';
+      }
+      case 'backlog': {
+        const backlog = this.getBacklog(id);
+        return backlog ? path.join(this.getBacklogsDir(), this.getBacklogFilename(backlog)) : '';
+      }
+      case 'sprint': {
+        const sprint = this.getSprint(id);
+        return sprint ? path.join(this.getSprintsDir(), this.getSprintFilename(sprint)) : '';
+      }
+      default:
+        return '';
+    }
   }
 }
 

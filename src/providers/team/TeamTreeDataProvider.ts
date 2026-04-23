@@ -62,7 +62,9 @@ export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeIte
   getChildren(element?: TeamTreeItem): Thenable<TeamTreeItem[]> {
     if (!this.workspaceRoot) {
       const wsFolders = vscode.workspace.workspaceFolders;
-      this.workspaceRoot = wsFolders?.[0]?.uri.fsPath;
+      if (wsFolders && wsFolders.length > 0) {
+        this.workspaceRoot = wsFolders[0].uri.fsPath;
+      }
     }
 
     if (!this.workspaceRoot) {
