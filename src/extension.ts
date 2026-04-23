@@ -22,7 +22,6 @@ import {
   registerCreateSprintFromRepoCommand,
   registerCreateBacklogFromRepoCommand,
   registerOpenWebviewCommand,
-  registerViewTasksCommand,
   registerViewTaskPreviewCommand,
   registerEditTaskRawCommand,
   registerViewEpicsCommand,
@@ -152,7 +151,6 @@ export async function activate(context: vscode.ExtensionContext) {
   const repoState = new RepositoryStateService(context.globalState);
 
   registerOpenWebviewCommand(context);
-  registerViewTasksCommand(context);
   registerViewTaskPreviewCommand(context);
   registerEditTaskRawCommand(context);
   registerViewBacklogsCommand(context);

@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as taskService from '../../services/taskService';
 import * as epicService from '../../services/epicService';
 import * as backlogService from '../../services/backlogService';
-import insertTaskLinkUnderSection from '../../utils/mdUtils';
 
 export function registerAddQuicklyCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand('sprintdesk.addQuickly', async () => {

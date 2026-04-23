@@ -1,9 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
-import { PROJECT_CONSTANTS } from '../../utils/constant';
-import { SprintDeskItem } from '../../utils/SprintDeskItem';
-import { promptInput } from '../../utils/helpers';
+import { getDataService } from '../../data/DataService';
+import { Sprint } from '../../data/types';
 
 type Deps = {
   repositoriesTreeView?: any;
@@ -28,7 +26,6 @@ export function registerCreateSprintFromRepoCommand(context: vscode.ExtensionCon
       }
 
       try {
-        // Get sprint dates
         const startDate = await vscode.window.showInputBox({
           prompt: 'Enter start date (DD-MM)',
           placeHolder: 'e.g., 11-08'
@@ -41,58 +38,44 @@ export function registerCreateSprintFromRepoCommand(context: vscode.ExtensionCon
         });
         if (!endDate) return;
 
-        // Get year
         const year = await vscode.window.showInputBox({
           prompt: 'Enter year (YYYY)',
           placeHolder: 'e.g., 2025'
         });
         if (!year) return;
 
-        // Create SprintDesk directory structure
-        const sprintDeskDir = path.join(repoPath, PROJECT_CONSTANTS.SPRINTDESK_DIR);
-        const sprintsDir = path.join(sprintDeskDir, PROJECT_CONSTANTS.SPRINTS_DIR);
-        
-        if (!fs.existsSync(sprintsDir)) {
-          fs.mkdirSync(sprintsDir, { recursive: true });
-        }
+        const dataService = getDataService(repoPath);
+        const sprintNumber = dataService.generateNextNumber('sprint');
+        const config = dataService.loadConfig();
+        const sprintPrefix = config.ids.sprint.prefix;
 
-        // Generate sprint filename
         const [startDay, startMonth] = startDate.split('-');
         const [endDay, endMonth] = endDate.split('-');
-        const sprintFileName = `${PROJECT_CONSTANTS.FILE_PREFIX.SPRINT}${startDay}-${startMonth}_${endDay}-${endMonth}_${year}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
-        const sprintPath = path.join(sprintsDir, sprintFileName);
+        const yy = year.slice(-2);
+        const sprintTitle = `${startDay}-${startMonth}-${yy} → ${endDay}-${endMonth}-${yy}`;
+        const sprintName = `[${sprintPrefix}-${sprintNumber}]_${sprintTitle}`;
 
-        // Generate sprint content
-        const shortStart = `${startDay}${startMonth}${year.slice(-2)}`;
-        const shortEnd = `${endDay}${endMonth}${year.slice(-2)}`;
-        const sprintContent = `# 📅 Sprint : ${shortStart} ➜ ${shortEnd}
-- **🗓️ Last update:** ${new Date().toISOString()}
-- **🛠️ Total Tasks:** 0
-- **📊 Progress:** ✅ [0/0] 🟩100%
-- **📝 Summary:** 
+        const sprint: Sprint = {
+          id: require('crypto').randomUUID(),
+          number: sprintNumber,
+          title: sprintTitle,
+          name: sprintName,
+          startDate: `${startDay}-${startMonth}-${year}`,
+          endDate: `${endDay}-${endMonth}-${year}`,
+          status: 'planned',
+          tasks: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
 
-## 📋 Tasks
+        sprint.path = path.join(dataService.getSprintsDir(), dataService.getSprintFilename(sprint));
 
-> Tasks will be linked here automatically
-`;
+        dataService.addSprint(sprint);
+        dataService.saveSprintMd(sprint);
 
-        // Use SprintDeskItem to create sprint
-        const sprintItem = new SprintDeskItem(sprintPath);
-        sprintItem.update(sprintContent, {
-          title: `Sprint : ${shortStart} ➜ ${shortEnd}`,
-          startDate: `${startDay}${startMonth}${year}`,
-          endDate: `${endDay}${endMonth}${year}`,
-          totalTasks: 0,
-          completedTasks: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-        sprintItem.create();
-
-        // Refresh sprints provider
         deps.sprintsProvider?.refresh?.();
 
-        vscode.window.showInformationMessage(`Sprint "${shortStart} ➜ ${shortEnd}" created successfully!`);
+        vscode.window.showInformationMessage(`Sprint "${sprintTitle}" created successfully!`);
 
       } catch (error) {
         vscode.window.showErrorMessage(`Failed to create sprint: ${error}`);
@@ -100,4 +83,3 @@ export function registerCreateSprintFromRepoCommand(context: vscode.ExtensionCon
     })
   );
 }
-

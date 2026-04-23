@@ -5,8 +5,6 @@ import * as fileService from '../services/fileService';
 import * as backlogService from '../services/backlogService';
 import { UI_CONSTANTS, PROJECT_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
-import { getBacklogPath, getTasksPath } from '../utils/backlogUtils';
-import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
 import { getDataService } from '../data/DataService';
 import { Task, Backlog } from '../data/types';
 

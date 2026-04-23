@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
-import { PROJECT_CONSTANTS } from '../../utils/constant';
-import { SprintDeskItem } from '../../utils/SprintDeskItem';
-import { promptInput } from '../../utils/helpers';
+import { promptInput } from '../../utils';
+import { getDataService } from '../../data/DataService';
+import { Backlog } from '../../data/types';
 
 type Deps = {
   repositoriesTreeView?: any;
@@ -28,11 +27,9 @@ export function registerCreateBacklogFromRepoCommand(context: vscode.ExtensionCo
       }
 
       try {
-        // Get backlog title
         const backlogTitle = await promptInput('Enter backlog title', 'New Backlog');
         if (!backlogTitle) return;
 
-        // Get backlog type
         const typeOptions = [
           { label: 'Features', value: 'features' },
           { label: 'Bugs', value: 'bugs' },
@@ -46,40 +43,28 @@ export function registerCreateBacklogFromRepoCommand(context: vscode.ExtensionCo
         });
         if (!selectedType) return;
 
-        // Create SprintDesk directory structure
-        const sprintDeskDir = path.join(repoPath, PROJECT_CONSTANTS.SPRINTDESK_DIR);
-        const backlogsDir = path.join(sprintDeskDir, PROJECT_CONSTANTS.BACKLOGS_DIR);
+        const dataService = getDataService(repoPath);
+        const backlogId = backlogTitle.toUpperCase().trim().replace(/\s+/g, '-');
         
-        if (!fs.existsSync(backlogsDir)) {
-          fs.mkdirSync(backlogsDir, { recursive: true });
+        if (dataService.getBacklog(backlogId)) {
+          vscode.window.showWarningMessage(`Backlog "${backlogTitle}" already exists.`);
+          return;
         }
 
-        // Generate backlog filename
-        const backlogFileName = `${PROJECT_CONSTANTS.FILE_PREFIX.BACKLOG}${selectedType.value}-${backlogTitle.toLowerCase().replace(/\s+/g, '-')}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
-        const backlogPath = path.join(backlogsDir, backlogFileName);
+        const backlog: Backlog = {
+          id: backlogId,
+          title: backlogTitle.toUpperCase(),
+          name: `[Backlog]_${backlogTitle.toUpperCase()}`,
+          description: '',
+          tasks: [],
+          color: '#2563eb'
+        };
 
-        // Generate backlog content
-        const backlogContent = `# 📋 Backlog: ${backlogTitle}
+        backlog.path = path.join(dataService.getBacklogsDir(), `${backlog.name}.md`);
 
-## 📝 Description
-Add backlog description here...
+        dataService.addBacklog(backlog);
+        dataService.saveBacklogMd(backlog);
 
-## 📋 Items
-
-> Items will be linked here automatically
-`;
-
-        // Use SprintDeskItem to create backlog
-        const backlogItem = new SprintDeskItem(backlogPath);
-        backlogItem.update(backlogContent, {
-          title: backlogTitle,
-          type: selectedType.value,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-        backlogItem.create();
-
-        // Refresh backlogs provider
         deps.backlogsProvider?.refresh?.();
 
         vscode.window.showInformationMessage(`Backlog "${backlogTitle}" created successfully!`);

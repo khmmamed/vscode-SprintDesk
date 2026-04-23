@@ -6,8 +6,6 @@ import * as epicService from '../services/epicService';
 import * as taskService from '../services/taskService';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
-import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
-import { getEpicPath } from '../utils/backlogUtils';
 import { getDataService } from '../data/DataService';
 import { Task, Epic } from '../data/types';
 

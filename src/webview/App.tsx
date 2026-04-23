@@ -5,7 +5,6 @@ import { acquireVsCodeApiOnce } from "./vscodeApi";
 import "./styles.css";
 import { TasksTable } from "./TasksTable";
 import { BacklogsList } from "./BacklogsList";
-import { AddMultipleTasksForm } from "./AddMultipleTasksForm";
 import { EpicsList } from "./EpicsList";
 import { EpicsTree } from "./EpicsTree";
 import TableBlock from "./TableBlock";
@@ -118,11 +117,7 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  if (view === "addMultipleTasks") {
-    return <AddMultipleTasksForm />;
-  }
-
-  if (showEpicsTree) {
+if (showEpicsTree) {
     return <EpicsTree />;
   }
 
