@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { TeamMember, AgentConfig, Task, AgentRole } from '../data/types';
 import { getDataService } from '../data/DataService';
 import { getWorkspaceRoot } from '../services/fileService';
+import * as taskService from '../services/taskService';
 
 export interface AgentRunResult {
   success: boolean;
@@ -192,6 +193,8 @@ export async function runAgent(agent: TeamMember, task: Task): Promise<AgentRunR
   try {
     vscode.window.showInformationMessage(`Starting agent ${agent.name} on task ${task.code}...`);
 
+    taskService.startTask(task.id);
+
     await checkoutBranch(branchName);
 
     const { command, args } = buildAgentCommand(agent.agentConfig, task.path || '', task.title, task.title, agent.name);
@@ -211,6 +214,8 @@ export async function runAgent(agent: TeamMember, task: Task): Promise<AgentRunR
 
     const commitHash = await commitChanges(commitMessage);
     const prUrl = await createPullRequest(commitMessage, `Task: ${task.code}\nAssignee: ${agent.name}`);
+    
+    taskService.markTaskForReview(task.id);
 
     vscode.window.showInformationMessage(`Agent ${agent.name} completed! PR: ${prUrl}`);
 

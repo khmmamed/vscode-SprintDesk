@@ -19,6 +19,7 @@ export * from './taskCommands/addQuicklyCommand'
 export * from './taskCommands/startFeatureFromTaskCommand'
 export * from './taskCommands/viewTaskPreview'
 export * from './taskCommands/editTaskRaw'
+export * from './taskCommands/setTaskStatusCommand'
 // webview
 export * from './webviewCommands/openWebview'
 

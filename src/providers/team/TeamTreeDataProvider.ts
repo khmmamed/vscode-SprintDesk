@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as teamService from '../../services/team/teamService';
-import { TeamMember } from '../../data/types';
+import * as taskService from '../../services/taskService';
+import { TeamMember, Task } from '../../data/types';
 import { PROJECT_CONSTANTS } from '../../utils/constant';
 
 export class TeamTreeItem extends vscode.TreeItem {
@@ -10,7 +11,7 @@ export class TeamTreeItem extends vscode.TreeItem {
 
   constructor(
     member: TeamMember,
-    public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.Collapsed
   ) {
     super(member.name, collapsibleState);
     this.member = member;
@@ -143,6 +144,37 @@ export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeIte
     if (!element) {
       const items = this.groupByRole(members);
       return Promise.resolve(items);
+    }
+
+    if (element.member && element.member.id) {
+      const dataService = taskService.getTaskService(this.workspaceRoot);
+      const tasks = dataService.loadTasks().filter(t => t.assignee === element.member.id);
+      
+      const treeItems: TeamTreeItem[] = tasks.map(t => {
+        const item = new TeamTreeItem({
+          id: t.id,
+          name: t.name,
+          email: '',
+          role: 'developer',
+          createdAt: '',
+          updatedAt: ''
+        }, vscode.TreeItemCollapsibleState.None);
+        item.contextValue = 'assignedTask';
+        item.label = `${t.code}: ${t.title}`;
+        item.description = t.status;
+        item.tooltip = `Status: ${t.status}\nPriority: ${t.priority}`;
+        const statusIcons: Record<string, string> = {
+          'waiting': 'circle-outline',
+          'in-progress': 'sync~spin',
+          'review': 'eye',
+          'done': 'check',
+          'blocked': 'error',
+          'cancelled': 'close'
+        };
+        item.iconPath = new vscode.ThemeIcon(statusIcons[t.status] || 'circle');
+        return item;
+      });
+      return Promise.resolve(treeItems);
     }
 
     return Promise.resolve([]);

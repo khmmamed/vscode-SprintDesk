@@ -27,7 +27,8 @@ import {
   registerViewEpicsCommand,
   registerViewBacklogsCommand,
   addMultipleTasksCommand,
-  registerAddTaskCommand
+  registerAddTaskCommand,
+  registerSetTaskStatusCommand
 } from './commands';
 import { registerViewProjectStructureCommand } from "./commands/viewProjectStructure";
 import { registerViewProjectsCommand } from "./commands/viewProjects";
@@ -241,6 +242,7 @@ const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositori
   registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
 registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider, teamProvider, historyProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
+  registerSetTaskStatusCommand(context);
   registerOpenSprintFileCommand(context);
   registerShowSprintCalendarCommand(context);
 

@@ -61,12 +61,14 @@ export class DataService {
     const defaultBacklog = cfg.get<string>('defaultBacklog') || 'features';
     const defaultStatus = cfg.get<string>('defaultStatus') || 'waiting';
     const defaultPriority = cfg.get<string>('defaultPriority') || 'medium';
-    const showIds = cfg.get<boolean>('showIds') ?? true;
+const showIds = cfg.get<boolean>('showIds') ?? true;
     const showCompleted = cfg.get<boolean>('showCompleted') ?? false;
     const projectPrefix = cfg.get<string>('projectPrefix') || 'SPD';
+    const developBranch = cfg.get<string>('developBranch') || 'develop';
 
     this.configCache = {
       projectPrefix,
+      developBranch,
       ids: {
         task: { prefix: taskPrefix, startNumber: taskStart, padding: taskPad },
         epic: { prefix: epicPrefix, startNumber: epicStart, padding: epicPad },
