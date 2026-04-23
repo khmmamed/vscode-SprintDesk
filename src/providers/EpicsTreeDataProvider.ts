@@ -103,12 +103,13 @@ export class EpicsTreeDataProvider implements vscode.TreeDataProvider<EpicsTreeI
   private workspaceRoot: string;
 
   // DragAndDrop interface implementation
-  readonly dropMimeTypes = [
+readonly dropMimeTypes = [
     'text/uri-list',
     'application/vnd.code.tree.sprintdesk-backlogs',
     'application/vnd.code.tree.sprintdesk-tasks',
     'application/vnd.code.tree.sprintdesk-epics',
-    'application/vnd.code.tree.sprintdesk-sprints'
+    'application/vnd.code.tree.sprintdesk-sprints',
+    'application/vnd.code.tree.sprintdesk-team'
   ];
   readonly dragMimeTypes = ['application/vnd.code.tree.sprintdesk-epics'];
 

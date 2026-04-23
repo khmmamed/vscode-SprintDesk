@@ -36,11 +36,20 @@ export class TeamTreeItem extends vscode.TreeItem {
   }
 }
 
-export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeItem> {
+export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeItem>, vscode.TreeDragAndDropController<TeamTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<TeamTreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private workspaceRoot: string | undefined;
+
+  readonly dropMimeTypes = [
+    'text/uri-list',
+    'application/vnd.code.tree.sprintdesk-backlogs',
+    'application/vnd.code.tree.sprintdesk-tasks',
+    'application/vnd.code.tree.sprintdesk-epics',
+    'application/vnd.code.tree.sprintdesk-sprints'
+  ];
+  readonly dragMimeTypes = ['application/vnd.code.tree.sprintdesk-team'];
 
   constructor() {
     this.refresh();
@@ -53,6 +62,64 @@ export class TeamTreeDataProvider implements vscode.TreeDataProvider<TeamTreeIte
 
   refresh(): void {
     this._onDidChangeTreeData.fire(undefined);
+  }
+
+  async handleDrop(target: TeamTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    if (!target) {
+      return;
+    }
+
+    const memberId = target.member.id;
+    if (!memberId) {
+      vscode.window.showWarningMessage('Cannot assign: member has no ID');
+      return;
+    }
+
+    const taskSources = {
+      tasks: 'application/vnd.code.tree.sprintdesk-tasks',
+      epics: 'application/vnd.code.tree.sprintdesk-epics',
+      sprints: 'application/vnd.code.tree.sprintdesk-sprints',
+      backlogs: 'application/vnd.code.tree.sprintdesk-backlogs'
+    };
+
+    for (const [source, mimeType] of Object.entries(taskSources)) {
+      const item = dataTransfer.get(mimeType);
+      if (item && item.value) {
+        try {
+          const handleData = JSON.parse(item.value as string);
+          const taskId = handleData._id;
+          
+          if (taskId) {
+            await this.handleTaskAssign(taskId, memberId);
+            return;
+          }
+        } catch (e) {
+        }
+      }
+    }
+
+    const textItem = dataTransfer.get('text/plain');
+    if (textItem && textItem.value) {
+      try {
+        const handleData = JSON.parse(textItem.value as string);
+        if (handleData._id) {
+          await this.handleTaskAssign(handleData._id, memberId);
+          return;
+        }
+      } catch (e) {
+      }
+    }
+  }
+
+  private async handleTaskAssign(taskId: string, memberId: string): Promise<void> {
+    try {
+      teamService.assignTaskToMember(taskId, memberId);
+      const member = teamService.getTeamMember(memberId);
+      vscode.window.showInformationMessage(`Task assigned to ${member?.name || 'team member'}`);
+      this.refresh();
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to assign task: ${error}`);
+    }
   }
 
   getTreeItem(element: TeamTreeItem): vscode.TreeItem {

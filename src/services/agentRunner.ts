@@ -33,7 +33,7 @@ export async function getTasksAssignedToAgent(agent: TeamMember): Promise<Task[]
   const dataService = getDataService(wsRoot);
   const tasks = dataService.loadTasks();
   
-  return tasks.filter(t => t.assignee === agent.name);
+  return tasks.filter(t => t.assignee === agent.id || t.assignee === agent.name);
 }
 
 export async function pickTaskForAgent(agent: TeamMember): Promise<Task | undefined> {

@@ -213,7 +213,8 @@ const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositori
   context.subscriptions.push(repositoriesTreeView);
 
   const teamTreeView = vscode.window.createTreeView('sprintdesk-team', {
-    treeDataProvider: teamProvider
+    treeDataProvider: teamProvider,
+    dragAndDropController: teamProvider
   });
   context.subscriptions.push(teamTreeView);
 

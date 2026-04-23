@@ -167,6 +167,26 @@ export function getAgent(id: string): TeamMember | undefined {
   return agents.find(a => a.id === id || a.name === id);
 }
 
+export function assignTaskToMember(taskId: string, memberId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  dataService.updateTask(taskId, { assignee: memberId });
+  const task = dataService.getTask(taskId);
+  if (task) dataService.saveTaskMd(task);
+}
+
+export function unassignTaskFromMember(taskId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  dataService.updateTask(taskId, { assignee: '' });
+  const task = dataService.getTask(taskId);
+  if (task) dataService.saveTaskMd(task);
+}
+
 const TEAMS_DIR = 'teams';
 
 function getTeamsPath(ws: string): string {
