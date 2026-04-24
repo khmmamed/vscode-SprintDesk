@@ -1,65 +1,102 @@
 # vscode-SprintDesk
 
-A productivity extension for managing tasks, epics, backlogs, and sprints directly within Visual Studio Code. SprintDesk helps you organize your development workflow using Markdown files and a simple, intuitive sidebar interface.
+A productivity extension for managing sprints, tasks, epics, backlogs, and teams directly within Visual Studio Code. SprintDesk helps you organize your agile development workflow right in your editor.
 
 ---
 
-## 🚀 Features
+## Features
 
-- **Task Management:** Create, view, and organize tasks as Markdown files in your workspace.
-- **Epics & Backlogs:** Group tasks under epics and backlogs for better planning and tracking.
-- **Quick Add Command:** Use the "Add Quickly" command to create tasks, epics, and backlog entries with a single input.
-- **Sprint Planning:** Move tasks from backlogs to sprints for active development.
-- **VSCode Integration:** Access all features from the sidebar and command palette.
-- **Markdown Linking:** Tasks, epics, and backlogs are interlinked using Markdown for easy navigation.
+### Organize Your Work
+- **Tasks** - Create and track individual tasks with automatic IDs
+- **Epics** - Group related tasks together
+- **Backlogs** - Organize upcoming work into categories like features, bugs, or improvements
+- **Sprints** - Plan and manage active development cycles
+
+### Work Your Way
+- Drag and drop tasks between sprints, epics, and backlogs
+- Set task status: waiting, in progress, under review, or complete
+- Set priority: low, medium, high, or critical
+- Visual sprint calendar to plan your sprint
+
+### Team Collaboration
+- Add team members manually
+- Automatically sync team from Git commit history
+- Add AI agents to help with tasks
+- Track all changes with history view
+
+### Quick Access
+- Keyboard shortcut: `Ctrl+Shift+T` to add a new task
+- Keyboard shortcut: `Ctrl+Shift+Q` to quickly add a task, epic, or backlog
+- Quick commands from the command palette
+
+### Multi-Project Support
+- Work on multiple projects or repositories
+- Switch between projects easily
 
 ---
 
-## 🛠️ Setup
+## Getting Started
 
-1. **Clone the Repository:**
-   ```sh
-   git clone https://github.com/khmmamed/vscode-SprintDesk.git
-   cd vscode-SprintDesk
-   ```
-2. **Install Dependencies:**
-   ```sh
-   npm install
-   ```
-3. **Build the Extension:**
-   ```sh
-   npm run compile
-   ```
-4. **Open in VSCode:**
-   - Open the folder in VSCode: `File > Open Folder...`
-   - Press `F5` to launch the extension in a new Extension Development Host window.
+1. Open VS Code and click the SprintDesk icon in the sidebar
+2. Right-click on **Repositories** → **Add Repository**
+3. Select your workspace folder
+4. Start adding tasks, epics, backlogs, and sprints!
+
+### Commands
+
+| Do This | Use This Command |
+|---------|------------------|
+| Add a new task | `sprintdesk.addTask` |
+| Add multiple tasks | `sprintdesk.addMultipleTasks` |
+| Add quickly | `sprintdesk.addQuickly` |
+| Add a new sprint | `sprintdesk.addSprint` |
+| Add a new backlog | `sprintdesk.addBacklog` |
+| Add a new epic | `sprintdesk.addEpic` |
+| View projects | `sprintdesk.viewProjects` |
+| Show sprint calendar | `sprintdesk.showSprintCalendar` |
+| Open sprint file | `sprintdesk.openSprintFile` |
+| View team | `sprintdesk.viewTeam` |
+| Sync team from Git | `sprintdesk.syncTeamFromGit` |
+| View history | `sprintdesk.viewHistory` |
+| Refresh | `sprintdesk.refresh` |
 
 ---
 
-## 🤝 How to Collaborate
+## Settings
 
-1. **Fork the repository** on GitHub and clone your fork locally.
-2. **Create a new branch** for your feature or bugfix:
+You can customize how SprintDesk works:
+
+| Setting | Default | What It Does |
+|---------|---------|--------------|
+| `sprintdesk.projectPrefix` | SPD | Project code prefix |
+| `sprintdesk.taskPrefix` | task_ | Task ID prefix |
+| `sprintdesk.taskStartNumber` | 100 | Starting task number |
+| `sprintdesk.sprintPrefix` | sprint_ | Sprint prefix |
+| `sprintdesk.defaultBacklog` | features | Default backlog name |
+| `sprintdesk.defaultStatus` | waiting | Default task status |
+| `sprintdesk.defaultPriority` | medium | Default priority |
+
+---
+
+## How to Contribute
+
+1. Fork the repository on GitHub
+2. Create a branch for your feature:
    ```sh
    git checkout -b feature/my-feature
    ```
-3. **Make your changes** and commit them with clear messages.
-4. **Push your branch** to your fork:
-   ```sh
-   git push origin feature/my-feature
-   ```
-5. **Open a Pull Request** on GitHub describing your changes.
-6. **Discuss and review**: Participate in code reviews and address feedback.
+3. Make your changes and commit them
+4. Push to your fork and open a Pull Request
+5. Participate in code reviews
 
 **Guidelines:**
-- Follow the existing code style and structure.
-- Write clear, concise commit messages.
-- Add or update documentation as needed.
-- Test your changes before submitting a PR.
+- Follow the existing code style
+- Write clear commit messages
+- Test your changes before submitting
 
 ---
 
-## 📝 License
+## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
 

@@ -1,29 +1,26 @@
 # Change Log
 
-All notable changes to the "vscode-async-postmessaging" extension will be documented in this file.
+All notable changes to the "vscode-SprintDesk" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.4.0] - 2026-04-24
+
+### Added
+- MCP Server integration for AI agents (port 3847)
+- Team management view with Git sync
+- History tracking view
+- Sprint calendar visualization
+- Interactive React webview UI for tasks/backlogs/epics
+- Drag & drop support between sprints, epics, and backlogs
+- Keyboard shortcuts: Ctrl+Shift+T (Add Task), Ctrl+Shift+Q (Add Quickly)
+- Multiple repository/project support
+- Task preview and raw editing
+
+### Changed
+- Updated task provider with enhanced tree view
+- Improved sprint file handling
+
 ## [Unreleased]
- 
+
 - Initial release
-
-## [0.3.8] - 2025-11-06
-
-- update task and add repo provider
-- update task
-- fix drop errors
-- fix epic drags
-- version bump to 0.3.8
-
-## [released]
-
-Add webview type to epics view and implement EpicsTree component
-sprints name patterns
-show task of backlogs sprints
-humanized tasks names and open them when clicked
-upcoming changes
-change status in sprint files
-open sprint file calendar should be fix it
-show task status in sprint sidebar
-fix: sprint name
