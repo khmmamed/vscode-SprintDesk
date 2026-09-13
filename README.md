@@ -24,6 +24,33 @@ A productivity extension for managing sprints, tasks, epics, backlogs, and teams
 - Add AI agents to help with tasks
 - Track all changes with history view
 
+### Workforce & Autonomous Work (experimental)
+SprintDesk v0.9 ships an experimental **workforce runtime**: a deterministic, policy-gated pipeline that maps
+employees → skills → tools → permissions → tasks, without an LLM in the scheduling path. See
+[`docs/v0.9-workforce-guide.md`](docs/v0.9-workforce-guide.md) for the full architecture.
+
+- **Employees & workforce** — human/agent members with certified skills, RBAC roles, and lifecycle gates
+  (`.SprintDesk/workforce/*.yml`)
+- **Tasks → Runs → Queue → Worker** — a task drives a `run`; queued runs are claimed by a deterministic
+  scheduler pass and executed by a headless/terminal/noop worker; every state change flows through
+  `startRun` / `finishRun` / `cancelRun`
+- **LLM providers** — ollama/openai model profiles per employee (model output is *data today*, never authority)
+- **MCP servers** — built-in `sprintdesk_*` toolset plus a capability-gated MCP client registry
+- **Events & findings** — lifecycle events (`run.start`, `run.finish`, `run.queued`, ...) persisted with a
+  full audit trail
+- **Reviews & approval gates** — `auto`/`manual` gates for task-assignment, run-execution, and config-change
+  with pending-approval tools
+- **Retry policy** — `maxRunRetries`, `retryBackoffMs`, `runTimeoutMs`, failure classification and
+  `availableAt` backoff gating
+- **Scheduler & autonomy** — deterministic cron/interval scheduler with autonomy levels `0–3` (default `1`)
+- **Workflow DSL** — declarative `task` / `loop` / `tool` / `condition` workflows that create queued runs
+  (`.SprintDesk/settings/workflows.yml`)
+
+> **⚠️ Experimental.** The workforce runtime is built for headless/extensibility scenarios and covered by the
+> smoke suite, but the VS Code UI (webview planning, dashboards) is not yet wired to it. Current limitations:
+> no end-to-end employee execution flow (task discovery → assignment → dispatch → review) from the UI;
+> condition evaluation reads step status only; tool/LLM output never overrides policy.
+
 ### Quick Access
 - Keyboard shortcut: `Ctrl+Shift+T` to add a new task
 - Keyboard shortcut: `Ctrl+Shift+Q` to quickly add a task, epic, or backlog

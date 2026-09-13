@@ -1,93 +1,58 @@
 # SprintDesk Future Features Planning
 
-## Version 0.4.0 (Next Release)
+> Note: The 0.4.0 / 0.5.0 / 0.6.0 feature lists in earlier versions of this file are **shipped**.
+> See [`current-features.md`](current-features.md) for what exists today and
+> [`v0.9-workforce-guide.md`](v0.9-workforce-guide.md) for the workforce architecture.
 
-### 🔄 Enhanced Sprint Management
-- [ ] Sprint burndown charts
-- [ ] Sprint velocity tracking
-- [ ] Automated sprint reports generation
-- [ ] Sprint capacity planning tools
-- [ ] Sprint retrospective templates
+## Next Release (v0.10+)
 
-### 📊 Advanced Analytics
-- [ ] Task completion time tracking
-- [ ] Team velocity metrics
-- [ ] Sprint performance analytics
-- [ ] Workload distribution visualization
-- [ ] Progress trend analysis
+### 🚀 End-to-End Employee Execution Flow (highest priority)
+The biggest usability gap today: an employee currently cannot run the full loop from a single entry point.
+- [ ] Task discovery → assignment/recommendation → dispatch → run → review, as one coherent flow
+- [ ] UI/command surface for the flow (webview planning, run status, review inbox)
+- [ ] Human-in-the-loop review of completed runs before tasks are marked done
+- [ ] Observable run telemetry surfaced in the UI
 
-### 🤝 Collaboration Features
-- [ ] Team member assignments
-- [ ] Task commenting system
-- [ ] @mentions support
-- [ ] Team workload view
-- [ ] Shared task templates
+### 🧭 Autonomy Iteration
+- [ ] Standardize autonomy level semantics and defaults across scheduler + workflow DSL
+- [ ] Per-schedule and per-workflow autonomy overrides
+- [ ] Escalation when autonomy budget is exceeded (approval request instead of silent skip)
 
-## Version 0.5.0
-
-### 🔌 Integration Enhancements
-- [ ] Jira synchronization
-- [ ] GitHub Issues integration
-- [ ] Azure DevOps integration
-- [ ] GitLab integration
-- [ ] Slack notifications
-
-### 📱 UI Improvements
-- [ ] Customizable dashboard
-- [ ] Dark theme optimization
-- [ ] Drag-and-drop task management
-- [ ] Custom status workflows
-- [ ] Interactive sprint board
-
-## Version 0.6.0
-
-### 🤖 Automation Features
-- [ ] Automated task status updates
-- [ ] Smart task assignments
-- [ ] Automated sprint creation
-- [ ] Intelligent task prioritization
-- [ ] Automated documentation updates
-
-### 📈 Reporting System
-- [ ] Custom report templates
-- [ ] Export capabilities (PDF, Excel)
-- [ ] Team performance reports
-- [ ] Sprint comparison reports
-- [ ] Burndown chart exports
+### ✨ Workforce Deepening
+- [ ] Webview planning UI with run queue, approvals, and findings
+- [ ] Team workload view and velocity analytics built on run records
+- [ ] Richer failure classification + regression detection across retries
+- [ ] Expand seed skill catalog and default task-type mappings
 
 ## Long-term Goals (1.0.0+)
 
 ### 🌐 Enterprise Features
-- [ ] Role-based access control
-- [ ] Custom workflow definitions
-- [ ] Enterprise reporting
-- [ ] Audit logging
-- [ ] Compliance tracking
+- [ ] Custom workflow templates shipped as folders
+- [ ] Jira / GitHub Issues / Azure DevOps / GitLab synchronization
+- [ ] Enterprise reporting and export (PDF, Excel)
+- [ ] Audit-log compliance tooling
 
 ### 🔒 Security Enhancements
-- [ ] Encryption for sensitive data
-- [ ] Authentication integration
-- [ ] Access control lists
-- [ ] Security audit logs
-- [ ] Compliance reporting
+- [ ] Encryption for sensitive data (credentials, tokens)
+- [ ] Authentication integration for MCP servers
+- [ ] Fine-grained access control lists beyond roles
 
 ### 🔄 AI Integration
-- [ ] AI-powered task estimation
-- [ ] Smart sprint planning suggestions
-- [ ] Automated task categorization
-- [ ] Predictive analytics
-- [ ] Natural language task creation
+- [ ] AI-powered task estimation and prioritization suggestions
+- [ ] Smart sprint planning and capacity planning
+- [ ] Predictive analytics on run/task history
+- [ ] Natural-language task creation
 
-### 🌍 Internationalization
-- [ ] Multi-language support
-- [ ] Localized templates
-- [ ] RTL language support
-- [ ] Date format localization
-- [ ] Custom terminology support
+### 📱 UI & Localization
+- [ ] Customizable dashboard and dark-theme polish
+- [ ] Multi-language support and localized templates
+- [ ] RTL layouts and localized date formats
 
 ## Contributing Opportunities
 
 We welcome contributions in the following areas:
+- End-to-end execution flow and run telemetry
+- Webview planning UI
 - Feature development
 - Documentation improvements
 - Template customization

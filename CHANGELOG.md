@@ -4,6 +4,51 @@ All notable changes to the "vscode-SprintDesk" extension will be documented in t
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.9.0] - 2026-09-13
+
+### v0.9 — Declarative Workflow DSL
+
+- **Workflow definitions:** `validateWorkflow` DSL with four step types — `task`, `loop`, `tool`, `condition`
+  (step ids `[a-z][a-zA-Z0-9_.-]*`, bounded `maxIterations`, `iterateVar` injection, `{var}` interpolation,
+  condition evaluation on step status only).
+- **Deterministic engine:** `executeWorkflow` creates Tasks + queued Runs through the queue (never bypasses
+  `QueueService`), tool steps always route through capability-gated MCP `callServerTool`, bounded loops,
+  fail-fast abort unless `continueOnError` flags an escaped step, `workflow.completed` / `workflow.failed`
+  lifecycle events.
+- **`WorkflowStore`:** `.SprintDesk/settings/workflows.yml`.
+- **Ground truth:** LLM and tool outputs remain data, never authorization — conditions branch on step status
+  (`always` / `never` / `step-status`), keeping the DSL deterministic and audit-safe.
+- Full architecture (v0.7–v0.9) documented in `docs/v0.9-workforce-guide.md`.
+
+## [0.8.0] - 2026-09-13
+
+### v0.8 — Deterministic Scheduler & Autonomy
+
+- **`ScheduleStore`** (`.SprintDesk/settings/schedules.yml`) with `cron` and `interval` schedule kinds.
+- **`scheduler.runSchedulerPass`:** deterministic, idempotent firing over due schedules; `availableAt`
+  backoff gating; `run.queued` via the queue (no scheduler-side execution).
+- **Autonomy levels** (`0`–`3`, default `1`) gate classified work (e.g., `critical` approval) — read-only
+  operating bounds for the scheduler.
+- No new MCP tools; scheduler composes existing queue primitives.
+
+## [0.7.0] - 2026-09-13
+
+### v0.7 — Providers, Events, Retries & Approvals
+
+- **LLM providers:** ollama / openai clients behind a credential facade; `Employee.modelProfile` selects the
+  model per employee (experimental, no autonomous calls yet).
+- **MCP client & registry:** hand-rolled JSON-RPC client, `McpServerStore` (`.SprintDesk/mcp/servers.yml`),
+  capability-gated external tool calls via `sprintdesk_mcpCall`; registry tools
+  (`mcpServersList/Add/Update/Remove`, `mcpToolsList`, `mcpCheck`).
+- **Lifecycle events:** `EventStore` (`.SprintDesk/data/events.yml`) + `emitEvent` on run / queue / employee
+  transitions; `sprintdesk_eventsPublish`, `sprintdesk_eventsList`, `sprintdesk_activitySummary`.
+- **Run retries:** `requeueRun` with `attempts`, per-run timeout `runTimeoutMs`, failure classification, and
+  `availableAt` backoff gating (`maxRunRetries`, `retryBackoffMs`).
+- **Approval gates:** `GateMode` `auto | manual` (`task-assignment`, `run-execution`, `config-change`) with
+  `ApprovalStore` (`.SprintDesk/workforce/approvals.yml`) and tools `gatesGet`, `gatesSet`, `approvalsList`,
+  `approvalsApprove`, `approvalsReject`, `employeeConfigure`.
+- **Stuck-run fix:** workers mark runs that time out so the queue can requeue them.
+
 ## [0.6.0] - 2026-09-13
 
 ### v0.6 — Queue, Scheduler & Worker Runtime
