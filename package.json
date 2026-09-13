@@ -35,7 +35,8 @@
     "clean": "rimraf dist",
     "test": "node ./out/test/runTest.js",
     "mcp": "rimraf out && tsc -p . --outDir out --noEmit false && node out/mcp/stdioServer.js",
-    "standup": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/standup.js"
+    "standup": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/standup.js",
+    "worker": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/worker.js"
   },
   "contributes": {
     "keybindings": [
@@ -257,6 +258,11 @@
         "command": "sprintdesk.recommendAssignee",
         "title": "SprintDesk: Recommend Assignee",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "sprintdesk.processQueue",
+        "title": "SprintDesk: Process Queue",
+        "icon": "$(play)"
       }
     ],
     "viewsContainers": {
@@ -367,6 +373,11 @@
           "command": "sprintdesk.syncWorkforceFromTeam",
           "when": "view == sprintdesk-workforce",
           "group": "navigation@3"
+        },
+        {
+          "command": "sprintdesk.processQueue",
+          "when": "view == sprintdesk-workforce",
+          "group": "navigation@4"
         },
         {
           "command": "sprintdesk.getItemHistory",

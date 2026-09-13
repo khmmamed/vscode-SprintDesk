@@ -2,7 +2,7 @@ import { getWorkspaceRoot } from '../../fileService';
 import { getDataService } from '../../../data/DataService';
 import { getStores } from '../../../data/stores';
 import { AgentConfig, Employee, Run, Task, WorkerMode } from '../../../data/types';
-import { finishRun, getQueueSettings } from '../queueService';
+import { finishRun, getQueueSettings, processQueue, QueueClaim, QueueSkip } from '../queueService';
 import { createHeadlessWorker } from './headlessWorker';
 import { createNoopWorker } from './noopWorker';
 import { createTerminalWorker } from './terminalWorker';
@@ -68,4 +68,25 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
 
   finishRun(runId, { status: result.status, result: result.output, error: result.error });
   return result;
+}
+
+export interface QueuePassOptions {
+  limit?: number;
+  mode?: WorkerMode;
+}
+
+export interface QueuePassResult {
+  claims: QueueClaim[];
+  skipped: QueueSkip[];
+  executed: Array<{ runId: string; result?: WorkerResult }>;
+}
+
+export async function runQueuePass(options: QueuePassOptions = {}): Promise<QueuePassResult> {
+  const pass = processQueue({ dryRun: false, limit: options.limit });
+  const executed: Array<{ runId: string; result?: WorkerResult }> = [];
+  for (const run of pass.started) {
+    const result = await executeRun(run.id, options.mode);
+    executed.push({ runId: run.id, result });
+  }
+  return { claims: pass.claims, skipped: pass.skipped, executed };
 }

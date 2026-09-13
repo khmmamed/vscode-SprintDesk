@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { WorkforceTreeDataProvider, WorkforceItem } from '../../providers/workforce/WorkforceTreeDataProvider';
 import * as workforceService from '../../services/workforce/workforceService';
+import * as queueService from '../../services/workforce/queueService';
+import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
 
 export function registerWorkforceCommands(context: vscode.ExtensionContext, provider: WorkforceTreeDataProvider): void {
@@ -157,6 +159,37 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
 
       workforceService.setEmployeeStatus(employee.id, status.value);
       provider.refresh();
+    }),
+
+    vscode.commands.registerCommand('sprintdesk.processQueue', async () => {
+      const current = queueService.getQueueSettings().workerMode;
+      const pick = await vscode.window.showQuickPick(
+        [
+          { label: 'Headless', description: 'Run agents as background processes (default)', value: 'headless' as const },
+          { label: 'VS Code terminal', description: 'Run agents in the integrated terminal', value: 'terminal' as const },
+          { label: 'Noop (dry-run)', description: 'Record runs as completed without a real agent', value: 'noop' as const }
+        ],
+        { placeHolder: `Worker mode for this pass (current: ${current})` }
+      );
+      const mode = pick?.value || current;
+
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'SprintDesk: processing queue…' },
+        async () => {
+          const result = await worker.runQueuePass({ mode });
+          const ok = result.executed.filter(e => e.result?.status === 'completed').length;
+          const failed = result.executed.length - ok;
+          const summary =
+            `Queue pass (${mode}): ${result.claims.length} claimed · ${result.executed.length} executed ` +
+            `(${ok} ok, ${failed} failed) · ${result.skipped.length} skipped`;
+          if (failed > 0) {
+            vscode.window.showWarningMessage(summary);
+          } else {
+            vscode.window.showInformationMessage(summary);
+          }
+          provider.refresh();
+        }
+      );
     }),
 
     vscode.commands.registerCommand('sprintdesk.removeEmployee', async (item: WorkforceItem) => {
