@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import { getStores } from '../../data/stores';
 import { AgentConfig, Employee, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
 import * as teamService from '../team/teamService';
+import { emitEvent } from './events';
 
 export interface Workforce {
   teams: EmployeeTeam[];
@@ -98,6 +99,14 @@ export function updateEmployee(
   if (!existing) return undefined;
 
   stores.employees.update(employeeId, { ...updates, updatedAt: new Date().toISOString() });
+  if (updates.status && updates.status !== existing.status) {
+    emitEvent('employee.status', 'workforce', {
+      employeeId,
+      name: existing.name,
+      from: existing.status || 'idle',
+      to: updates.status
+    });
+  }
   return stores.employees.getById(employeeId);
 }
 

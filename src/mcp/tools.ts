@@ -698,6 +698,14 @@ export const WORKFORCE_TOOLS = [
       },
     },
   },
+  {
+    name: 'sprintdesk_activitySummary',
+    description: 'Overall workforce activity snapshot: employee/run/task counts, queue settings, and the latest 20 events',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
 ];
 
 export const MCP_TOOLS = [

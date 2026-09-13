@@ -4,6 +4,7 @@ import { getStores } from '../../data/stores';
 import { AuditEntry, Employee, QueueSettings, Run, Task } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
 import { updateEmployee } from './workforceService';
+import { emitEvent } from './events';
 
 export type QueueSkipReason =
   | 'task-not-found'
@@ -116,6 +117,13 @@ export function startRun(runId: string): Run | undefined {
     details: { runId: run.id, agentId: run.agentId, taskCode: task?.code }
   });
 
+  emitEvent('run.started', 'queue', {
+    runId: run.id,
+    taskId: run.taskId,
+    taskCode: task?.code,
+    agentId: run.agentId
+  });
+
   return getStores().runs.getById(runId);
 }
 
@@ -159,6 +167,14 @@ export function finishRun(runId: string, outcome: RunOutcome): Run | undefined {
     }
   });
 
+  emitEvent('run.finished', 'queue', {
+    runId: run.id,
+    taskId: run.taskId,
+    taskCode: task?.code,
+    agentId: run.agentId,
+    status: outcome.status
+  });
+
   return getStores().runs.getById(runId);
 }
 
@@ -195,6 +211,12 @@ export function cancelRun(runId: string, actorId?: string): Run | undefined {
     details: { runId: run.id, agentId: run.agentId }
   });
 
+  emitEvent('run.cancelled', 'queue', {
+    runId: run.id,
+    taskId: run.taskId,
+    agentId: run.agentId
+  });
+
   return getStores().runs.getById(runId);
 }
 
@@ -220,43 +242,49 @@ export function processQueue(options: QueueProcessOptions = {}): QueueProcessRes
   const started: Run[] = [];
 
   for (const run of rankQueuedRuns(getStores().runs.loadAll())) {
+    const skip = (reason: QueueSkipReason, detail?: string): void => {
+      skipped.push({ runId: run.id, reason, detail });
+      emitEvent('queue.skip', 'queue', {
+        runId: run.id,
+        taskId: run.taskId,
+        reason,
+        ...(detail ? { detail } : {})
+      });
+    };
+
     const task = ds.getTask(run.taskId);
     if (!task) {
-      skipped.push({ runId: run.id, reason: 'task-not-found' });
+      skip('task-not-found');
       continue;
     }
     if (task.status === 'done' || task.status === 'cancelled') {
-      skipped.push({ runId: run.id, reason: 'task-closed', detail: task.status });
+      skip('task-closed', task.status);
       continue;
     }
 
     const employee = employeeById(run.agentId);
     if (!employee) {
-      skipped.push({ runId: run.id, reason: 'employee-not-found' });
+      skip('employee-not-found');
       continue;
     }
     if (employee.status === 'offline') {
-      skipped.push({ runId: run.id, reason: 'employee-offline' });
+      skip('employee-offline');
       continue;
     }
 
     const gate = requireEmployeePermission('run:create', employee.id);
     if (!gate.ok) {
-      skipped.push({ runId: run.id, reason: 'no-permission', detail: gate.error });
+      skip('no-permission', gate.error);
       continue;
     }
 
     if (runningEmployees.has(employee.id) || claimedEmployees.has(employee.id)) {
-      skipped.push({
-        runId: run.id,
-        reason: 'concurrency-limit',
-        detail: `${employee.name} is already busy or claimed`
-      });
+      skip('concurrency-limit', `${employee.name} is already busy or claimed`);
       continue;
     }
 
     if (claims.length >= claimsBudget) {
-      skipped.push({ runId: run.id, reason: 'concurrency-limit', detail: 'global capacity reached' });
+      skip('concurrency-limit', 'global capacity reached');
       continue;
     }
 

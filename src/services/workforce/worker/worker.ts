@@ -54,6 +54,7 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
   const employee = getStores().employees.getById(run.agentId || '');
   if (!employee) {return undefined;}
   if (!employee.agentConfig) {
+    finishRun(runId, { status: 'failed', error: 'Agent not configured' });
     return { status: 'failed', error: 'Agent not configured' };
   }
 
