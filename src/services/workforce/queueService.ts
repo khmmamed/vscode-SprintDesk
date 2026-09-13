@@ -42,7 +42,15 @@ export interface RunOutcome {
   status: 'completed' | 'failed';
   result?: string;
   error?: string;
+  classification?: RunFailureClassification;
 }
+
+export type RunFailureClassification =
+  | 'exit-nonzero'
+  | 'timeout'
+  | 'spawn-error'
+  | 'invalid-config'
+  | 'none';
 
 function dataService() {
   return getDataService(fileService.getWorkspaceRoot());
@@ -172,10 +180,51 @@ export function finishRun(runId: string, outcome: RunOutcome): Run | undefined {
     taskId: run.taskId,
     taskCode: task?.code,
     agentId: run.agentId,
-    status: outcome.status
+    status: outcome.status,
+    ...(outcome.classification ? { classification: outcome.classification } : {})
   });
 
   return getStores().runs.getById(runId);
+}
+
+export function requeueRun(runId: string): boolean {
+  const run = getStores().runs.getById(runId);
+  if (!run || run.status !== 'running') {return false;}
+  const settings = getQueueSettings();
+  if (run.attempts > settings.maxRunRetries) {return false;}
+
+  const now = new Date().toISOString();
+  getStores().runs.update(runId, {
+    status: 'queued',
+    attempts: run.attempts + 1,
+    startedAt: undefined,
+    finishedAt: undefined,
+    result: undefined,
+    error: undefined,
+    updatedAt: now
+  });
+
+  const employee = employeeById(run.agentId);
+  if (employee) {
+    updateEmployee(employee.id, { status: 'idle' });
+  }
+
+  recordAudit({
+    actor: 'queue',
+    action: 'run.retry',
+    targetType: 'task',
+    targetId: run.taskId,
+    details: { runId, agentId: run.agentId, attempts: run.attempts + 1 }
+  });
+
+  emitEvent('run.retried', 'queue', {
+    runId,
+    taskId: run.taskId,
+    agentId: run.agentId,
+    attempts: run.attempts + 1
+  });
+
+  return true;
 }
 
 export function cancelRun(runId: string, actorId?: string): Run | undefined {

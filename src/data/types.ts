@@ -143,6 +143,8 @@ export interface QueueSettings {
   autoAssignUnassigned: boolean;
   workerMode: WorkerMode;
   pollIntervalMs: number;
+  runTimeoutMs: number;
+  maxRunRetries: number;
 }
 
 export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
@@ -151,7 +153,9 @@ export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
   maxConcurrentRuns: 1,
   autoAssignUnassigned: false,
   workerMode: 'headless',
-  pollIntervalMs: 30000
+  pollIntervalMs: 30000,
+  runTimeoutMs: 600000,
+  maxRunRetries: 1
 };
 
 export interface EmployeeTeam {

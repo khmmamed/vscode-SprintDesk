@@ -52,7 +52,7 @@ export function createHeadlessWorker(): WorkerRuntime {
               spawnWith(true);
               return;
             }
-            finish({ status: 'failed', error: err.message });
+            finish({ status: 'failed', error: err.message, classification: 'spawn-error' });
           });
 
           child.on('close', (code) => {
@@ -60,7 +60,7 @@ export function createHeadlessWorker(): WorkerRuntime {
             if (code === 0) {
               finish({ status: 'completed', output: stdout.trim() });
             } else {
-              finish({ status: 'failed', error: stderr.trim() || stdout.trim() || `Process exited with code ${code}` });
+              finish({ status: 'failed', error: stderr.trim() || stdout.trim() || `Process exited with code ${code}`, classification: 'exit-nonzero' });
             }
           });
         };
@@ -70,7 +70,7 @@ export function createHeadlessWorker(): WorkerRuntime {
         if (request.timeoutMs) {
           timer = setTimeout(() => {
             if (currentChild) {currentChild.kill();}
-            finish({ status: 'failed', error: `Timeout after ${request.timeoutMs}ms` });
+            finish({ status: 'failed', error: `Timeout after ${request.timeoutMs}ms`, classification: 'timeout' });
           }, request.timeoutMs);
         }
       });

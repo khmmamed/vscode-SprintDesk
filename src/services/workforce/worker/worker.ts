@@ -2,7 +2,7 @@ import { getWorkspaceRoot } from '../../fileService';
 import { getDataService } from '../../../data/DataService';
 import { getStores } from '../../../data/stores';
 import { AgentConfig, Employee, Run, Task, WorkerMode } from '../../../data/types';
-import { finishRun, getQueueSettings, processQueue, QueueClaim, QueueSkip } from '../queueService';
+import { finishRun, getQueueSettings, processQueue, requeueRun, QueueClaim, QueueSkip } from '../queueService';
 import { createHeadlessWorker } from './headlessWorker';
 import { createNoopWorker } from './noopWorker';
 import { createTerminalWorker } from './terminalWorker';
@@ -20,6 +20,7 @@ export interface WorkerResult {
   status: 'completed' | 'failed';
   output?: string;
   error?: string;
+  classification?: 'exit-nonzero' | 'timeout' | 'spawn-error' | 'invalid-config';
 }
 
 export interface WorkerRuntime {
@@ -64,10 +65,20 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
     task,
     employee,
     agentConfig: employee.agentConfig,
-    workspaceRoot: wsRoot
+    workspaceRoot: wsRoot,
+    timeoutMs: getQueueSettings().runTimeoutMs
   });
 
-  finishRun(runId, { status: result.status, result: result.output, error: result.error });
+  if (result.status === 'failed' && requeueRun(runId)) {
+    return result;
+  }
+
+  finishRun(runId, {
+    status: result.status,
+    result: result.output,
+    error: result.error,
+    classification: result.classification
+  });
   return result;
 }
 
