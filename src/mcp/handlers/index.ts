@@ -9,6 +9,7 @@ import { PLANNING_HANDLERS } from './planning';
 import { WORKFORCE_HANDLERS } from './capability';
 import { MCP_HANDLERS } from './mcp';
 import { ACTIVITY_HANDLERS } from './activity';
+import { APPROVAL_HANDLERS } from './approvals';
 import { Handler, HandlerResult, res } from './helpers';
 
 export const HANDLERS: Record<string, Handler> = {
@@ -22,7 +23,8 @@ export const HANDLERS: Record<string, Handler> = {
   ...PLANNING_HANDLERS,
   ...WORKFORCE_HANDLERS,
   ...MCP_HANDLERS,
-  ...ACTIVITY_HANDLERS
+  ...ACTIVITY_HANDLERS,
+  ...APPROVAL_HANDLERS
 };
 
 export async function handleToolCall(toolName: string, args: any): Promise<HandlerResult> {

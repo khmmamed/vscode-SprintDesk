@@ -5,6 +5,7 @@ import { AuditEntry, Employee, QueueSettings, Run, Task } from '../../data/types
 import { requireEmployeePermission } from './capabilityService';
 import { updateEmployee } from './workforceService';
 import { emitEvent } from './events';
+import { gateMode, requestApproval } from './gates';
 
 export type QueueSkipReason =
   | 'task-not-found'
@@ -91,9 +92,20 @@ export function updateQueueSettings(settings: Partial<QueueSettings>): QueueSett
   return getStores().queue.saveSettings(settings);
 }
 
-export function startRun(runId: string): Run | undefined {
+export function startRun(runId: string, opts?: { bypassGate?: boolean }): Run | undefined {
   const run = getStores().runs.getById(runId);
   if (!run || run.status !== 'queued') {return undefined;}
+
+  if (!opts?.bypassGate && gateMode('run-execution') === 'manual') {
+    requestApproval({
+      type: 'run-execution',
+      reason: 'Run execution requires manual approval',
+      requesterId: run.agentId,
+      target: `run ${run.id} for task ${run.taskId}`,
+      pending: { op: 'start-run', runId: run.id, agentId: run.agentId || '' }
+    });
+    return undefined;
+  }
 
   const now = new Date().toISOString();
   getStores().runs.update(runId, {

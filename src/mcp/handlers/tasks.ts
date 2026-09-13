@@ -1,6 +1,8 @@
 import * as taskService from '../../services/taskService';
 import { getStores } from '../../data/stores';
 import { requireEmployeePermission, rankEmployees } from '../../services/workforce/capabilityService';
+import { gateMode, requestApproval } from '../../services/workforce/gates';
+import { performTaskAssignment } from '../../services/workforce/workforceService';
 import { Handler, HandlerResult, res, getWs, getDs, findTask, resolveAgent, recordAudit } from './helpers';
 
 async function handle_sprintdesk_tasksAssign(args: any): Promise<HandlerResult> {
@@ -16,17 +18,27 @@ async function handle_sprintdesk_tasksAssign(args: any): Promise<HandlerResult> 
   const gate = requireEmployeePermission('task:claim', agent.id);
   if (!gate.ok) return res(gate.error, true);
 
-  ds.updateTask(task.id, { agent: agent.id });
+  if (gateMode('task-assignment') === 'manual') {
+    const approval = requestApproval({
+      type: 'task-assignment',
+      reason: 'Task assignment requires manual approval',
+      requesterId: args.actorId || agent.id,
+      target: `${task.code || task.id} → ${agent.name}`,
+      pending: {
+        op: 'assign-task',
+        taskId: task.id,
+        employeeId: agent.id,
+        employeeName: agent.name,
+        requesterId: args.actorId || agent.id
+      }
+    });
+    return res(JSON.stringify({ status: 'pending-approval', approval }, null, 2));
+  }
+
+  performTaskAssignment(task.id, agent.id, args.actorId || agent.id);
+
   const updatedTask = ds.getTask(task.id);
   if (updatedTask) ds.saveTaskMd(updatedTask);
-
-  recordAudit({
-    actor: 'mcp',
-    action: 'assign',
-    targetType: 'task',
-    targetId: task.id,
-    details: { agentId: agent.id, agentName: agent.name, source: agent.source, taskCode: task.code }
-  });
 
   return res(JSON.stringify(updatedTask, null, 2));
 }

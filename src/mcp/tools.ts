@@ -809,6 +809,80 @@ export const MCP_TOOLS = [
   },
 ];
 
+export const APPROVAL_TOOLS = [
+  {
+    name: 'sprintdesk_gatesGet',
+    description: 'Read the current approval gate modes (task-assignment, run-execution, config-change): auto or manual',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sprintdesk_gatesSet',
+    description: 'Set an approval gate mode (requires approval:configure)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        gate: { type: 'string', enum: ['task-assignment', 'run-execution', 'config-change'], description: 'Which gate to configure' },
+        mode: { type: 'string', enum: ['auto', 'manual'], description: 'auto = proceed without approval, manual = requires approval' },
+        actorId: { type: 'string', description: 'Acting employee id or name (must hold approval:configure)' },
+      },
+      required: ['gate', 'mode'],
+    },
+  },
+  {
+    name: 'sprintdesk_approvalsList',
+    description: 'List approval requests by status (default pending)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        status: { type: 'string', enum: ['pending', 'approved', 'rejected'], description: 'Status filter (default pending)' },
+        limit: { type: 'number', description: 'Max approvals to return' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_approvalsApprove',
+    description: 'Approve a pending approval request and perform its deferred operation (requires approval:review)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approvalId: { type: 'string', description: 'Approval id' },
+        actorId: { type: 'string', description: 'Acting employee id or name (must hold approval:review)' },
+      },
+      required: ['approvalId', 'actorId'],
+    },
+  },
+  {
+    name: 'sprintdesk_approvalsReject',
+    description: 'Reject a pending approval request (requires approval:review)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approvalId: { type: 'string', description: 'Approval id' },
+        actorId: { type: 'string', description: 'Acting employee id or name (must hold approval:review)' },
+      },
+      required: ['approvalId', 'actorId'],
+    },
+  },
+  {
+    name: 'sprintdesk_employeeConfigure',
+    description: 'Update an employee modelProfile/agentConfig/capabilities (deferred to approval queue when config-change gate is manual)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        employeeId: { type: 'string', description: 'Employee id or name' },
+        modelProfile: { type: 'object', description: 'Model profile: { name, provider (ollama|openai), model, baseUrl?, apiKeyRef?, options? }' },
+        agentConfig: { type: 'object', description: 'Agent config: { tool, command?, model?, workingDir?, promptTemplate? }' },
+        capabilities: { type: 'array', items: { type: 'string' }, description: 'Replacement capability list' },
+        actorId: { type: 'string', description: 'Acting employee id or name' },
+      },
+      required: ['employeeId'],
+    },
+  },
+];
+
 export const ALL_TOOLS = [
   ...TASK_TOOLS,
   ...EPIC_TOOLS,
@@ -826,6 +900,7 @@ export const ALL_TOOLS = [
   ...CONTEXT_TOOLS,
   ...WORKFORCE_TOOLS,
   ...MCP_TOOLS,
+  ...APPROVAL_TOOLS,
 ];
 
 export function getToolByName(name: string) {

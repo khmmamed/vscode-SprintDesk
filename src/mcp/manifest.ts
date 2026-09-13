@@ -16,6 +16,7 @@ import {
   WORKFORCE_TOOLS,
   HISTORY_TOOLS,
   MCP_TOOLS,
+  APPROVAL_TOOLS,
   ALL_TOOLS
 } from './tools';
 
@@ -40,7 +41,8 @@ const TOOL_GROUPS: McpManifestToolGroup[] = [
   { group: 'context', tools: CONTEXT_TOOLS },
   { group: 'workforce', tools: WORKFORCE_TOOLS },
   { group: 'history', tools: HISTORY_TOOLS },
-  { group: 'mcp', tools: MCP_TOOLS }
+  { group: 'mcp', tools: MCP_TOOLS },
+  { group: 'approvals', tools: APPROVAL_TOOLS }
 ];
 
 export function buildMcpManifest(): Record<string, unknown> {

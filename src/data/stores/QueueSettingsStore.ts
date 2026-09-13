@@ -1,5 +1,5 @@
 import { YAMLStore } from './BaseStore';
-import { DEFAULT_QUEUE_SETTINGS, QueueSettings } from '../types';
+import { DEFAULT_APPROVAL_GATES, DEFAULT_QUEUE_SETTINGS, QueueSettings } from '../types';
 
 export class QueueSettingsStore extends YAMLStore<QueueSettings> {
   constructor(workspaceRoot?: string) {
@@ -8,14 +8,24 @@ export class QueueSettingsStore extends YAMLStore<QueueSettings> {
 
   getSettings(): QueueSettings {
     const existing = this.getById('default');
-    return existing
-      ? { ...DEFAULT_QUEUE_SETTINGS, ...existing }
-      : { ...DEFAULT_QUEUE_SETTINGS };
+    if (!existing) return { ...DEFAULT_QUEUE_SETTINGS };
+    return {
+      ...DEFAULT_QUEUE_SETTINGS,
+      ...existing,
+      approvalGates: { ...DEFAULT_APPROVAL_GATES, ...(existing.approvalGates || {}) }
+    };
   }
 
   saveSettings(settings: Partial<QueueSettings>): QueueSettings {
     const current = this.getSettings();
-    const merged: QueueSettings = { ...current, ...settings };
+    const gates = settings.approvalGates
+      ? { ...DEFAULT_APPROVAL_GATES, ...current.approvalGates, ...settings.approvalGates }
+      : undefined;
+    const merged: QueueSettings = {
+      ...current,
+      ...settings,
+      ...(gates ? { approvalGates: gates } : {})
+    };
     if (this.getById('default')) {
       this.update('default', merged);
     } else {

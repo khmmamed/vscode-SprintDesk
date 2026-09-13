@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
+import * as fileService from '../fileService';
+import { getDataService, DataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
-import { AgentConfig, Employee, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
+import { AgentConfig, Employee, EmployeeModelProfile, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
 import * as teamService from '../team/teamService';
 import { emitEvent } from './events';
 
@@ -259,4 +261,84 @@ export function getWorkforceSummary(): {
     unassigned: unassigned.length,
     busy: employees.filter(e => e.status === 'busy').length
   };
+}
+
+function dataService(): DataService {
+  return getDataService(fileService.getWorkspaceRoot());
+}
+
+function findClassicTask(taskId: string) {
+  const ds = dataService();
+  return ds.getTask(taskId) || ds.loadTasks().find(t => t.code === taskId);
+}
+
+export function recordWorkforceAudit(entry: {
+  actor: string;
+  action: string;
+  targetType: string;
+  targetId?: string;
+  details?: Record<string, unknown>;
+}): void {
+  getStores().audit.add({
+    ...entry,
+    id: `audit_${Date.now()}`,
+    timestamp: new Date().toISOString()
+  });
+}
+
+export interface PerformedAssignment {
+  taskId: string;
+  agentId: string;
+}
+
+export function performTaskAssignment(taskId: string, agentId: string, requesterId?: string): PerformedAssignment {
+  const ds = dataService();
+  const task = findClassicTask(taskId);
+  if (!task) throw new Error(`Task not found: ${taskId}`);
+
+  ds.updateTask(task.id, { agent: agentId });
+  const updatedTask = ds.getTask(task.id);
+  if (updatedTask) ds.saveTaskMd(updatedTask);
+
+  recordWorkforceAudit({
+    actor: requesterId || 'workforce',
+    action: 'assign',
+    targetType: 'task',
+    targetId: task.id,
+    details: { agentId, taskCode: task.code }
+  });
+
+  return { taskId: task.id, agentId };
+}
+
+export interface EmployeeConfigChange {
+  modelProfile?: EmployeeModelProfile;
+  agentConfig?: AgentConfig;
+  capabilities?: string[];
+}
+
+export function performConfigChange(employeeId: string, changes: EmployeeConfigChange, requesterId?: string): Employee {
+  const stores = getStores();
+  const employee = stores.employees.loadAll().find(e => e.id === employeeId || e.name === employeeId);
+  if (!employee) throw new Error(`Employee not found: ${employeeId}`);
+
+  const updates: Partial<Pick<Employee, 'modelProfile' | 'agentConfig' | 'capabilities'>> = {};
+  if (changes.modelProfile !== undefined) updates.modelProfile = changes.modelProfile;
+  if (changes.agentConfig !== undefined) updates.agentConfig = changes.agentConfig;
+  if (changes.capabilities !== undefined) updates.capabilities = changes.capabilities;
+
+  const updated = updateEmployee(employee.id, updates);
+  if (!updated) throw new Error(`Employee not found: ${employeeId}`);
+
+  recordWorkforceAudit({
+    actor: requesterId || 'workforce',
+    action: 'config.change',
+    targetType: 'employee',
+    targetId: employee.id,
+    details: {
+      name: employee.name,
+      changed: Object.keys(updates)
+    }
+  });
+  return updated;
 }

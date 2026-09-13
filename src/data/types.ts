@@ -124,15 +124,75 @@ export interface Policy {
 
 export const DEFAULT_POLICY: Policy = {
   roles: {
-    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call'],
+    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure'],
     developer: ['task:claim', 'run:create'],
     reviewer: ['task:assign', 'task:claim'],
     observer: [],
     agent: ['run:create', 'run:update', 'task:claim', 'mcp:list', 'mcp:call'],
-    human: ['task:assign', 'task:claim']
+    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure']
   },
   overrides: []
 };
+
+export type ApprovalGateMode = 'auto' | 'manual';
+
+export interface ApprovalGates {
+  taskAssignment: ApprovalGateMode;
+  runExecution: ApprovalGateMode;
+  configChange: ApprovalGateMode;
+}
+
+export const DEFAULT_APPROVAL_GATES: ApprovalGates = {
+  taskAssignment: 'auto',
+  runExecution: 'auto',
+  configChange: 'auto'
+};
+
+export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ApprovalPendingAssignTask {
+  op: 'assign-task';
+  taskId: string;
+  employeeId: string;
+  employeeName?: string;
+  requesterId?: string;
+}
+
+export interface ApprovalPendingStartRun {
+  op: 'start-run';
+  runId: string;
+  agentId: string;
+}
+
+export interface ApprovalPendingConfigChange {
+  op: 'apply-config';
+  employeeId: string;
+  changes: {
+    modelProfile?: EmployeeModelProfile;
+    agentConfig?: AgentConfig;
+    capabilities?: string[];
+  };
+  requesterId?: string;
+}
+
+export type ApprovalPending =
+  | ApprovalPendingAssignTask
+  | ApprovalPendingStartRun
+  | ApprovalPendingConfigChange;
+
+export interface Approval {
+  id: string;
+  type: ApprovalType;
+  status: ApprovalStatus;
+  reason: string;
+  target: string;
+  requesterId?: string;
+  pending: ApprovalPending;
+  createdAt: string;
+  resolvedAt?: string;
+  decisionBy?: string;
+}
 
 export type WorkerMode = 'headless' | 'terminal' | 'noop';
 
@@ -145,6 +205,7 @@ export interface QueueSettings {
   pollIntervalMs: number;
   runTimeoutMs: number;
   maxRunRetries: number;
+  approvalGates: ApprovalGates;
 }
 
 export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
@@ -155,7 +216,8 @@ export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
   workerMode: 'headless',
   pollIntervalMs: 30000,
   runTimeoutMs: 600000,
-  maxRunRetries: 1
+  maxRunRetries: 1,
+  approvalGates: { ...DEFAULT_APPROVAL_GATES }
 };
 
 export interface EmployeeTeam {
