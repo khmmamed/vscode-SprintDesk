@@ -4,6 +4,35 @@ All notable changes to the "vscode-SprintDesk" extension will be documented in t
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased] - v0.10 Workforce Control Center
+
+### v0.10 Slice 1 — Control Center & end-to-end execution
+
+- **Workforce Control Center webview:** `sprintdesk.openWorkforce` opens a dedicated `?view=workforce` panel
+  with tabs for Employees, Runs, Create Task & Run, and counted placeholders for Approvals / Schedules /
+  Workflows / Activity. The legacy project-management webview is untouched.
+- **7-section Workforce tree:** `Employees` (teams → members → unassigned), `Tasks` (agent-assigned),
+  `Runs` (recent runs with status icons), plus Approvals / Schedules / Workflows / Activity nav rows with live
+  counts that open the Control Center. Existing employee/team commands preserved.
+- **End-to-end **Create Task & Run** flow:** create task → assign employee → `queueService.createRun` →
+  `startRun` → `executeRun` → `finishRun`, with live `RUN_UPDATED` pushes to the webview. Queue state
+  transitions remain owned by `QueueService`.
+- **`queueService.createRun(taskId, agentId)`:**
+  new single source of truth for run creation (permission gate + offline check + task/run tagging). The MCP
+  `sprintdesk_runsCreate` handler now routes through it — identical MCP behavior.
+- **Ollama worker runtime:** new `WorkerMode 'ollama'` executes the task through the employee's LLM
+  `modelProfile` (falling back to `agentConfig.model`), emitting `Findings:` / `Errors:` sections.
+  `processQueue` quickpick and the Create Task form expose the mode.
+- **Structured run summaries:** `Run.summary { findings, errors }` computed by `finishRun` via
+  `summarizeRunOutput` (explicit sections with bullet fallback).
+- **New commands:** `sprintdesk.openWorkforce`, `sprintdesk.createTaskForEmployee` (agent tree row),
+  `sprintdesk.cancelRun` (run tree row).
+- **Run lifecycle hardening:** control-center/tree cancel works out of the box (`run:cancel` granted to the
+  default `agent` role); command-layer errors (offline agent, no agent assigned, missing permission) surface
+  in the webview instead of hanging; the Workforce tree refreshes on every run transition driven by the
+  Control Center; the Create & Run message distinguishes approval-required from plain queued.
+- Architecture: `docs/v0.10-control-center.md`. Version stays `0.9.0` during development.
+
 ## [0.9.0] - 2026-09-13
 
 ### v0.9 — Declarative Workflow DSL

@@ -54,6 +54,7 @@ import { createEpicInteractive } from './commands/interactive/epicInteractive';
 import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './commands/interactive/backlogInteractive';
 import * as teamService from './services/team/teamService';
 import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
+import { registerWorkforceControlCenter } from './commands/workforce/openWorkforceControlCenter';
 import * as capabilityService from './services/workforce/capabilityService';
 // Tasks - import and create wrapper for API compatibility
 import { createTask as createTaskService } from "./services/taskService";
@@ -416,6 +417,7 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
 
   // Workforce commands
   registerWorkforceCommands(context, workforceProvider);
+  registerWorkforceControlCenter(context);
 
 // Settings commands
   registerOpenSettingsCommand(context);

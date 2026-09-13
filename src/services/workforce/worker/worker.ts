@@ -1,10 +1,11 @@
 import { getWorkspaceRoot } from '../../fileService';
 import { getDataService } from '../../../data/DataService';
 import { getStores } from '../../../data/stores';
-import { AgentConfig, Employee, Run, Task, WorkerMode } from '../../../data/types';
+import { AgentConfig, Employee, EmployeeModelProfile, Run, Task, WorkerMode } from '../../../data/types';
 import { finishRun, getQueueSettings, processQueue, requeueRun, QueueClaim, QueueSkip } from '../queueService';
 import { createHeadlessWorker } from './headlessWorker';
 import { createNoopWorker } from './noopWorker';
+import { createOllamaWorker } from './ollamaWorker';
 import { createTerminalWorker } from './terminalWorker';
 
 export interface WorkerRequest {
@@ -14,6 +15,7 @@ export interface WorkerRequest {
   agentConfig: AgentConfig;
   workspaceRoot: string;
   timeoutMs?: number;
+  modelProfile?: EmployeeModelProfile;
 }
 
 export interface WorkerResult {
@@ -35,6 +37,8 @@ export function getWorkerRuntime(mode?: WorkerMode): WorkerRuntime {
       return createNoopWorker();
     case 'terminal':
       return createTerminalWorker();
+    case 'ollama':
+      return createOllamaWorker();
     case 'headless':
     default:
       return createHeadlessWorker();
@@ -66,7 +70,8 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
     employee,
     agentConfig: employee.agentConfig,
     workspaceRoot: wsRoot,
-    timeoutMs: getQueueSettings().runTimeoutMs
+    timeoutMs: getQueueSettings().runTimeoutMs,
+    modelProfile: employee.modelProfile
   });
 
   if (result.status === 'failed' && requeueRun(runId, { classification: result.classification })) {

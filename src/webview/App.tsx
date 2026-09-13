@@ -8,6 +8,7 @@ import { BacklogsList } from "./BacklogsList";
 import { EpicsList } from "./EpicsList";
 import { EpicsTree } from "./EpicsTree";
 import TableBlock from "./TableBlock";
+import WorkforceControlCenter from "./workforce/WorkforceControlCenter";
 
 interface ProjectFile {
   name: string;
@@ -119,6 +120,10 @@ export const App: React.FunctionComponent<IAppProps> = ({ }) => {
 
 if (showEpicsTree) {
     return <EpicsTree />;
+  }
+
+  if (view === "workforce") {
+    return <WorkforceControlCenter />;
   }
 
   if (view === "projects") {

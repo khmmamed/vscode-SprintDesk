@@ -1,7 +1,7 @@
 import * as fileService from '../fileService';
 import { getDataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
-import { AuditEntry, Employee, QueueSettings, Run, Task } from '../../data/types';
+import { AuditEntry, Employee, QueueSettings, Run, RunSummary, Task } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
 import { updateEmployee } from './workforceService';
 import { emitEvent } from './events';
@@ -66,6 +66,52 @@ export function isRetryableClassification(classification?: RunFailureClassificat
 
 export function computeRetryDelayMs(attempts: number, baseBackoffMs: number): number {
   return baseBackoffMs * attempts;
+}
+
+const SUMMARY_HEADER = /^\s*(findings|errors|summary|notes|references|conclusion|analysis)[:.\-]?\s*$/i;
+const BULLET_LINE = /^\s*[-*•]|\s*\d+[.)]\s/;
+const ERROR_LINE = /\b(error|exception|failed|failure|timeout|unreachable|spawn-error)\b/i;
+const ZERO_LINE = /^[\s\-*.]*(0|none|null)$/i;
+
+function countSectionItems(lines: string[]): number {
+  const bullets = lines.filter(l => BULLET_LINE.test(l));
+  if (bullets.length > 0) {return bullets.length;}
+  return lines.filter(l => !SUMMARY_HEADER.test(l)).length;
+}
+
+export function summarizeRunOutput(output?: string, error?: string, failed = false): RunSummary {
+  const lines = (output || '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return { findings: 0, errors: failed && error ? 1 : 0 };
+  }
+
+  const findingsIdx = lines.findIndex(l => /^findings:?\s*$/i.test(l));
+  const errorsIdx = lines.findIndex(l => /^errors:?\s*$/i.test(l));
+
+  let findings = 0;
+  if (findingsIdx !== -1) {
+    const sectionEnd = errorsIdx > findingsIdx ? errorsIdx : lines.length;
+    findings = countSectionItems(lines.slice(findingsIdx + 1, sectionEnd));
+  } else {
+    const bullets = lines.filter(l => BULLET_LINE.test(l) && !ERROR_LINE.test(l));
+    const meaningful = lines.filter(l => !BULLET_LINE.test(l) && !ERROR_LINE.test(l) && !SUMMARY_HEADER.test(l));
+    findings = bullets.length > 0 ? bullets.length : meaningful.length;
+  }
+
+  let errors = 0;
+  if (errorsIdx !== -1) {
+    const section = lines.slice(errorsIdx + 1).filter(l => !SUMMARY_HEADER.test(l));
+    const items = section.filter(l => !ZERO_LINE.test(l));
+    errors = items.length > 0 ? countSectionItems(items) : 0;
+  } else {
+    errors = lines.filter(l => ERROR_LINE.test(l)).length;
+  }
+
+  if (failed && error) {errors += 1;}
+  return { findings, errors };
 }
 
 function dataService() {
@@ -163,17 +209,65 @@ export function startRun(runId: string, opts?: { bypassGate?: boolean }): Run | 
   return getStores().runs.getById(runId);
 }
 
+export function createRun(taskId: string, agentIdOrName?: string, opts?: { actor?: string }): Run {
+  const ds = dataService();
+  const task = ds.getTask(taskId) || ds.loadTasks().find(t => t.code === taskId);
+  if (!task) {throw new Error(`Task not found: ${taskId}`);}
+
+  const employees = getStores().employees.loadAll();
+  const byIdOrName = (id?: string): Employee | undefined =>
+    id ? employees.find(e => e.id === id || e.name === id) : undefined;
+
+  const agent = byIdOrName(agentIdOrName) || (task.agent ? byIdOrName(task.agent) : undefined);
+  if (!agent) {
+    throw new Error(`No agent assigned to task ${task.code}. Assign an agent first via sprintdesk_tasksAssign.`);
+  }
+
+  const gate = requireEmployeePermission('run:create', agent.id);
+  if (!gate.ok) {throw new Error(gate.error);}
+
+  if (agent.status === 'offline') {
+    throw new Error(`Agent ${agent.name} is offline and cannot take work`);
+  }
+
+  const now = new Date().toISOString();
+  const run: Run = {
+    id: `run_${Date.now()}`,
+    taskId: task.id,
+    agentId: agent.id,
+    status: 'queued',
+    attempts: (task.attempts || 0) + 1,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  getStores().runs.add(run);
+  ds.updateTask(task.id, { runId: run.id, attempts: run.attempts, agent: agent.id });
+
+  recordAudit({
+    actor: opts?.actor || 'queue',
+    action: 'run.create',
+    targetType: 'task',
+    targetId: task.id,
+    details: { runId: run.id, agentId: agent.id, agentName: agent.name, taskCode: task.code }
+  });
+
+  return run;
+}
+
 export function finishRun(runId: string, outcome: RunOutcome): Run | undefined {
   const run = getStores().runs.getById(runId);
   if (!run || run.status !== 'running') {return undefined;}
 
   const completed = outcome.status === 'completed';
   const now = new Date().toISOString();
+  const summary = summarizeRunOutput(outcome.result, outcome.error, !completed);
   getStores().runs.update(runId, {
     status: outcome.status,
     finishedAt: now,
     result: outcome.result,
     error: outcome.error,
+    summary,
     updatedAt: now
   });
 

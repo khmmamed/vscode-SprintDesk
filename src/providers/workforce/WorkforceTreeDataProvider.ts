@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
-import { Employee, EmployeeTeam } from '../../data/types';
+import { Employee, EmployeeTeam, Run, Task } from '../../data/types';
 import * as workforceService from '../../services/workforce/workforceService';
 import { getStores } from '../../data/stores';
+import { getDataService } from '../../data/DataService';
+import { getWorkspaceRoot } from '../../services/fileService';
+import type { WorkforceSection } from '../../commands/workforce/openWorkforceControlCenter';
 
 export class WorkforceItem extends vscode.TreeItem {
   constructor(
@@ -9,10 +12,26 @@ export class WorkforceItem extends vscode.TreeItem {
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly contextValue: string,
     public readonly employee?: Employee,
-    public readonly team?: EmployeeTeam
+    public readonly team?: EmployeeTeam,
+    public readonly run?: Run,
+    public readonly task?: Task,
+    public readonly section?: WorkforceSection,
+    icon?: string,
+    description?: string,
+    tooltip?: string
   ) {
     super(label, collapsibleState);
     this.contextValue = contextValue;
+    if (icon) {this.iconPath = new vscode.ThemeIcon(icon);}
+    if (description) {this.description = description;}
+    if (tooltip) {this.tooltip = tooltip;}
+    if (section) {
+      this.command = {
+        command: 'sprintdesk.openWorkforce',
+        title: 'Open Workforce Control Center',
+        arguments: [section]
+      };
+    }
 
     if (employee) {
       if (employee.role === 'agent') {
@@ -56,6 +75,34 @@ export class WorkforceItem extends vscode.TreeItem {
   }
 }
 
+function dataService() {
+  const ws = getWorkspaceRoot();
+  return ws ? getDataService(ws) : undefined;
+}
+
+function taskTitleFor(run: Run): string {
+  const ds = dataService();
+  const task = ds ? ds.getTask(run.taskId) : undefined;
+  return task?.title || run.taskId;
+}
+
+function runDescription(run: Run): string {
+  if (run.startedAt) {
+    return `${run.status} · started ${new Date(run.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  return run.status;
+}
+
+function runIcon(status: Run['status']): string {
+  switch (status) {
+    case 'running': return 'sync~spin';
+    case 'queued': return 'clock';
+    case 'completed': return 'check';
+    case 'failed': return 'error';
+    case 'cancelled': return 'circle-slash';
+  }
+}
+
 export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<WorkforceItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<WorkforceItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -70,18 +117,102 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
 
   getChildren(element?: WorkforceItem): Thenable<WorkforceItem[]> {
     if (!element) {
-      return Promise.resolve(this.buildTeamRows());
+      return Promise.resolve(this.buildNavRows());
     }
 
-    if (element.contextValue === 'workforceTeam') {
-      return Promise.resolve(this.buildMemberRows(element.team));
+    switch (element.contextValue) {
+      case 'workforceEmployees':
+        return Promise.resolve(this.buildTeamRows());
+      case 'workforceTeam':
+        return Promise.resolve(this.buildMemberRows(element.team));
+      case 'workforceUnassigned':
+        return Promise.resolve(this.buildMemberRows());
+      case 'workforceTasks':
+        return Promise.resolve(this.buildTaskRows());
+      case 'workforceRuns':
+        return Promise.resolve(this.buildRunRows());
+      default:
+        return Promise.resolve([]);
     }
+  }
 
-    if (element.contextValue === 'workforceUnassigned') {
-      return Promise.resolve(this.buildMemberRows());
-    }
+  private buildNavRows(): WorkforceItem[] {
+    const employees = workforceService.getWorkforce().employees;
+    const teams = workforceService.getWorkforce().teams;
+    const pendingApprovals = getStores().approvals.loadAll().filter(a => a.status === 'pending').length;
+    const schedules = getStores().schedules.loadAll().length;
+    const workflows = getStores().workflows.loadAll().length;
+    const running = getStores().runs.loadAll().filter(r => r.status === 'running').length;
+    const lastEvent = getStores().events.latest(1)[0];
+    const assignedTasks = this.assignedTaskCount();
 
-    return Promise.resolve([]);
+    return [
+      new WorkforceItem(
+        `Employees (${employees.length})`,
+        vscode.TreeItemCollapsibleState.Expanded,
+        'workforceEmployees',
+        undefined, undefined, undefined, undefined, undefined,
+        'organization',
+        teams.length > 0 ? `${teams.length} team(s)` : undefined
+      ),
+      new WorkforceItem(
+        `Tasks (${assignedTasks})`,
+        vscode.TreeItemCollapsibleState.Expanded,
+        'workforceTasks'
+      ),
+      new WorkforceItem(
+        `Runs (${running} running)`,
+        vscode.TreeItemCollapsibleState.Expanded,
+        'workforceRuns'
+      ),
+      new WorkforceItem(
+        `Approvals (${pendingApprovals})`,
+        vscode.TreeItemCollapsibleState.None,
+        'workforceApprovals',
+        undefined, undefined, undefined, undefined,
+        'approvals',
+        'checklist',
+        undefined,
+        'Manage approval gates and pending requests in the Control Center'
+      ),
+      new WorkforceItem(
+        `Schedules (${schedules})`,
+        vscode.TreeItemCollapsibleState.None,
+        'workforceSchedules',
+        undefined, undefined, undefined, undefined,
+        'schedules',
+        'calendar',
+        undefined,
+        'Manage schedules in the Control Center'
+      ),
+      new WorkforceItem(
+        `Workflows (${workflows})`,
+        vscode.TreeItemCollapsibleState.None,
+        'workforceWorkflows',
+        undefined, undefined, undefined, undefined,
+        'workflows',
+        'project',
+        undefined,
+        'Manage workflows in the Control Center'
+      ),
+      new WorkforceItem(
+        'Activity',
+        vscode.TreeItemCollapsibleState.None,
+        'workforceActivity',
+        undefined, undefined, undefined, undefined,
+        'activity',
+        'history',
+        lastEvent ? new Date(lastEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'no activity',
+        'Open the activity feed in the Control Center'
+      )
+    ];
+  }
+
+  private assignedTaskCount(): number {
+    const ds = dataService();
+    if (!ds) {return 0;}
+    const employeeIds = new Set(workforceService.getWorkforce().employees.map(e => e.id));
+    return ds.loadTasks().filter(t => Boolean(t.agent) && employeeIds.has(t.agent as string)).length;
   }
 
   private buildTeamRows(): WorkforceItem[] {
@@ -129,6 +260,60 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
         employee
       );
     }).filter((x): x is WorkforceItem => x !== null);
+  }
+
+  private buildTaskRows(): WorkforceItem[] {
+    const ds = dataService();
+    if (!ds) {return [];}
+    const employeeIds = new Set(workforceService.getWorkforce().employees.map(e => e.id));
+    const assigned = ds.loadTasks()
+      .filter(t => Boolean(t.agent) && employeeIds.has(t.agent as string))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+
+    if (assigned.length === 0) {
+      return [new WorkforceItem('No assigned tasks', vscode.TreeItemCollapsibleState.None, 'workforceEmpty')];
+    }
+
+    return assigned.map(t => new WorkforceItem(
+      t.title,
+      vscode.TreeItemCollapsibleState.None,
+      'workforceTask',
+      undefined,
+      undefined,
+      undefined,
+      t,
+      undefined,
+      'checklist',
+      `${t.code} · ${t.workStatus || t.status}${t.priority && t.priority !== 'medium' ? ` · ${t.priority}` : ''}`
+    ));
+  }
+
+  private buildRunRows(): WorkforceItem[] {
+    const runs = getStores().runs.loadAll()
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .slice(0, 30);
+
+    if (runs.length === 0) {
+      return [new WorkforceItem('No runs yet', vscode.TreeItemCollapsibleState.None, 'workforceEmpty')];
+    }
+
+    return runs.map(run => {
+      const employee = run.agentId ? getStores().employees.getById(run.agentId) : undefined;
+      const tooltip = run.error ? `${taskTitleFor(run)} - ${run.error}` : taskTitleFor(run);
+      return new WorkforceItem(
+        taskTitleFor(run),
+        vscode.TreeItemCollapsibleState.None,
+        'runItem',
+        undefined,
+        undefined,
+        run,
+        undefined,
+        undefined,
+        runIcon(run.status),
+        `${runDescription(run)}${employee ? ` · ${employee.name}` : ''}`,
+        tooltip
+      );
+    });
   }
 }
 

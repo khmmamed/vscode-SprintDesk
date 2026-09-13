@@ -1,56 +1,18 @@
 import { getStores } from '../../data/stores';
-import { Run } from '../../data/types';
 import { requireEmployeePermission } from '../../services/workforce/capabilityService';
 import * as queueService from '../../services/workforce/queueService';
-import { Handler, HandlerResult, res, getDs, findTask, resolveAgent, recordAudit } from './helpers';
+import { Handler, HandlerResult, res, getDs } from './helpers';
 
 async function handle_sprintdesk_runsCreate(args: any): Promise<HandlerResult> {
   const ds = getDs();
   if (!ds) return res('No workspace found', true);
 
-  const task = findTask(ds, args.taskId);
-  if (!task) return res(`Task not found: ${args.taskId}`, true);
-
-  const agent = resolveAgent(args.agentId) || (task.agent ? resolveAgent(task.agent) : undefined);
-  if (!agent) {
-    return res(
-      `No agent assigned to task ${task.code}. Assign an agent first via sprintdesk_tasksAssign.`,
-      true
-    );
+  try {
+    const run = queueService.createRun(args.taskId, args.agentId, { actor: 'mcp' });
+    return res(JSON.stringify(run, null, 2));
+  } catch (e: any) {
+    return res(e.message, true);
   }
-
-  const gate = requireEmployeePermission('run:create', agent.id);
-  if (!gate.ok) return res(gate.error, true);
-
-  if (agent.status === 'offline') {
-    return res(`Agent ${agent.name} is offline and cannot take work`, true);
-  }
-
-  const now = new Date().toISOString();
-  const run: Run = {
-    id: `run_${Date.now()}`,
-    taskId: task.id,
-    agentId: agent.id,
-    status: 'queued',
-    attempts: (task.attempts || 0) + 1,
-    createdAt: now,
-    updatedAt: now
-  };
-
-  getStores().runs.add(run);
-
-  const updates: any = { runId: run.id, attempts: run.attempts, agent: agent.id };
-  ds.updateTask(task.id, updates);
-
-  recordAudit({
-    actor: 'mcp',
-    action: 'run.create',
-    targetType: 'task',
-    targetId: task.id,
-    details: { runId: run.id, agentId: agent.id, agentName: agent.name, taskCode: task.code }
-  });
-
-  return res(JSON.stringify(run, null, 2));
 }
 
 async function handle_sprintdesk_runsList(args: any): Promise<HandlerResult> {

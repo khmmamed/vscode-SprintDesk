@@ -52,6 +52,14 @@ export interface Run {
   error?: string;
   createdAt: string;
   updatedAt: string;
+
+  // v0.10 structured outcome summary (additive, non-breaking)
+  summary?: RunSummary;
+}
+
+export interface RunSummary {
+  findings: number;
+  errors: number;
 }
 
 export interface EventRecord {
@@ -129,7 +137,7 @@ export const DEFAULT_POLICY: Policy = {
     developer: ['task:claim', 'run:create'],
     reviewer: ['task:assign', 'task:claim'],
     observer: [],
-    agent: ['run:create', 'run:update', 'task:claim', 'mcp:list', 'mcp:call'],
+    agent: ['run:create', 'run:update', 'run:cancel', 'task:claim', 'mcp:list', 'mcp:call'],
     human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure']
   },
   overrides: []
@@ -195,7 +203,7 @@ export interface Approval {
   decisionBy?: string;
 }
 
-export type WorkerMode = 'headless' | 'terminal' | 'noop';
+export type WorkerMode = 'headless' | 'terminal' | 'noop' | 'ollama';
 
 export interface QueueSettings {
   id: string;

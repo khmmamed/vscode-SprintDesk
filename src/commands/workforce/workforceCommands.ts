@@ -4,6 +4,7 @@ import * as workforceService from '../../services/workforce/workforceService';
 import * as queueService from '../../services/workforce/queueService';
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
+import { openWorkforceControlCenter } from './openWorkforceControlCenter';
 
 export function registerWorkforceCommands(context: vscode.ExtensionContext, provider: WorkforceTreeDataProvider): void {
   context.subscriptions.push(
@@ -161,12 +162,44 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
       provider.refresh();
     }),
 
+    vscode.commands.registerCommand('sprintdesk.createTaskForEmployee', async (item: WorkforceItem) => {
+      const employee = item?.employee || (await (async () => {
+        const agents = workforceService.getWorkforce().employees.filter(e => e.role === 'agent');
+        const picked = await vscode.window.showQuickPick(
+          agents.map(e => ({ label: e.name, description: `${e.status || 'idle'} · ${(e.capabilities || []).join(', ') || 'no capabilities'}`, employee: e })),
+          { placeHolder: 'Select an agent' }
+        );
+        return picked?.employee;
+      })());
+      if (!employee) return;
+      openWorkforceControlCenter('create-task', employee.id);
+    }),
+
+    vscode.commands.registerCommand('sprintdesk.cancelRun', async (item: WorkforceItem) => {
+      const run = item?.run;
+      if (!run) return;
+      const confirm = await vscode.window.showWarningMessage(
+        `Cancel run for "${item.label}"?`,
+        { modal: true },
+        'Cancel Run'
+      );
+      if (confirm !== 'Cancel Run') return;
+      try {
+        queueService.cancelRun(run.id);
+        provider.refresh();
+        vscode.window.showInformationMessage(`Run ${run.id} cancelled`);
+      } catch (e: any) {
+        vscode.window.showErrorMessage(e.message || String(e));
+      }
+    }),
+
     vscode.commands.registerCommand('sprintdesk.processQueue', async () => {
       const current = queueService.getQueueSettings().workerMode;
       const pick = await vscode.window.showQuickPick(
         [
           { label: 'Headless', description: 'Run agents as background processes (default)', value: 'headless' as const },
           { label: 'VS Code terminal', description: 'Run agents in the integrated terminal', value: 'terminal' as const },
+          { label: 'Ollama (LLM)', description: 'Execute the task via the employee model profile', value: 'ollama' as const },
           { label: 'Noop (dry-run)', description: 'Record runs as completed without a real agent', value: 'noop' as const }
         ],
         { placeHolder: `Worker mode for this pass (current: ${current})` }

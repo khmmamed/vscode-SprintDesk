@@ -265,6 +265,21 @@
         "command": "sprintdesk.processQueue",
         "title": "SprintDesk: Process Queue",
         "icon": "$(play)"
+      },
+      {
+        "command": "sprintdesk.openWorkforce",
+        "title": "SprintDesk: Open Workforce Control Center",
+        "icon": "$(window)"
+      },
+      {
+        "command": "sprintdesk.createTaskForEmployee",
+        "title": "SprintDesk: Create Task & Run",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.cancelRun",
+        "title": "SprintDesk: Cancel Run",
+        "icon": "$(close)"
       }
     ],
     "viewsContainers": {
@@ -382,6 +397,11 @@
           "group": "navigation@4"
         },
         {
+          "command": "sprintdesk.openWorkforce",
+          "when": "view == sprintdesk-workforce",
+          "group": "navigation@5"
+        },
+        {
           "command": "sprintdesk.getItemHistory",
           "when": "view == sprintdesk-history",
           "group": "navigation"
@@ -471,6 +491,11 @@
           "group": "inline@1"
         },
         {
+          "command": "sprintdesk.createTaskForEmployee",
+          "when": "view == sprintdesk-workforce && viewItem == employeeAgent",
+          "group": "inline@0"
+        },
+        {
           "command": "sprintdesk.setEmployeeStatus",
           "when": "view == sprintdesk-workforce && viewItem =~ /^employee/",
           "group": "inline@2"
@@ -484,6 +509,11 @@
           "command": "sprintdesk.setTeamLead",
           "when": "view == sprintdesk-workforce && viewItem == workforceTeam",
           "group": "inline@4"
+        },
+        {
+          "command": "sprintdesk.cancelRun",
+          "when": "view == sprintdesk-workforce && viewItem == runItem",
+          "group": "inline"
         },
         {
           "command": "sprintdesk.markTaskForReview",
