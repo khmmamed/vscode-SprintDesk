@@ -56,6 +56,30 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Tests: matching / non-matching / disabled / idempotent / re-entrancy / auto-wire via `emitEvent` / audit /
   missing-workflow failure / permission checks / update-toggle-delete. Version stays `0.9.0` during development.
 
+### v0.11 Slice 5 — Agent Validation / Review
+
+- **Agents validate; humans decide.** Every `Finding` now carries an orthogonal (non-breaking) agent-validation
+  dimension alongside the existing `pending | approved | rejected` human status:
+  `PENDING → AGENT REVIEW → VALIDATED → HUMAN REVIEW → APPROVED / REJECTED` with the full history on the record.
+- **Validation state without touching human status:** findings are added with `agentValidationState: 'requested'`
+  (`agentValidationRequestedAt`), and `findingsService.validateFinding` records `agentReview`
+  (`validatorId`/`validatorName`, `recommendation: recommend-approve | recommend-reject | request-revision`,
+  `confidence`, `reason`, `validatedAt`) and flips the state to `validated` — it never changes `status`, so an
+  agent can recommend but never silently approve. `requestAgentValidation` re-exposes a finding idempotently.
+- **Authorized validators only:** `finding:validate` permission granted to the `reviewer` role in `DEFAULT_POLICY`
+  (policy overrides keep working); unauthorized attempts throw and leave the finding untouched.
+- **Auditable + observable:** `finding.validation.requested` (on materialization) and `finding.validated` events join
+  the existing stream, and every validation writes an `finding.validated` audit entry (payload includes
+  recommendation/confidence/reason). Duplicate validation attempts are idempotent — no second event/audit.
+- **Control Center:** Finding cards show a review-state chip (agent review → `pending agent review/human review`),
+  the recommendation (colored), validator, confidence %, reason, and validation time; pending unvalidated findings
+  gain a **Validate** action with an inline form (validating-agent picker filtered to `finding:validate` holders,
+  recommendation, confidence, reason). The dashboard replaces "Findings N pending" with **Agent Review N** and
+  **Human Review N** counters; human Approve/Reject remains on every pending finding.
+- Tests: state entry on creation, authorized validator records within an unchanged `pending` status, unauthorized
+  blocked, persisted review, duplicate-safe validation, no human-approval bypass, idempotent re-request,
+  agent-vs-human review counts, plus events + audit assertions. Version stays `0.9.0` during development.
+
 ## [Unreleased] - v0.10 Workforce Control Center
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution

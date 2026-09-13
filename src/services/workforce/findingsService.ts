@@ -1,5 +1,5 @@
 import { getStores } from '../../data/stores';
-import { Employee, Finding, FindingSeverity, FindingStatus, Run, Task } from '../../data/types';
+import { Employee, Finding, FindingAgentReview, FindingRecommendation, FindingSeverity, FindingStatus, Run, Task } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
 import { emitEvent } from './events';
 
@@ -80,6 +80,8 @@ export function createFinding(input: CreateFindingInput): Finding {
     timestamp: now,
     severity,
     status: 'pending',
+    agentValidationState: 'requested',
+    agentValidationRequestedAt: now,
     ...(input.taskId ? { taskId: input.taskId } : {}),
     ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
     ...(input.category ? { category: input.category } : {}),
@@ -89,7 +91,8 @@ export function createFinding(input: CreateFindingInput): Finding {
     ...(input.evidence ? { evidence: input.evidence } : {})
   };
 
-  if (!getStores().findings.getById(finding.id)) {
+  const existing = getStores().findings.getById(finding.id);
+  if (!existing) {
     getStores().findings.add(finding);
     emitEvent('finding.created', 'findings', {
       findingId: finding.id,
@@ -98,6 +101,12 @@ export function createFinding(input: CreateFindingInput): Finding {
       agentId: input.agent,
       severity: finding.severity,
       status: finding.status
+    });
+    emitEvent('finding.validation.requested', 'findings', {
+      findingId: finding.id,
+      runId: input.runId,
+      taskId: input.taskId,
+      severity: finding.severity
     });
   }
 
@@ -178,6 +187,91 @@ export function updateStatus(findingId: string, decision: FindingDecision, actor
   return getStores().findings.getById(findingId);
 }
 
+export function requestAgentValidation(findingId: string): Finding | undefined {
+  const finding = getStores().findings.getById(findingId);
+  if (!finding || finding.status !== 'pending') {return undefined;}
+  if (finding.agentValidationState === 'requested') {return finding;}
+
+  const now = new Date().toISOString();
+  getStores().findings.update(findingId, {
+    agentValidationState: 'requested',
+    agentValidationRequestedAt: now
+  });
+
+  emitEvent('finding.validation.requested', 'findings', {
+    findingId,
+    runId: finding.source?.runId,
+    taskId: finding.taskId,
+    severity: finding.severity
+  });
+
+  return getStores().findings.getById(findingId);
+}
+
+export interface FindingValidationInput {
+  recommendation: FindingRecommendation;
+  confidence?: number;
+  reason?: string;
+}
+
+export function validateFinding(findingId: string, input: FindingValidationInput, validatorId?: string): Finding | undefined {
+  const finding = getStores().findings.getById(findingId);
+  if (!finding || finding.status !== 'pending') {return undefined;}
+
+  const gate = requireEmployeePermission('finding:validate', validatorId);
+  if (!gate.ok) {throw new Error(gate.error);}
+
+  // Idempotent: an already-validated finding is returned unchanged (no duplicate event/audit).
+  if (finding.agentReview) {return finding;}
+
+  const employee = validatorId ? getStores().employees.getById(validatorId) : undefined;
+  const now = new Date().toISOString();
+  const review: FindingAgentReview = {
+    validatorId: validatorId || 'system',
+    validatorName: employee?.name,
+    recommendation: input.recommendation,
+    ...(typeof input.confidence === 'number' && Number.isFinite(input.confidence)
+      ? { confidence: Math.min(1, Math.max(0, input.confidence)) }
+      : {}),
+    ...(typeof input.reason === 'string' && input.reason.trim() ? { reason: input.reason.trim() } : {}),
+    validatedAt: now
+  };
+
+  getStores().findings.update(findingId, {
+    agentValidationState: 'validated',
+    agentReview: review
+  });
+
+  emitEvent('finding.validated', 'findings', {
+    findingId,
+    runId: finding.source?.runId,
+    taskId: finding.taskId,
+    validatorId: review.validatorId,
+    recommendation: review.recommendation,
+    confidence: review.confidence,
+    reason: review.reason
+  });
+
+  getStores().audit.add({
+    id: `audit_${Date.now()}`,
+    actor: review.validatorId,
+    action: 'finding.validated',
+    targetType: 'finding',
+    targetId: findingId,
+    details: {
+      runId: finding.source?.runId,
+      taskId: finding.taskId,
+      severity: finding.severity,
+      recommendation: review.recommendation,
+      confidence: review.confidence,
+      reason: review.reason
+    },
+    timestamp: now
+  });
+
+  return getStores().findings.getById(findingId);
+}
+
 export function resolveEmployeeForRun(run: Run): Employee | undefined {
   return run.agentId ? getStores().employees.getById(run.agentId) : undefined;
 }
@@ -196,5 +290,25 @@ export function getFindingSummary(): FindingSummary {
     approved: total.filter(f => f.status === 'approved').length,
     rejected: total.filter(f => f.status === 'rejected').length,
     total: total.length
+  };
+}
+
+export interface FindingReviewCounts {
+  pending: number;
+  pendingAgentReview: number;
+  pendingHumanReview: number;
+  approved: number;
+  rejected: number;
+}
+
+export function getFindingReviewCounts(): FindingReviewCounts {
+  const all = getStores().findings.loadAll();
+  const pending = all.filter(f => f.status === 'pending');
+  return {
+    pending: pending.length,
+    pendingAgentReview: pending.filter(f => !f.agentReview).length,
+    pendingHumanReview: pending.filter(f => !!f.agentReview).length,
+    approved: all.filter(f => f.status === 'approved').length,
+    rejected: all.filter(f => f.status === 'rejected').length
   };
 }

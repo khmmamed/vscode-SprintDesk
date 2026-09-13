@@ -77,6 +77,15 @@ export interface FindingDto {
   taskId?: string;
   taskTitle?: string;
   category?: string;
+  agentValidationState?: 'requested' | 'validated';
+  agentReview?: {
+    validatorId: string;
+    validatorName?: string;
+    recommendation: 'recommend-approve' | 'recommend-reject' | 'request-revision';
+    confidence?: number;
+    reason?: string;
+    validatedAt: string;
+  };
 }
 
 export interface EventRuleDto {
@@ -194,7 +203,18 @@ function findingDtos(): FindingDto[] {
       runStatus: run?.status,
       taskId: f.taskId,
       taskTitle: task?.title || f.taskId,
-      category: f.category
+      category: f.category,
+      agentValidationState: f.agentValidationState,
+      agentReview: f.agentReview
+        ? {
+            validatorId: f.agentReview.validatorId,
+            validatorName: f.agentReview.validatorName,
+            recommendation: f.agentReview.recommendation,
+            confidence: f.agentReview.confidence,
+            reason: f.agentReview.reason,
+            validatedAt: f.agentReview.validatedAt
+          }
+        : undefined
     };
   });
 }
@@ -250,6 +270,7 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
   const counts = {
     pendingApprovals: getStores().approvals.loadAll().filter(a => a.status === 'pending').length,
     pendingFindings: findingsService.pendingFindingCount(),
+    ...findingsService.getFindingReviewCounts(),
     schedules: getStores().schedules.loadAll().length,
     workflows: getStores().workflows.loadAll().length,
     eventRules: getStores().eventRules.loadAll().length
@@ -418,6 +439,35 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         if (findingId && (decision === 'approved' || decision === 'rejected')) {
           try {
             const updated = findingsService.updateStatus(findingId, decision);
+            if (updated) {
+              newPanel.webview.postMessage({
+                command: 'FINDING_UPDATED',
+                payload: { finding: findingDtos().find(f => f.id === findingId) }
+              });
+            }
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        } else if (command === 'WORKFORCE_VALIDATE_FINDING') {
+        const findingId: string | undefined = message?.payload?.findingId;
+        const recommendation: string | undefined = message?.payload?.recommendation;
+        if (
+          findingId &&
+          (recommendation === 'recommend-approve' || recommendation === 'recommend-reject' || recommendation === 'request-revision')
+        ) {
+          const validatorId: string | undefined = message?.payload?.validatorId;
+          const confidence: number | undefined =
+            typeof message?.payload?.confidence === 'number' && Number.isFinite(message.payload.confidence)
+              ? message.payload.confidence
+              : undefined;
+          const reason: string | undefined = typeof message?.payload?.reason === 'string' ? message.payload.reason : undefined;
+          try {
+            const updated = findingsService.validateFinding(
+              findingId,
+              { recommendation, confidence, reason },
+              validatorId
+            );
             if (updated) {
               newPanel.webview.postMessage({
                 command: 'FINDING_UPDATED',

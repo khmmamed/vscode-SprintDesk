@@ -459,6 +459,158 @@ describe('findings (first-class workforce objects, v0.11)', () => {
   });
 });
 
+describe('agent validation & review (v0.11)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function materializeOne(result = 'Findings:\n- a claim\nErrors:\n0') {
+    const employee = seedAgent();
+    const task = makeTask({ type: 'feature' });
+    const run = makeRun(task.id, employee.id, { result });
+    return findingsService.materializeFindings(run.id)[0];
+  }
+
+  it('enters the agent-review state when a finding is created', () => {
+    const finding = materializeOne();
+    assert.strictEqual(finding.agentValidationState, 'requested');
+    assert.ok(finding.agentValidationRequestedAt);
+    assert.strictEqual(finding.status, 'pending');
+
+    const requested = getStores().events.findByType('finding.validation.requested');
+    assert.strictEqual(requested.length, 1);
+    assert.strictEqual(requested[0].payload.findingId, finding.id);
+  });
+
+  it('lets an authorized validator record a recommendation without deciding the finding', () => {
+    const finding = materializeOne();
+    const validator = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Review Bot' });
+
+    const validated = findingsService.validateFinding(
+      finding.id,
+      { recommendation: 'recommend-approve', confidence: 0.9, reason: 'matches scope' },
+      validator.id
+    );
+
+    assert.strictEqual(validated?.agentValidationState, 'validated');
+    assert.strictEqual(validated?.status, 'pending');
+    assert.strictEqual(validated?.agentReview?.validatorId, validator.id);
+    assert.strictEqual(validated?.agentReview?.validatorName, 'Review Bot');
+    assert.strictEqual(validated?.agentReview?.recommendation, 'recommend-approve');
+    assert.strictEqual(validated?.agentReview?.confidence, 0.9);
+    assert.strictEqual(validated?.agentReview?.reason, 'matches scope');
+    assert.ok(validated?.agentReview?.validatedAt);
+
+    const validatedEvents = getStores().events.findByType('finding.validated');
+    assert.strictEqual(validatedEvents.length, 1);
+    assert.strictEqual(validatedEvents[0].payload.validatorId, validator.id);
+
+    const audit = getStores().audit.loadAll().filter(a => a.action === 'finding.validated');
+    assert.strictEqual(audit.length, 1);
+    assert.strictEqual(audit[0].targetId, finding.id);
+  });
+
+  it('blocks validators without the finding:validate permission', () => {
+    const finding = materializeOne();
+    const observer = seedAgent({ role: 'human', teamRole: 'observer' });
+
+    assert.throws(
+      () => findingsService.validateFinding(finding.id, { recommendation: 'recommend-approve' }, observer.id),
+      /finding:validate/
+    );
+
+    const stored = getStores().findings.getById(finding.id);
+    assert.strictEqual(stored?.agentReview, undefined);
+    assert.strictEqual(stored?.agentValidationState, 'requested');
+    assert.strictEqual(getStores().events.findByType('finding.validated').length, 0);
+    assert.strictEqual(getStores().audit.loadAll().filter(a => a.action === 'finding.validated').length, 0);
+  });
+
+  it('persists the agent review on the finding record', () => {
+    const finding = materializeOne();
+    const validator = seedAgent({ role: 'agent', teamRole: 'reviewer' });
+
+    findingsService.validateFinding(
+      finding.id,
+      { recommendation: 'request-revision', confidence: 0.6, reason: 'needs evidence' },
+      validator.id
+    );
+
+    const reloaded = getStores().findings.getById(finding.id);
+    assert.strictEqual(reloaded?.agentValidationState, 'validated');
+    assert.strictEqual(reloaded?.agentReview?.recommendation, 'request-revision');
+    assert.strictEqual(reloaded?.agentReview?.confidence, 0.6);
+    assert.strictEqual(reloaded?.agentReview?.reason, 'needs evidence');
+  });
+
+  it('is idempotent for duplicate validation attempts', () => {
+    const finding = materializeOne();
+    const validator = seedAgent({ role: 'agent', teamRole: 'reviewer' });
+
+    findingsService.validateFinding(
+      finding.id,
+      { recommendation: 'recommend-reject', confidence: 0.8, reason: 'out of scope' },
+      validator.id
+    );
+    const again = findingsService.validateFinding(
+      finding.id,
+      { recommendation: 'recommend-approve', confidence: 0.1 },
+      validator.id
+    );
+
+    assert.strictEqual(again?.agentReview?.recommendation, 'recommend-reject');
+    assert.strictEqual(again?.agentReview?.reason, 'out of scope');
+    assert.strictEqual(getStores().events.findByType('finding.validated').length, 1);
+    assert.strictEqual(getStores().audit.loadAll().filter(a => a.action === 'finding.validated').length, 1);
+  });
+
+  it('never bypasses the human decision', () => {
+    const finding = materializeOne();
+    const validator = seedAgent({ role: 'agent', teamRole: 'reviewer' });
+    const reviewer = seedAgent({ role: 'human', teamRole: 'human' });
+
+    findingsService.validateFinding(finding.id, { recommendation: 'recommend-approve' }, validator.id);
+    const approved = findingsService.updateStatus(finding.id, 'approved', reviewer.id);
+
+    assert.strictEqual(approved?.status, 'approved');
+    assert.strictEqual(approved?.agentReview?.recommendation, 'recommend-approve');
+    assert.strictEqual(getStores().findings.getById(finding.id)?.status, 'approved');
+  });
+
+  it('requesting agent validation again is idempotent', () => {
+    const finding = materializeOne();
+    const again = findingsService.requestAgentValidation(finding.id);
+
+    assert.strictEqual(again?.agentValidationState, 'requested');
+    assert.strictEqual(getStores().events.findByType('finding.validation.requested').length, 1);
+  });
+
+  it('counts findings awaiting agent review vs human review', () => {
+    const a = materializeOne();
+    const b = materializeOne('Findings:\n- second claim\nErrors:\n0');
+    const validator = seedAgent({ role: 'agent', teamRole: 'reviewer' });
+
+    findingsService.validateFinding(a.id, { recommendation: 'recommend-approve' }, validator.id);
+
+    const counts = findingsService.getFindingReviewCounts();
+    assert.strictEqual(counts.pending, 2);
+    assert.strictEqual(counts.pendingAgentReview, 1);
+    assert.strictEqual(counts.pendingHumanReview, 1);
+  });
+});
+
 describe('applyConfigChange (agent model/configuration, v0.11)', () => {
   let ws: TestWorkspace;
 

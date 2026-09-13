@@ -55,6 +55,8 @@ interface OverviewDto {
 interface CountsDto {
   pendingApprovals: number;
   pendingFindings: number;
+  pendingAgentReview: number;
+  pendingHumanReview: number;
   schedules: number;
   workflows: number;
   eventRules: number;
@@ -111,6 +113,15 @@ interface FindingDto {
   taskId?: string;
   taskTitle?: string;
   category?: string;
+  agentValidationState?: "requested" | "validated";
+  agentReview?: {
+    validatorId: string;
+    validatorName?: string;
+    recommendation: "recommend-approve" | "recommend-reject" | "request-revision";
+    confidence?: number;
+    reason?: string;
+    validatedAt: string;
+  };
 }
 
 const EMPTY_OVERVIEW: OverviewDto = {
@@ -118,7 +129,7 @@ const EMPTY_OVERVIEW: OverviewDto = {
   employees: { total: 0, agents: 0, idle: 0, busy: 0, offline: 0 }
 };
 
-const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, schedules: 0, workflows: 0, eventRules: 0 };
+const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, pendingAgentReview: 0, pendingHumanReview: 0, schedules: 0, workflows: 0, eventRules: 0 };
 
 const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "employees", label: "Employees" },
@@ -179,6 +190,22 @@ function severityColor(severity: "low" | "medium" | "high"): string {
     case "high": return "#e53935";
     case "medium": return "#ffb74d";
     case "low": return "#4caf50";
+  }
+}
+
+function recommendationColor(recommendation: "recommend-approve" | "recommend-reject" | "request-revision"): string {
+  switch (recommendation) {
+    case "recommend-approve": return "#4caf50";
+    case "recommend-reject": return "#e53935";
+    case "request-revision": return "#ffb74d";
+  }
+}
+
+function recommendationLabel(recommendation: "recommend-approve" | "recommend-reject" | "request-revision"): string {
+  switch (recommendation) {
+    case "recommend-approve": return "recommend approve";
+    case "recommend-reject": return "recommend reject";
+    case "request-revision": return "request revision";
   }
 }
 
@@ -329,6 +356,15 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     workflowId: string;
   }>({ name: "", description: "", eventType: "", source: "", payloadKey: "", payloadValue: "", workflowId: "" });
 
+  const [validateFor, setValidateFor] = React.useState<FindingDto | null>(null);
+  const [validateError, setValidateError] = React.useState<string>("");
+  const [validateForm, setValidateForm] = React.useState<{
+    validatorId: string;
+    recommendation: string;
+    confidence: string;
+    reason: string;
+  }>({ validatorId: "", recommendation: "recommend-approve", confidence: "0.9", reason: "" });
+
   React.useEffect(() => {
     const handler = (event: MessageEvent) => {
       const { command, payload, error: messageError } = event.data || {};
@@ -361,6 +397,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         const finding: FindingDto | undefined = payload?.finding;
         if (finding) {
           setFindings(prev => [finding, ...(prev || []).filter(f => f.id !== finding.id)]);
+          if (finding.agentReview) setValidateFor(null);
         }
       } else if (command === "SET_WORKFORCE_OVERVIEW") {
         if (payload?.overview) setOverview(payload.overview);
@@ -385,6 +422,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setError(messageError);
           setConfigResult(messageError);
           setRuleError(messageError);
+          setValidateError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -425,6 +463,34 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
   const decideFinding = (findingId: string, decision: "approved" | "rejected"): void => {
     postRequest("WORKFORCE_DECIDE_FINDING", { findingId, decision });
+  };
+
+  const openValidate = (f: FindingDto): void => {
+    setValidateFor(f);
+    setValidateError("");
+    setValidateForm(prev => ({ ...prev, validatorId: prev.validatorId || (validators.length > 0 ? validators[0].id : "") }));
+  };
+
+  const closeValidate = (): void => {
+    setValidateFor(null);
+    setValidateError("");
+  };
+
+  const setValidateField = (field: keyof typeof validateForm, value: string): void => {
+    setValidateForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const submitValidate = (): void => {
+    if (!validateFor) return;
+    if (!validateForm.validatorId) {setValidateError("Select a validating agent"); return;}
+    setValidateError("");
+    postRequest("WORKFORCE_VALIDATE_FINDING", {
+      findingId: validateFor.id,
+      validatorId: validateForm.validatorId,
+      recommendation: validateForm.recommendation,
+      confidence: validateForm.confidence !== "" ? Number(validateForm.confidence) : undefined,
+      reason: validateForm.reason.trim() || undefined
+    });
   };
 
   const setRuleFormField = (field: keyof typeof ruleForm, value: string): void => {
@@ -520,6 +586,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   };
 
   const agents = employees.filter(e => e.role === "agent");
+  const validators = employees.filter(e => e.permissions.includes("finding:validate"));
   const runningCount = overview.runs.running;
 
   return (
@@ -537,7 +604,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         <span style={styles.stat}>Completed {overview.runs.completed}</span>
         <span style={styles.stat}>Failed {overview.runs.failed}</span>
         <span style={styles.stat}>Approvals {counts.pendingApprovals}</span>
-        <span style={styles.stat}>Findings {counts.pendingFindings} pending</span>
+        <span style={styles.stat}>Agent Review {counts.pendingAgentReview}</span>
+        <span style={styles.stat}>Human Review {counts.pendingHumanReview}</span>
         <span style={styles.stat}>Schedules {counts.schedules}</span>
         <span style={styles.stat}>Workflows {counts.workflows}</span>
         <span style={styles.stat}>Event Rules {counts.eventRules}</span>
@@ -779,10 +847,24 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 <span style={styles.name}>{f.title}</span>
                 <span style={{ ...styles.chip, color: severityColor(f.severity) }}>{f.severity}</span>
                 {f.confidence !== undefined && <span style={styles.chip}>{Math.round(f.confidence * 100)}%</span>}
+                {f.agentReview ? (
+                  <span style={{ ...styles.chip, color: recommendationColor(f.agentReview.recommendation) }}>
+                    {recommendationLabel(f.agentReview.recommendation)}
+                  </span>
+                ) : (
+                  <span style={styles.chip}>agent review</span>
+                )}
                 <span style={{ ...styles.statusChip, color: f.status === "approved" ? "#4caf50" : f.status === "rejected" ? "#e53935" : "#ffb74d" }}>
-                  {f.status}
+                  {f.status === "pending"
+                    ? f.agentReview
+                      ? "pending human review"
+                      : "pending agent review"
+                    : f.status}
                 </span>
                 <span style={{ flex: 1 }} />
+                {f.status === "pending" && !f.agentReview && (
+                  <button style={styles.button} onClick={() => openValidate(f)}>Validate</button>
+                )}
                 {f.status === "pending" && (
                   <>
                     <button style={styles.button} onClick={() => decideFinding(f.id, "approved")}>Approve</button>
@@ -796,6 +878,52 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 {f.taskTitle && <span style={styles.muted}> · Task: {f.taskTitle}</span>}
                 <span style={styles.muted}> · {formatTime(f.timestamp)}</span>
               </div>
+
+              {validateFor?.id === f.id && (
+                <div style={{ ...styles.card, marginTop: 10, padding: 10, background: "#101418" }}>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ ...styles.field, flex: 1 }}>
+                      <label style={styles.label}>Validating agent</label>
+                      <select style={styles.select} value={validateForm.validatorId} onChange={ev => setValidateField("validatorId", ev.target.value)}>
+                        {validators.length === 0 && <option value="">— no agent holds finding:validate —</option>}
+                        {validators.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ ...styles.field, flex: 1 }}>
+                      <label style={styles.label}>Recommendation</label>
+                      <select style={styles.select} value={validateForm.recommendation} onChange={ev => setValidateField("recommendation", ev.target.value)}>
+                        <option value="recommend-approve">Recommend approve</option>
+                        <option value="recommend-reject">Recommend reject</option>
+                        <option value="request-revision">Request revision</option>
+                      </select>
+                    </div>
+                    <div style={{ ...styles.field, flex: 1 }}>
+                      <label style={styles.label}>Confidence (0–1)</label>
+                      <input style={styles.input} value={validateForm.confidence} placeholder="0.9" onChange={ev => setValidateField("confidence", ev.target.value)} />
+                    </div>
+                  </div>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Reason (optional)</label>
+                    <input style={styles.input} value={validateForm.reason} onChange={ev => setValidateField("reason", ev.target.value)} />
+                  </div>
+                  {validateError && <div style={styles.error}>{validateError}</div>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={styles.button} onClick={submitValidate}>Record Validation</button>
+                    <button style={styles.buttonGhost} onClick={closeValidate}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {f.agentReview && (
+                <div style={{ marginTop: 6, fontSize: 12 }}>
+                  <span style={styles.muted}>
+                    Validated by {f.agentReview.validatorName || f.agentReview.validatorId}
+                    {f.agentReview.confidence !== undefined && ` · ${Math.round(f.agentReview.confidence * 100)}% confidence`}
+                    {f.agentReview.reason && ` · ${f.agentReview.reason}`}
+                    {` · ${formatTime(f.agentReview.validatedAt)}`}
+                  </span>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -72,6 +72,20 @@ export interface FindingSource {
   reference?: string;
 }
 
+// v0.11 agent validation & review (additive, non-breaking)
+export type FindingRecommendation = 'recommend-approve' | 'recommend-reject' | 'request-revision';
+
+export interface FindingAgentReview {
+  validatorId: string;
+  validatorName?: string;
+  recommendation: FindingRecommendation;
+  confidence?: number;
+  reason?: string;
+  validatedAt: string;
+}
+
+export type FindingAgentReviewState = 'requested' | 'validated';
+
 export interface Finding {
   id: string;
   title: string;
@@ -91,6 +105,11 @@ export interface Finding {
   taskId?: string;
   resolvedAt?: string;
   decisionBy?: string;
+
+  // v0.11 agent validation & review (additive, non-breaking)
+  agentValidationState?: FindingAgentReviewState;
+  agentValidationRequestedAt?: string;
+  agentReview?: FindingAgentReview;
 }
 
 export interface EventRecord {
@@ -166,7 +185,7 @@ export const DEFAULT_POLICY: Policy = {
   roles: {
     lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage'],
     developer: ['task:claim', 'run:create'],
-    reviewer: ['task:assign', 'task:claim'],
+    reviewer: ['task:assign', 'task:claim', 'finding:validate'],
     observer: [],
     agent: ['run:create', 'run:update', 'run:cancel', 'task:claim', 'mcp:list', 'mcp:call'],
     human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure', 'event-rule:manage']
