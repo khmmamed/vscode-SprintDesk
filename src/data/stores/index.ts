@@ -10,6 +10,7 @@ import { PolicyStore } from './PolicyStore';
 import { QueueSettingsStore } from './QueueSettingsStore';
 import { McpServerStore } from './McpServerStore';
 import { ApprovalStore } from './ApprovalStore';
+import { FindingStore } from './FindingStore';
 import { ScheduleStore } from './ScheduleStore';
 import { WorkflowStore } from './WorkflowStore';
 import {
@@ -31,6 +32,7 @@ export interface Stores {
   queue: QueueSettingsStore;
   mcpServers: McpServerStore;
   approvals: ApprovalStore;
+  findings: FindingStore;
   schedules: ScheduleStore;
   workflows: WorkflowStore;
 }
@@ -65,6 +67,7 @@ export function getStores(workspaceRoot?: string): Stores {
       queue: new QueueSettingsStore(root),
       mcpServers: new McpServerStore(root),
       approvals: new ApprovalStore(root),
+      findings: new FindingStore(root),
       schedules: new ScheduleStore(root),
       workflows: new WorkflowStore(root)
     };

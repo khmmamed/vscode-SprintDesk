@@ -3,6 +3,7 @@ import { getDataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
 import { AuditEntry, Employee, QueueSettings, Run, RunSummary, Task } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
+import * as findingsService from './findingsService';
 import { updateEmployee } from './workforceService';
 import { emitEvent } from './events';
 import { gateMode, requestApproval } from './gates';
@@ -305,6 +306,10 @@ export function finishRun(runId: string, outcome: RunOutcome): Run | undefined {
     status: outcome.status,
     ...(outcome.classification ? { classification: outcome.classification } : {})
   });
+
+  if (completed) {
+    findingsService.materializeFindings(run.id);
+  }
 
   return getStores().runs.getById(runId);
 }

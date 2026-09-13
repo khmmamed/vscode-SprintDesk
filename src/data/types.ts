@@ -62,6 +62,37 @@ export interface RunSummary {
   errors: number;
 }
 
+// v0.11 findings as a first-class workforce object (additive, non-breaking)
+export type FindingSeverity = 'low' | 'medium' | 'high';
+export type FindingStatus = 'pending' | 'approved' | 'rejected';
+
+export interface FindingSource {
+  runId: string;
+  type?: string;
+  reference?: string;
+}
+
+export interface Finding {
+  id: string;
+  title: string;
+  description?: string;
+  evidence?: string;
+  source: FindingSource;
+  agent: string;
+  agentName?: string;
+  timestamp: string;
+  severity: FindingSeverity;
+  confidence?: number;
+  category?: string;
+  suggestedTaskType?: Task['type'];
+  suggestedWorkflow?: string;
+  suggestedPriority?: Task['priority'];
+  status: FindingStatus;
+  taskId?: string;
+  resolvedAt?: string;
+  decisionBy?: string;
+}
+
 export interface EventRecord {
   id: string;
   type: string;
@@ -521,6 +552,10 @@ export const DEFAULT_AUTONOMY_LEVEL: AutonomyLevel = 1;
 
 export interface SchedulesData {
   schedules: ScheduleRecord[];
+}
+
+export interface FindingsData {
+  findings: Finding[];
 }
 
 export interface McpServersData {

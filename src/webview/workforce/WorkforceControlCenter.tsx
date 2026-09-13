@@ -6,6 +6,7 @@ type WorkforceSection =
   | "employees"
   | "tasks"
   | "runs"
+  | "findings"
   | "approvals"
   | "schedules"
   | "workflows"
@@ -13,6 +14,7 @@ type WorkforceSection =
   | "create-task";
 
 type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+type FindingStatus = "pending" | "approved" | "rejected";
 type WorkerMode = "headless" | "terminal" | "noop" | "ollama";
 
 interface RunDto {
@@ -49,8 +51,25 @@ interface OverviewDto {
 
 interface CountsDto {
   pendingApprovals: number;
+  pendingFindings: number;
   schedules: number;
   workflows: number;
+}
+
+interface FindingDto {
+  id: string;
+  title: string;
+  severity: "low" | "medium" | "high";
+  confidence?: number;
+  status: FindingStatus;
+  agentId: string;
+  agentName: string;
+  timestamp: string;
+  runId: string;
+  runStatus?: RunStatus;
+  taskId?: string;
+  taskTitle?: string;
+  category?: string;
 }
 
 const EMPTY_OVERVIEW: OverviewDto = {
@@ -58,12 +77,13 @@ const EMPTY_OVERVIEW: OverviewDto = {
   employees: { total: 0, agents: 0, idle: 0, busy: 0, offline: 0 }
 };
 
-const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, schedules: 0, workflows: 0 };
+const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, schedules: 0, workflows: 0 };
 
 const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "employees", label: "Employees" },
   { key: "tasks", label: "Tasks" },
   { key: "runs", label: "Runs" },
+  { key: "findings", label: "Findings" },
   { key: "approvals", label: "Approvals" },
   { key: "schedules", label: "Schedules" },
   { key: "workflows", label: "Workflows" },
@@ -109,6 +129,14 @@ function statusColor(status: RunStatus): string {
     case "completed": return "#4caf50";
     case "failed": return "#e53935";
     case "cancelled": return "#9e9e9e";
+  }
+}
+
+function severityColor(severity: "low" | "medium" | "high"): string {
+  switch (severity) {
+    case "high": return "#e53935";
+    case "medium": return "#ffb74d";
+    case "low": return "#4caf50";
   }
 }
 
@@ -216,6 +244,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [tab, setTab] = React.useState<WorkforceSection>("employees");
   const [runs, setRuns] = React.useState<RunDto[]>([]);
   const [employees, setEmployees] = React.useState<EmployeeDto[]>([]);
+  const [findings, setFindings] = React.useState<FindingDto[]>([]);
   const [overview, setOverview] = React.useState<OverviewDto>(EMPTY_OVERVIEW);
   const [counts, setCounts] = React.useState<CountsDto>(EMPTY_COUNTS);
 
@@ -235,7 +264,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
   React.useEffect(() => {
     const handler = (event: MessageEvent) => {
-      const { command, payload } = event.data || {};
+      const { command, payload, error: messageError } = event.data || {};
       if (command === "SET_WORKFORCE_INIT") {
         if (payload?.section) setTab(payload.section);
         if (payload?.focusAgentId) {
@@ -246,6 +275,13 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         setRuns(payload || []);
       } else if (command === "SET_WORKFORCE_EMPLOYEES") {
         setEmployees(payload || []);
+      } else if (command === "SET_WORKFORCE_FINDINGS") {
+        setFindings(payload || []);
+      } else if (command === "FINDING_UPDATED") {
+        const finding: FindingDto | undefined = payload?.finding;
+        if (finding) {
+          setFindings(prev => [finding, ...(prev || []).filter(f => f.id !== finding.id)]);
+        }
       } else if (command === "SET_WORKFORCE_OVERVIEW") {
         if (payload?.overview) setOverview(payload.overview);
       } else if (command === "SET_WORKFORCE_COUNTS") {
@@ -261,12 +297,12 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") setBusy("done");
         }
       } else if (command === "WORKFORCE_RESPONSE") {
-        if (payload?.error) {
-          setError(payload.error);
+        if (messageError) {
+          setError(messageError);
           setBusy("error");
-        } else if (payload?.payload) {
-          setOutcome(payload.payload);
-          setBusy(payload.payload?.ran ? "done" : "idle");
+        } else if (payload) {
+          setOutcome(payload);
+          setBusy(payload?.ran ? "done" : "idle");
           setError("");
         }
       }
@@ -299,6 +335,10 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     postRequest("WORKFORCE_CANCEL_RUN", { runId });
   };
 
+  const decideFinding = (findingId: string, decision: "approved" | "rejected"): void => {
+    postRequest("WORKFORCE_DECIDE_FINDING", { findingId, decision });
+  };
+
   const startCreateForAgent = (agentId: string): void => {
     setForm(prev => ({ ...prev, agentId }));
     setTab("create-task");
@@ -322,6 +362,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         <span style={styles.stat}>Completed {overview.runs.completed}</span>
         <span style={styles.stat}>Failed {overview.runs.failed}</span>
         <span style={styles.stat}>Approvals {counts.pendingApprovals}</span>
+        <span style={styles.stat}>Findings {counts.pendingFindings} pending</span>
         <span style={styles.stat}>Schedules {counts.schedules}</span>
         <span style={styles.stat}>Workflows {counts.workflows}</span>
       </div>
@@ -482,6 +523,39 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                   {!run.result && !run.error && <div>No output captured.</div>}
                 </div>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "findings" && (
+        <div>
+          {findings.length === 0 && (
+            <div style={styles.empty}>No findings yet. Findings are captured from the Findings section of completed run output.</div>
+          )}
+          {findings.map(f => (
+            <div key={f.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{f.title}</span>
+                <span style={{ ...styles.chip, color: severityColor(f.severity) }}>{f.severity}</span>
+                {f.confidence !== undefined && <span style={styles.chip}>{Math.round(f.confidence * 100)}%</span>}
+                <span style={{ ...styles.statusChip, color: f.status === "approved" ? "#4caf50" : f.status === "rejected" ? "#e53935" : "#ffb74d" }}>
+                  {f.status}
+                </span>
+                <span style={{ flex: 1 }} />
+                {f.status === "pending" && (
+                  <>
+                    <button style={styles.button} onClick={() => decideFinding(f.id, "approved")}>Approve</button>
+                    <button style={styles.buttonGhost} onClick={() => decideFinding(f.id, "rejected")}>Reject</button>
+                  </>
+                )}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={styles.muted}>Agent: {f.agentName}</span>
+                {f.category && <span style={styles.muted}> · {f.category}</span>}
+                {f.taskTitle && <span style={styles.muted}> · Task: {f.taskTitle}</span>}
+                <span style={styles.muted}> · {formatTime(f.timestamp)}</span>
+              </div>
             </div>
           ))}
         </div>

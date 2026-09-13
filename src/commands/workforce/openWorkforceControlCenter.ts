@@ -6,14 +6,16 @@ import * as queueService from '../../services/workforce/queueService';
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
 import { getActivitySummary } from '../../services/workforce/observability';
+import * as findingsService from '../../services/workforce/findingsService';
 import { getDataService } from '../../data/DataService';
-import { Employee, Run, Task, WorkerMode } from '../../data/types';
+import { Employee, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
   | 'employees'
   | 'tasks'
   | 'runs'
+  | 'findings'
   | 'approvals'
   | 'schedules'
   | 'workflows'
@@ -55,6 +57,22 @@ export interface TaskDto {
   workStatus?: string;
   priority?: string;
   agent?: string;
+}
+
+export interface FindingDto {
+  id: string;
+  title: string;
+  severity: Finding['severity'];
+  confidence?: number;
+  status: FindingStatus;
+  agentId: string;
+  agentName: string;
+  timestamp: string;
+  runId: string;
+  runStatus?: Run['status'];
+  taskId?: string;
+  taskTitle?: string;
+  category?: string;
 }
 
 let panel: vscode.WebviewPanel | undefined;
@@ -121,6 +139,29 @@ function taskDtos(): TaskDto[] {
   }));
 }
 
+function findingDtos(): FindingDto[] {
+  const ds = dataService();
+  return findingsService.allFindings(200).map(f => {
+    const run = f.source?.runId ? getStores().runs.getById(f.source.runId) : undefined;
+    const task = f.taskId && ds ? ds.getTask(f.taskId) : undefined;
+    return {
+      id: f.id,
+      title: f.title,
+      severity: f.severity,
+      confidence: f.confidence,
+      status: f.status,
+      agentId: f.agent,
+      agentName: f.agentName || f.agent,
+      timestamp: f.timestamp,
+      runId: f.source?.runId || '',
+      runStatus: run?.status,
+      taskId: f.taskId,
+      taskTitle: task?.title || f.taskId,
+      category: f.category
+    };
+  });
+}
+
 function pushRun(panelRef: vscode.WebviewPanel, run: Run): void {
   const message = { command: 'RUN_UPDATED', payload: { run: getRunDto(run) } };
   try {
@@ -134,6 +175,7 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
   const overview = getActivitySummary();
   const counts = {
     pendingApprovals: getStores().approvals.loadAll().filter(a => a.status === 'pending').length,
+    pendingFindings: findingsService.pendingFindingCount(),
     schedules: getStores().schedules.loadAll().length,
     workflows: getStores().workflows.loadAll().length
   };
@@ -143,6 +185,7 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EMPLOYEES', payload: employeeDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_TASKS', payload: taskDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_RUNS', payload: allRunDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_FINDINGS', payload: findingDtos() });
   } catch {
     // panel may be disposed mid-flight
   }
@@ -286,6 +329,24 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
           try {
             const cancelled = queueService.cancelRun(runId);
             if (cancelled) {pushRun(newPanel, cancelled);}
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_DECIDE_FINDING') {
+        const findingId: string | undefined = message?.payload?.findingId;
+        const decision: string | undefined = message?.payload?.decision;
+        if (findingId && (decision === 'approved' || decision === 'rejected')) {
+          try {
+            const updated = findingsService.updateStatus(findingId, decision);
+            if (updated) {
+              newPanel.webview.postMessage({
+                command: 'FINDING_UPDATED',
+                payload: { finding: findingDtos().find(f => f.id === findingId) }
+              });
+            }
           } catch (error) {
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
           }

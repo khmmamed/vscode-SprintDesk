@@ -140,6 +140,7 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     const employees = workforceService.getWorkforce().employees;
     const teams = workforceService.getWorkforce().teams;
     const pendingApprovals = getStores().approvals.loadAll().filter(a => a.status === 'pending').length;
+    const pendingFindings = getStores().findings.pending().length;
     const schedules = getStores().schedules.loadAll().length;
     const workflows = getStores().workflows.loadAll().length;
     const running = getStores().runs.loadAll().filter(r => r.status === 'running').length;
@@ -164,6 +165,16 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
         `Runs (${running} running)`,
         vscode.TreeItemCollapsibleState.Expanded,
         'workforceRuns'
+      ),
+      new WorkforceItem(
+        `Findings (${pendingFindings})`,
+        vscode.TreeItemCollapsibleState.None,
+        'workforceFindings',
+        undefined, undefined, undefined, undefined,
+        'findings',
+        'search',
+        undefined,
+        'Review workforce findings in the Control Center'
       ),
       new WorkforceItem(
         `Approvals (${pendingApprovals})`,

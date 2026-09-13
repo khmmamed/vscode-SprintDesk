@@ -4,6 +4,24 @@ All notable changes to the "vscode-SprintDesk" extension will be documented in t
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased] - v0.11 Findings & Human Validation
+
+### v0.11 Slice 2 — Findings as first-class objects
+
+- **First-class `Finding`:** new `Finding` type (title, description, evidence, structured `source {runId, type, reference}`,
+  severity/confidence/category, suggested task/workflow/priority, `pending → approved | rejected` lifecycle)
+  persisted to `.SprintDesk/workforce/findings.yml` via `FindingStore`.
+- **Materialization from runs:** `finishRun` captures the `Findings:` section of completed run output into real
+  `Finding` records attributed to the run + agent; deterministic identity (`runId` + normalized bullet hash) makes
+  re-materialization idempotent even if bullets reorder.
+- **Human validation:** `findingsService.updateStatus` approves/rejects pending findings under the existing
+  `approval:review` permission (no new authorization concept); emits `finding.created` / `finding.resolved` events.
+- **Control Center:** new `Findings` tab (severity/confidence chips, Approve / Reject) + `Findings (N)` tree nav row
+  with pending count; dashboard strip shows pending findings. No separate tree provider — unified architecture.
+- **Hardening:** Control Center `WORKFORCE_RESPONSE` now surfaces backend errors/success correctly (previously the
+  payload/error were read from the wrong nesting level).
+- Architecture: `docs/v0.11-upcomming.md`. Version stays `0.9.0` during development.
+
 ## [Unreleased] - v0.10 Workforce Control Center
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution

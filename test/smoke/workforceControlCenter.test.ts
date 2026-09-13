@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { makeEmployee, makeTask, makeRun, makeWorkspace, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
 import * as queueService from '../../src/services/workforce/queueService';
+import * as findingsService from '../../src/services/workforce/findingsService';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
 import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/services/workforce/worker/worker';
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
@@ -335,6 +336,120 @@ describe('resolveRunnableState gate (configuration per mode)', () => {
   it('allows noop runs when agentConfig is present', () => {
     const employee = makeEmployee({ agentConfig: makeAgentConfig() });
     assert.deepStrictEqual(resolveRunnableState(employee, 'noop'), { ok: true });
+  });
+});
+
+describe('findings (first-class workforce objects, v0.11)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  it('extracts bullets and severities from a Findings section', () => {
+    const bullets = findingsService.extractFindingBullets(
+      ['Findings:', '- [high] candidate announcement', '- scheduled event', '3. poll results', 'Errors:', '- some failure'].join('\n')
+    );
+    assert.deepStrictEqual(bullets, [
+      { title: 'candidate announcement', severity: 'high' },
+      { title: 'scheduled event', severity: 'medium' },
+      { title: 'poll results', severity: 'medium' }
+    ]);
+  });
+
+  it('returns nothing when there is no Findings section', () => {
+    assert.deepStrictEqual(findingsService.extractFindingBullets('- alpha\n- beta'), []);
+  });
+
+  it('materializes pending findings attributed to the run and agent', () => {
+    const employee = seedAgent({ name: 'Morocco News Agent' });
+    const task = makeTask({ type: 'feature' });
+    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- a\n- b\nErrors:\n0' });
+
+    const created = findingsService.materializeFindings(run.id);
+    assert.strictEqual(created.length, 2);
+
+    const stored = findingsService.allFindings();
+    assert.strictEqual(stored.length, 2);
+    assert.ok(stored.every(f => f.status === 'pending'));
+    assert.ok(stored.every(f => f.source.runId === run.id));
+    assert.ok(stored.every(f => f.agent === employee.id && f.agentName === 'Morocco News Agent'));
+    assert.ok(stored.every(f => f.taskId === task.id));
+  });
+
+  it('does not duplicate findings when re-materializing with reordered bullets', () => {
+    const employee = seedAgent();
+    const task = makeTask({ type: 'feature' });
+    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- alpha\n- beta\n- gamma\nErrors:\n0' });
+
+    findingsService.materializeFindings(run.id);
+    assert.strictEqual(findingsService.allFindings().length, 3);
+
+    getStores().runs.update(run.id, { result: 'Findings:\n- gamma\n- alpha\n- beta\nErrors:\n0' });
+    findingsService.materializeFindings(run.id);
+    assert.strictEqual(findingsService.allFindings().length, 3);
+  });
+
+  it('materializes findings when a run finishes through finishRun', () => {
+    const employee = seedAgent({ agentConfig: makeAgentConfig() });
+    const task = makeTask({ type: 'feature' });
+    const run = makeRun(task.id, employee.id);
+
+    queueService.startRun(run.id);
+    queueService.finishRun(run.id, { status: 'completed', result: 'Findings:\n- verified claim\nErrors:\n0' });
+
+    const stored = findingsService.allFindings();
+    assert.strictEqual(stored.length, 1);
+    assert.strictEqual(stored[0].title, 'verified claim');
+    assert.strictEqual(stored[0].source.runId, run.id);
+
+    const createdEvents = getStores().events.findByType('finding.created');
+    assert.strictEqual(createdEvents.length, 1);
+    assert.strictEqual(createdEvents[0].payload.runId, run.id);
+  });
+
+  it('approves and rejects pending findings and emits finding.resolved only once', () => {
+    const employee = seedAgent();
+    const task = makeTask({ type: 'feature' });
+    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- a\nErrors:\n0' });
+
+    const [finding] = findingsService.materializeFindings(run.id);
+    assert.strictEqual(finding.status, 'pending');
+
+    const approved = findingsService.updateStatus(finding.id, 'approved');
+    assert.strictEqual(approved?.status, 'approved');
+    assert.ok(approved?.resolvedAt);
+    assert.strictEqual(findingsService.updateStatus(finding.id, 'rejected'), undefined);
+
+    const resolvedEvents = getStores().events.findByType('finding.resolved');
+    assert.strictEqual(resolvedEvents.length, 1);
+    assert.strictEqual(resolvedEvents[0].payload.status, 'approved');
+  });
+
+  it('blocks approval decisions for actors without approval:review permission', () => {
+    const observer = seedAgent({ role: 'human', teamRole: 'observer' });
+    const employee = seedAgent();
+    const task = makeTask({ type: 'feature' });
+    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- a\nErrors:\n0' });
+    const [finding] = findingsService.materializeFindings(run.id);
+
+    assert.throws(() => findingsService.updateStatus(finding.id, 'approved', observer.id), /approval:review/);
+    assert.strictEqual(getStores().findings.getById(finding.id)?.status, 'pending');
+
+    const reviewer = seedAgent({ role: 'human', teamRole: 'human' });
+    const rejected = findingsService.updateStatus(finding.id, 'rejected', reviewer.id);
+    assert.strictEqual(rejected?.status, 'rejected');
+    assert.strictEqual(rejected?.decisionBy, reviewer.id);
   });
 });
 
