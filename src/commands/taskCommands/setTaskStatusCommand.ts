@@ -74,7 +74,7 @@ export function registerSetTaskStatusCommand(context: vscode.ExtensionContext) {
         return;
       }
 
-      const memberId = task.assignee;
+      const memberId = taskService.getTaskAssignee(task);
       
       taskService.setTaskStatus(task.id, status as any);
       

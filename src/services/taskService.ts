@@ -166,6 +166,10 @@ export function setTaskStatus(taskId: string, status: Task['status']): void {
   getTaskService().updateTask(taskId, { status });
 }
 
+export function getTaskAssignee(task: Task): string | undefined {
+  return task.agent ?? task.assignee;
+}
+
 export function startTask(taskId: string): void {
   setTaskStatus(taskId, 'in-progress');
 }
