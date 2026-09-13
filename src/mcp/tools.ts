@@ -354,6 +354,63 @@ export const AGENT_TOOLS = [
   },
 ];
 
+export const TEAM_TOOLS = [
+  {
+    name: 'sprintdesk_listTeam',
+    description: 'List team members (from .SprintDesk/teams)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sprintdesk_syncTeamFromGit',
+    description: 'Sync team members from git contributors',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sprintdesk_addTeamMember',
+    description: 'Add a team member (does not automatically create a workforce employee)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Member name' },
+        email: { type: 'string', description: 'Member email' },
+        role: { type: 'string', enum: ['lead', 'developer', 'reviewer', 'observer', 'agent'], description: 'Team role (default developer)' },
+        avatar: { type: 'string', description: 'Optional avatar url' },
+        agentConfig: { type: 'object', description: 'Optional agent configuration (tool/model/command)' },
+      },
+      required: ['name', 'email'],
+    },
+  },
+  {
+    name: 'sprintdesk_removeTeamMember',
+    description: 'Remove a team member by id or email',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'Member id' },
+        email: { type: 'string', description: 'Member email' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_runAgent',
+    description: 'Run a team agent interactively against a task (legacy terminal/git flow)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        agentId: { type: 'string', description: 'Agent id' },
+        taskCode: { type: 'string', description: 'Task code' },
+      },
+      required: ['agentId', 'taskCode'],
+    },
+  },
+];
+
 export const TASK_WORK_TOOLS = [
   {
     name: 'sprintdesk_tasksClaim',
@@ -534,6 +591,37 @@ export const EVENT_TOOLS = [
   },
 ];
 
+export const HISTORY_TOOLS = [
+  {
+    name: 'sprintdesk_getHistory',
+    description: 'Get change history for an item, or all recent history',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        itemId: { type: 'string', description: 'Item ID filter' },
+        itemType: { type: 'string', enum: ['task', 'epic', 'backlog', 'sprint'], description: 'Item type filter' },
+        limit: { type: 'number', description: 'Max entries to return' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_trackChange',
+    description: 'Record a change-history entry',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        itemId: { type: 'string', description: 'Item ID' },
+        itemType: { type: 'string', enum: ['task', 'epic', 'backlog', 'sprint'], description: 'Item type' },
+        action: { type: 'string', enum: ['create', 'update', 'delete', 'move', 'assign'], description: 'Change action' },
+        field: { type: 'string', description: 'Optional changed field' },
+        oldValue: { type: 'string', description: 'Optional previous value' },
+        newValue: { type: 'string', description: 'Optional new value' },
+      },
+      required: ['itemId', 'itemType', 'action'],
+    },
+  },
+];
+
 export const AUDIT_TOOLS = [
   {
     name: 'sprintdesk_auditList',
@@ -618,11 +706,13 @@ export const ALL_TOOLS = [
   ...SPRINT_TOOLS,
   ...BACKLOG_TOOLS,
   ...MOVE_TOOLS,
+  ...TEAM_TOOLS,
   ...AGENT_TOOLS,
   ...TASK_WORK_TOOLS,
   ...RUN_TOOLS,
   ...QUEUE_TOOLS,
   ...EVENT_TOOLS,
+  ...HISTORY_TOOLS,
   ...AUDIT_TOOLS,
   ...CONTEXT_TOOLS,
   ...WORKFORCE_TOOLS,

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { handleRequest } from './core';
 import { ALL_TOOLS } from './tools';
+import { buildMcpManifest } from './manifest';
 
 export interface McpHttpTransportOptions {
   port?: number;
@@ -45,6 +46,11 @@ export function createMcpHttpTransport(options: McpHttpTransportOptions = {}): h
 
     if (req.method === 'GET' && url === '/tools') {
       sendJson(res, 200, { tools: ALL_TOOLS.map(t => t.name) });
+      return;
+    }
+
+    if (req.method === 'GET' && url === '/manifest') {
+      sendJson(res, 200, buildMcpManifest());
       return;
     }
 

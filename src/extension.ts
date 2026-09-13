@@ -61,6 +61,7 @@ import { createTask as createTaskService } from "./services/taskService";
 import { setHost, setFileSystem } from './host';
 import { VSCodeHost } from './host/VSCodeHost';
 import { NodeFileSystem } from './host/NodeFileSystem';
+import { buildMcpManifest } from './mcp/manifest';
 
 const createTask = async (repoPath?: string): Promise<void> => {
   const ws = repoPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -561,40 +562,7 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
 
 // Ensure MCP files exist
     const mcpManifestPath = path.join(sdPath, 'mcp', 'manifest.json');
-    const mcpManifest = {
-      name: 'sprintdesk-mcp',
-      version: '1.1.0',
-      description: 'MCP server for SprintDesk task management - exposes CRUD, query, workflow, run, and workforce operations for AI agents',
-      author: 'SprintDesk',
-      repository: 'https://github.com/khmmamed/vscode-SprintDesk',
-      homepage: 'https://github.com/khmmamed/vscode-SprintDesk',
-      capabilities: { tools: true, resources: false },
-      connection: {
-        http: { url: 'http://localhost:3847/mcp', methods: ['POST'] },
-        stdio: { command: 'npm run mcp', cwd: '<workspace-root>' }
-      },
-      tools: {
-        task: ['sprintdesk_createTask', 'sprintdesk_getTask', 'sprintdesk_updateTask', 'sprintdesk_deleteTask', 'sprintdesk_listTasks', 'sprintdesk_searchTasks'],
-        workflow: ['sprintdesk_tasksClaim', 'sprintdesk_tasksComplete', 'sprintdesk_tasksAssign', 'sprintdesk_tasksUnassign', 'sprintdesk_tasksAutoAssign'],
-        epic: ['sprintdesk_createEpic', 'sprintdesk_getEpic', 'sprintdesk_updateEpic', 'sprintdesk_deleteEpic', 'sprintdesk_listEpics', 'sprintdesk_getTasksByEpic', 'sprintdesk_addTaskToEpic'],
-        sprint: ['sprintdesk_createSprint', 'sprintdesk_getSprint', 'sprintdesk_updateSprint', 'sprintdesk_deleteSprint', 'sprintdesk_listSprints', 'sprintdesk_getTasksBySprint', 'sprintdesk_addTaskToSprint'],
-        backlog: ['sprintdesk_createBacklog', 'sprintdesk_getBacklog', 'sprintdesk_listBacklogs', 'sprintdesk_addTaskToBacklog'],
-        move: ['sprintdesk_moveTaskToEpic', 'sprintdesk_moveTaskToSprint', 'sprintdesk_moveTaskToBacklog'],
-        team: ['sprintdesk_listTeam', 'sprintdesk_syncTeamFromGit', 'sprintdesk_addTeamMember', 'sprintdesk_removeTeamMember', 'sprintdesk_runAgent'],
-        workforce: ['sprintdesk_agentsList', 'sprintdesk_agentsGet', 'sprintdesk_skillsList', 'sprintdesk_skillsUpsert', 'sprintdesk_policyGet', 'sprintdesk_recommendEmployees'],
-        run: ['sprintdesk_runsCreate', 'sprintdesk_runsList', 'sprintdesk_runsGet', 'sprintdesk_runsCancel', 'sprintdesk_runsUpdate'],
-        queue: ['sprintdesk_queueGet', 'sprintdesk_queueProcess'],
-        event: ['sprintdesk_eventsPublish', 'sprintdesk_eventsList'],
-        audit: ['sprintdesk_auditList'],
-        context: ['sprintdesk_projectContext'],
-        history: ['sprintdesk_getHistory', 'sprintdesk_trackChange']
-      },
-      usage: {
-        http_curl: "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}'",
-        http_call: "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_listTasks\",\"arguments\":{}}}'",
-        stdio: 'cd <workspace> && npm run mcp'
-      }
-    };
+    const mcpManifest = buildMcpManifest();
     fs.writeFileSync(mcpManifestPath, JSON.stringify(mcpManifest, null, 2), 'utf8');
 
     const mcpReadmePath = path.join(sdPath, 'mcp', 'README.md');
