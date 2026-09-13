@@ -518,3 +518,95 @@ export interface SchedulesData {
 export interface McpServersData {
   servers: McpServerConfig[];
 }
+
+// v0.9 workflow builder DSL (additive, non-breaking) -------------------------
+export type WorkflowStepType = 'task' | 'loop' | 'tool' | 'condition';
+
+export interface WorkflowBaseStep {
+  id: string;
+  name?: string;
+  continueOnError?: boolean;
+}
+
+export interface WorkflowTaskStep extends WorkflowBaseStep {
+  type: 'task';
+  title: string;
+  taskType: Task['type'];
+  priority: Task['priority'];
+  backlog?: string;
+  requiredSkills?: string[];
+}
+
+export interface WorkflowLoopStep extends WorkflowBaseStep {
+  type: 'loop';
+  maxIterations: number;
+  iterateVar: string;
+  body: WorkflowStep[];
+}
+
+export interface WorkflowToolStep extends WorkflowBaseStep {
+  type: 'tool';
+  serverId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  agent: string;
+}
+
+export type WorkflowConditionType = 'always' | 'never' | 'step-status';
+
+export interface WorkflowStepStatusCondition {
+  type: 'step-status';
+  stepId: string;
+  expectedStatus: 'completed' | 'failed';
+}
+
+export interface WorkflowStaticCondition {
+  type: 'always' | 'never';
+}
+
+export type WorkflowCondition = WorkflowStepStatusCondition | WorkflowStaticCondition;
+
+export interface WorkflowConditionStep extends WorkflowBaseStep {
+  type: 'condition';
+  when: WorkflowCondition;
+  then: WorkflowStep[];
+  else?: WorkflowStep[];
+}
+
+export type WorkflowStep =
+  | WorkflowTaskStep
+  | WorkflowLoopStep
+  | WorkflowToolStep
+  | WorkflowConditionStep;
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+  steps: WorkflowStep[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowStepResult {
+  stepId: string;
+  status: 'completed' | 'failed' | 'skipped';
+  outputs: Record<string, unknown>;
+  error?: string;
+}
+
+export type WorkflowRunStatus = 'completed' | 'failed';
+
+export interface WorkflowRunResult {
+  workflowId: string;
+  name: string;
+  executedAt: string;
+  status: WorkflowRunStatus;
+  stepResults: WorkflowStepResult[];
+  error?: string;
+}
+
+export interface WorkflowsData {
+  workflows: WorkflowDefinition[];
+}
