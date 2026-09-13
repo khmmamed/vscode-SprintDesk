@@ -131,12 +131,14 @@ export const DEFAULT_POLICY: Policy = {
   overrides: []
 };
 
+export type WorkerMode = 'headless' | 'terminal' | 'noop';
+
 export interface QueueSettings {
   id: string;
   enabled: boolean;
   maxConcurrentRuns: number;
   autoAssignUnassigned: boolean;
-  workerMode: 'headless' | 'terminal' | 'noop';
+  workerMode: WorkerMode;
   pollIntervalMs: number;
 }
 

@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as crypto from 'crypto';
-import { TeamMember, AgentConfig, Task, AgentRole } from '../data/types';
+import { TeamMember, Task } from '../data/types';
 import { getDataService } from '../data/DataService';
 import { getWorkspaceRoot } from '../services/fileService';
 import * as taskService from '../services/taskService';
+import { buildAgentCommand, sanitizeBranchName } from './workforce/worker/commandBuilder';
 
 export interface AgentRunResult {
   success: boolean;
@@ -29,7 +27,7 @@ async function execCommand(command: string, cwd: string): Promise<{ stdout: stri
 
 export async function getTasksAssignedToAgent(agent: TeamMember): Promise<Task[]> {
   const wsRoot = getWorkspaceRoot();
-  if (!wsRoot) return [];
+  if (!wsRoot) {return [];}
 
   const dataService = getDataService(wsRoot);
   const tasks = dataService.loadTasks();
@@ -59,69 +57,9 @@ export async function pickTaskForAgent(agent: TeamMember): Promise<Task | undefi
   return selected?.task;
 }
 
-function sanitizeBranchName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-}
-
-function getRoleFilePath(agentName: string): string {
-  const wsRoot = getWorkspaceRoot();
-  if (!wsRoot) return '';
-  return path.join(wsRoot, '.SprintDesk', 'teams', `${agentName}.json`);
-}
-
-function loadAgentRole(agentName: string): AgentRole | undefined {
-  const rolePath = getRoleFilePath(agentName);
-  if (!rolePath || !fs.existsSync(rolePath)) return undefined;
-  
-  try {
-    const content = fs.readFileSync(rolePath, 'utf8');
-    return JSON.parse(content);
-  } catch {
-    return undefined;
-  }
-}
-
-function buildAgentCommand(config: AgentConfig, taskPath: string, taskDescription: string, taskTitle: string, agentName: string): { command: string; args: string[] } {
-  const taskDir = taskPath && taskPath !== 'undefined' ? path.dirname(taskPath) : process.cwd();
-  const taskFile = path.basename(taskPath);
-  const roleFile = getRoleFilePath(agentName);
-  
-  const role = loadAgentRole(agentName);
-  const roleDescription = role?.role || '';
-  const defaultTemplate = "Read your role from {roleFile} and work on task {taskFile}";
-  const template = role?.promptTemplate || defaultTemplate;
-  
-  const fullPrompt = `[${roleDescription}] Read role from ${roleFile} and work on task ${taskPath}`;
-
-  switch (config.tool) {
-    case 'opencode': {
-      return { command: 'opencode', args: ['-s', '--prompt', fullPrompt] };
-    }
-    case 'ollama': {
-      const model = config.model || role?.model || 'llama3';
-      const prompt = `Role: ${roleDescription}\n\nTask: ${taskTitle}\nWork in: ${taskDir}`;
-      return { command: 'ollama', args: ['run', model, prompt] };
-    }
-    case 'claude-code': {
-      return { command: 'claude', args: ['code', '--task', taskPath] };
-    }
-    case 'custom': {
-      const cmd = (config.command || role?.command || '')
-        .replace(/\{task_path\}/g, taskPath)
-        .replace(/\{task_dir\}/g, taskDir)
-        .replace(/\{task_file\}/g, taskFile)
-        .replace(/\{description\}/g, fullPrompt);
-      const parts = cmd.split(' ');
-      return { command: parts[0], args: parts.slice(1) };
-    }
-    default:
-      return { command: '', args: [] };
-  }
-}
-
 async function getCurrentBranch(): Promise<string> {
   const wsRoot = getWorkspaceRoot();
-  if (!wsRoot) return '';
+  if (!wsRoot) {return '';}
   
   try {
     const { execSync } = require('child_process');
@@ -133,7 +71,7 @@ async function getCurrentBranch(): Promise<string> {
 
 async function checkoutBranch(branchName: string): Promise<boolean> {
   const wsRoot = getWorkspaceRoot();
-  if (!wsRoot) return false;
+  if (!wsRoot) {return false;}
 
   const { stdout } = await execCommand(`git checkout -b ${branchName}`, wsRoot);
   return stdout.includes(branchName) || stdout.includes('Switched to new branch');
@@ -141,7 +79,7 @@ async function checkoutBranch(branchName: string): Promise<boolean> {
 
 async function commitChanges(message: string): Promise<string | undefined> {
   const wsRoot = getWorkspaceRoot();
-  if (!wsRoot) return undefined;
+  if (!wsRoot) {return undefined;}
 
   try {
     await execCommand('git add -A', wsRoot);
@@ -156,7 +94,7 @@ async function commitChanges(message: string): Promise<string | undefined> {
 
 async function createPullRequest(title: string, body?: string): Promise<string | undefined> {
   const wsRoot = getWorkspaceRoot();
-  if (!wsRoot) return undefined;
+  if (!wsRoot) {return undefined;}
 
   try {
     const currentBranch = await getCurrentBranch();
