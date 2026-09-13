@@ -124,11 +124,11 @@ export interface Policy {
 
 export const DEFAULT_POLICY: Policy = {
   roles: {
-    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel'],
+    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call'],
     developer: ['task:claim', 'run:create'],
     reviewer: ['task:assign', 'task:claim'],
     observer: [],
-    agent: ['run:create', 'run:update', 'task:claim'],
+    agent: ['run:create', 'run:update', 'task:claim', 'mcp:list', 'mcp:call'],
     human: ['task:assign', 'task:claim']
   },
   overrides: []
@@ -326,6 +326,24 @@ export interface EmployeeModelProfile {
   };
 }
 
+// v0.7 MCP server registrations (additive, non-breaking)
+export type McpServerKind = 'stdio' | 'http';
+
+export interface McpServerConfig {
+  id: string;
+  kind: McpServerKind;
+  name?: string;
+  description?: string;
+  enabled: boolean;
+  url?: string;
+  command?: string;
+  args?: string[];
+  headersRef?: string;
+  timeoutMs?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TeamMember {
   id: string;
   name: string;
@@ -386,4 +404,8 @@ export interface EmployeeTeamsData {
 
 export interface SkillsData {
   skills: Skill[];
+}
+
+export interface McpServersData {
+  servers: McpServerConfig[];
 }

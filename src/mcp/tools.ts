@@ -700,6 +700,107 @@ export const WORKFORCE_TOOLS = [
   },
 ];
 
+export const MCP_TOOLS = [
+  {
+    name: 'sprintdesk_mcpServersList',
+    description: 'List registered MCP servers',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sprintdesk_mcpServersAdd',
+    description: 'Register an MCP server (stdio or http)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'Unique server id (also used in mcp.<id>.<tool> capability ids)' },
+        kind: { type: 'string', enum: ['stdio', 'http'], description: 'Transport kind' },
+        name: { type: 'string', description: 'Display name' },
+        description: { type: 'string', description: 'Description' },
+        url: { type: 'string', description: 'HTTP endpoint for kind=http' },
+        command: { type: 'string', description: 'Command for kind=stdio' },
+        args: { type: 'array', items: { type: 'string' }, description: 'Arguments for kind=stdio' },
+        headersRef: { type: 'string', description: 'Credential ref (env:.. or secret:..) resolving to JSON headers' },
+        timeoutMs: { type: 'number', description: 'Request timeout in ms' },
+        enabled: { type: 'boolean', description: 'Enabled flag (default true)' },
+      },
+      required: ['id', 'kind'],
+    },
+  },
+  {
+    name: 'sprintdesk_mcpServersUpdate',
+    description: 'Update a registered MCP server',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'Server id' },
+        kind: { type: 'string', enum: ['stdio', 'http'] },
+        name: { type: 'string' },
+        description: { type: 'string' },
+        url: { type: 'string' },
+        command: { type: 'string' },
+        args: { type: 'array', items: { type: 'string' } },
+        headersRef: { type: 'string' },
+        timeoutMs: { type: 'number' },
+        enabled: { type: 'boolean' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'sprintdesk_mcpServersRemove',
+    description: 'Remove a registered MCP server',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'Server id' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'sprintdesk_mcpToolsList',
+    description: 'List tools exposed by an MCP server (requires mcp:list permission and mcp.<server>.list capability for the acting employee)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        serverId: { type: 'string', description: 'MCP server id' },
+        agent: { type: 'string', description: 'Acting employee id or name' },
+      },
+      required: ['serverId'],
+    },
+  },
+  {
+    name: 'sprintdesk_mcpCheck',
+    description: 'Dry-run safety check for a future MCP tool call (capability + permission + server state)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        serverId: { type: 'string', description: 'MCP server id' },
+        toolName: { type: 'string', description: 'Tool to check' },
+        agent: { type: 'string', description: 'Acting employee id or name' },
+      },
+      required: ['serverId', 'toolName'],
+    },
+  },
+  {
+    name: 'sprintdesk_mcpCall',
+    description: 'Invoke a tool on an MCP server through the safety chain (agent capability + employee permission)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        serverId: { type: 'string', description: 'MCP server id' },
+        toolName: { type: 'string', description: 'Tool name' },
+        toolArgs: { type: 'object', description: 'Tool arguments' },
+        agent: { type: 'string', description: 'Acting employee id or name' },
+      },
+      required: ['serverId', 'toolName'],
+    },
+  },
+];
+
 export const ALL_TOOLS = [
   ...TASK_TOOLS,
   ...EPIC_TOOLS,
@@ -716,6 +817,7 @@ export const ALL_TOOLS = [
   ...AUDIT_TOOLS,
   ...CONTEXT_TOOLS,
   ...WORKFORCE_TOOLS,
+  ...MCP_TOOLS,
 ];
 
 export function getToolByName(name: string) {

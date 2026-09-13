@@ -8,6 +8,7 @@ import { EmployeeTeamStore } from './EmployeeTeamStore';
 import { SkillStore } from './SkillStore';
 import { PolicyStore } from './PolicyStore';
 import { QueueSettingsStore } from './QueueSettingsStore';
+import { McpServerStore } from './McpServerStore';
 import {
   ProjectMcpManifest,
   defaultProjectMcpManifest,
@@ -25,6 +26,7 @@ export interface Stores {
   skills: SkillStore;
   policy: PolicyStore;
   queue: QueueSettingsStore;
+  mcpServers: McpServerStore;
 }
 
 export interface ProjectMcpFacade {
@@ -54,7 +56,8 @@ export function getStores(workspaceRoot?: string): Stores {
       teams: new EmployeeTeamStore(root),
       skills: new SkillStore(root),
       policy: new PolicyStore(root),
-      queue: new QueueSettingsStore(root)
+      queue: new QueueSettingsStore(root),
+      mcpServers: new McpServerStore(root)
     };
     activeStoresRoot = root;
   }
