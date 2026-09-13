@@ -475,6 +475,46 @@ export interface SkillsData {
   skills: Skill[];
 }
 
+export type AutonomyLevel = 0 | 1 | 2 | 3;
+
+// v0.8 scheduler semantics (additive, non-breaking)
+export type ScheduleKind = 'cron' | 'interval';
+
+export interface ScheduleTaskTemplate {
+  name: string;
+  title?: string;
+  type: Task['type'];
+  priority: Task['priority'];
+  backlog?: string;
+  epicName?: string;
+}
+
+export interface ScheduleRecord {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: ScheduleKind;
+  autonomyLevel: AutonomyLevel;
+  taskTemplate: ScheduleTaskTemplate;
+
+  // cron schedules (kind === 'cron') - 5-field deterministic expression
+  cron?: string;
+  // interval schedules (kind === 'interval')
+  intervalMs?: number;
+
+  lastRunAt?: string;
+  lastOccurrenceKey?: string;
+  runCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const DEFAULT_AUTONOMY_LEVEL: AutonomyLevel = 1;
+
+export interface SchedulesData {
+  schedules: ScheduleRecord[];
+}
+
 export interface McpServersData {
   servers: McpServerConfig[];
 }

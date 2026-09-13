@@ -10,6 +10,7 @@ import { PolicyStore } from './PolicyStore';
 import { QueueSettingsStore } from './QueueSettingsStore';
 import { McpServerStore } from './McpServerStore';
 import { ApprovalStore } from './ApprovalStore';
+import { ScheduleStore } from './ScheduleStore';
 import {
   ProjectMcpManifest,
   defaultProjectMcpManifest,
@@ -29,6 +30,7 @@ export interface Stores {
   queue: QueueSettingsStore;
   mcpServers: McpServerStore;
   approvals: ApprovalStore;
+  schedules: ScheduleStore;
 }
 
 export interface ProjectMcpFacade {
@@ -60,7 +62,8 @@ export function getStores(workspaceRoot?: string): Stores {
       policy: new PolicyStore(root),
       queue: new QueueSettingsStore(root),
       mcpServers: new McpServerStore(root),
-      approvals: new ApprovalStore(root)
+      approvals: new ApprovalStore(root),
+      schedules: new ScheduleStore(root)
     };
     activeStoresRoot = root;
   }
