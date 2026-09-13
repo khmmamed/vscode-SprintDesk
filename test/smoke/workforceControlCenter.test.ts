@@ -7,6 +7,7 @@ import * as workforceService from '../../src/services/workforce/workforceService
 import * as approvals from '../../src/services/workforce/approvals';
 import * as eventRulesService from '../../src/services/workforce/eventRulesService';
 import { emitEvent } from '../../src/services/workforce/events';
+import { getRunsByFilter, runDetail, getQueueSnapshot, getActivitySummary } from '../../src/services/workforce/observability';
 import { getDataService } from '../../src/data/DataService';
 import { EventRecord, WorkflowDefinition } from '../../src/data/types';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
@@ -905,6 +906,210 @@ describe('event rules (async automation, v0.11)', () => {
     const deleted = eventRulesService.deleteEventRule(rule.id);
     assert.strictEqual(deleted, true);
     assert.strictEqual(getStores().eventRules.getById(rule.id), undefined);
+  });
+});
+
+describe('operational execution & queue visibility (v0.11)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  it('lists runs and filters by status', () => {
+    const agent = seedAgent();
+    const task = makeTask({ type: 'feature' });
+
+    const run = queueService.createRun(task.id, agent.id);
+    queueService.startRun(run.id);
+    queueService.finishRun(run.id, { status: 'completed', result: 'done\nErrors:\n0' });
+    queueService.createRun(task.id, agent.id);
+
+    assert.strictEqual(getRunsByFilter('all').length, 2);
+    assert.strictEqual(getRunsByFilter('queued').length, 1);
+    assert.strictEqual(getRunsByFilter('running').length, 0);
+    assert.strictEqual(getRunsByFilter('completed').length, 1);
+    assert.strictEqual(getRunsByFilter('all')[0].status, 'queued');
+    assert.strictEqual(getRunsByFilter('all')[0].taskId, task.id);
+  });
+
+  it('classifies queued runs in retry backoff as retrying', () => {
+    const agent = seedAgent();
+    const task = makeTask();
+    makeRun(task.id, agent.id, { status: 'queued', availableAt: new Date(Date.now() + 60000).toISOString() });
+
+    assert.strictEqual(getRunsByFilter('retrying').length, 1);
+    assert.strictEqual(getRunsByFilter('queued').length, 0);
+
+    getStores().runs.update(getRunsByFilter('retrying')[0].id, { availableAt: new Date(Date.now() - 1000).toISOString() });
+    assert.strictEqual(getRunsByFilter('retrying').length, 0);
+    assert.strictEqual(getRunsByFilter('queued').length, 1);
+  });
+
+  it('processes the queue to claim queued runs', () => {
+    const agent = seedAgent();
+    const task = makeTask();
+    const run = queueService.createRun(task.id, agent.id);
+
+    const result = queueService.processQueue({ dryRun: false });
+    assert.strictEqual(result.claims.length, 1);
+    assert.strictEqual(result.started.length, 1);
+    assert.strictEqual(result.skipped.length, 0);
+    assert.strictEqual(getStores().runs.getById(run.id)?.status, 'running');
+
+    const second = queueService.processQueue({ dryRun: false });
+    assert.strictEqual(second.claims.length, 0);
+    assert.strictEqual(second.started.length, 0);
+  });
+
+  it('builds a queue snapshot with run counts and worker occupancy', () => {
+    const alpha = seedAgent({ name: 'Alpha' });
+    const beta = seedAgent({ name: 'Beta' });
+    const task = makeTask();
+
+    const r1 = queueService.createRun(task.id, alpha.id);
+    queueService.startRun(r1.id);
+    queueService.createRun(task.id, alpha.id);
+
+    const r3 = queueService.createRun(task.id, beta.id);
+    queueService.startRun(r3.id);
+    queueService.finishRun(r3.id, { status: 'failed', error: 'boom', classification: 'exit-nonzero' });
+
+    const snap = getQueueSnapshot();
+    assert.strictEqual(snap.runs.queued, 1);
+    assert.strictEqual(snap.runs.running, 1);
+    assert.strictEqual(snap.runs.failed, 1);
+    assert.strictEqual(snap.allocated, 1);
+    assert.strictEqual(snap.busyEmployees, 1);
+    assert.strictEqual(snap.workerMode, queueService.getQueueSettings().workerMode);
+  });
+
+  it('reports run detail with task, agent, duration and linked findings', () => {
+    const agent = seedAgent({ name: 'News Bot', agentConfig: makeAgentConfig() });
+    const task = makeTask({ type: 'feature' });
+    const run = makeRun(task.id, agent.id, {
+      status: 'running',
+      startedAt: new Date(Date.now() - 5000).toISOString()
+    });
+
+    queueService.finishRun(run.id, { status: 'completed', result: 'Findings:\n- claim one\n- claim two\nErrors:\n0' });
+
+    const detail = runDetail(getStores().runs.getById(run.id)!);
+    assert.strictEqual(detail.task?.title, task.title);
+    assert.strictEqual(detail.task?.code, task.code);
+    assert.strictEqual(detail.employee?.id, agent.id);
+    assert.ok(detail.durationMs !== undefined && detail.durationMs >= 4900);
+    assert.strictEqual(detail.findings.length, 2);
+    assert.strictEqual(detail.findings[0].agentValidationState, 'requested');
+    assert.ok(detail.findings.every(f => f.source?.runId === run.id));
+  });
+
+  it('reports the run → finding → validation chain', () => {
+    const agent = seedAgent();
+    const task = makeTask();
+    const run = makeRun(task.id, agent.id, { status: 'running', startedAt: new Date().toISOString() });
+    queueService.finishRun(run.id, { status: 'completed', result: 'Findings:\n- risky claim\nErrors:\n0' });
+
+    const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Reviewer' });
+    const detail = runDetail(getStores().runs.getById(run.id)!);
+    assert.strictEqual(detail.findings.length, 1);
+    assert.strictEqual(detail.findings[0].agentValidationState, 'requested');
+
+    findingsService.validateFinding(detail.findings[0].id, { recommendation: 'recommend-approve', confidence: 0.85 }, reviewer.id);
+
+    const after = runDetail(getStores().runs.getById(run.id)!);
+    assert.strictEqual(after.findings[0].agentReview?.validatorId, reviewer.id);
+    assert.strictEqual(after.findings[0].agentReview?.recommendation, 'recommend-approve');
+    assert.strictEqual(after.findings[0].status, 'pending');
+  });
+
+  it('reports the run → workflow → event rule trigger chain', () => {
+    const agent = seedAgent();
+    const task = makeTask();
+    getDataService(ws.root).updateTask(task.id, { source: 'workflow', workflow: 'triage-wf' });
+    const run = makeRun(task.id, agent.id, { status: 'queued' });
+    getStores().eventRules.add({
+      id: 'rule_1',
+      name: 'Triage merged PRs',
+      enabled: true,
+      matcher: { eventType: 'pull_request.merged', source: 'github' },
+      workflowId: 'wf_triage',
+      workflowName: 'triage-wf',
+      runCount: 1,
+      recentTriggers: [
+        {
+          eventId: 'evt_1',
+          eventType: 'pull_request.merged',
+          workflowId: 'wf_triage',
+          status: 'completed',
+          createdAt: new Date().toISOString(),
+          createdTaskIds: [task.id]
+        }
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const detail = runDetail(run);
+    assert.strictEqual(detail.task?.source, 'workflow');
+    assert.strictEqual(detail.task?.workflow, 'triage-wf');
+    assert.strictEqual(detail.trigger?.ruleName, 'Triage merged PRs');
+    assert.strictEqual(detail.trigger?.eventType, 'pull_request.merged');
+  });
+
+  it('handles retry and cancel via queue operations with permission checks', () => {
+    const agent = seedAgent();
+    const task = makeTask();
+    const failed = queueService.createRun(task.id, agent.id);
+    queueService.startRun(failed.id);
+    queueService.finishRun(failed.id, { status: 'failed', error: 'boom', classification: 'exit-nonzero' });
+
+    const observer = seedAgent({ role: 'human', teamRole: 'observer', name: 'Observer' });
+    const pending = queueService.createRun(task.id, agent.id);
+    assert.throws(() => queueService.cancelRun(pending.id, observer.id), /run:cancel/);
+    queueService.cancelRun(pending.id, agent.id);
+    assert.strictEqual(getStores().runs.getById(pending.id)?.status, 'cancelled');
+
+    const retried = queueService.createRun(failed.taskId, failed.agentId);
+    assert.strictEqual(retried.status, 'queued');
+    assert.strictEqual(retried.attempts, 3);
+    assert.strictEqual(getRunsByFilter('cancelled').length, 1);
+  });
+
+  it('reflects run state changes across snapshots and Control Center counters', () => {
+    const agent = seedAgent();
+    const task = makeTask();
+    const run = queueService.createRun(task.id, agent.id);
+
+    assert.strictEqual(getQueueSnapshot().runs.queued, 1);
+    queueService.startRun(run.id);
+    assert.strictEqual(getQueueSnapshot().runs.running, 1);
+    assert.strictEqual(getQueueSnapshot().busyEmployees, 1);
+
+    queueService.finishRun(run.id, { status: 'completed', result: 'Findings:\n- claim one\nErrors:\n0' });
+    const snap = getQueueSnapshot();
+    assert.strictEqual(snap.runs.completed, 1);
+    assert.strictEqual(snap.runs.running, 0);
+    assert.strictEqual(snap.busyEmployees, 0);
+    assert.strictEqual(getActivitySummary().runs.completed, 1);
+
+    assert.strictEqual(findingsService.getFindingReviewCounts().pendingAgentReview, 1);
+    const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Reviewer' });
+    const [finding] = findingsService.allFindings();
+    assert.ok(finding, 'finding materialized from run output');
+    findingsService.validateFinding(finding.id, { recommendation: 'recommend-approve' }, reviewer.id);
+    assert.strictEqual(findingsService.getFindingReviewCounts().pendingAgentReview, 0);
+    assert.strictEqual(findingsService.getFindingReviewCounts().pendingHumanReview, 1);
   });
 });
 

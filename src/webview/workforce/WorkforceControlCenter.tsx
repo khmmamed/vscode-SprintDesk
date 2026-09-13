@@ -15,6 +15,8 @@ type WorkforceSection =
   | "create-task";
 
 type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+type RunFilter = RunStatus | "retrying" | "all";
+type FindingFilter = "all" | "agent" | "human" | "approved" | "rejected";
 type FindingStatus = "pending" | "approved" | "rejected";
 type WorkerMode = "headless" | "terminal" | "noop" | "ollama";
 type RuleTriggerStatus = "completed" | "failed";
@@ -24,16 +26,36 @@ interface RunDto {
   taskId: string;
   taskTitle: string;
   taskCode: string;
+  taskSource?: string;
+  taskWorkflow?: string;
+  trigger?: { ruleId: string; ruleName: string; eventType: string };
   agentName: string;
   agentId?: string;
   status: RunStatus;
   attempts: number;
+  availableAt?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
+  durationMs?: number;
   result?: string;
   error?: string;
   summary?: { findings: number; errors: number };
+  mode?: WorkerMode;
+  model?: string;
+}
+
+interface QueueDto {
+  asOf: string;
+  runs: { queued: number; running: number; completed: number; failed: number; cancelled: number };
+  waitingRetry: number;
+  multiAttempt: number;
+  workerMode: WorkerMode;
+  maxConcurrentRuns: number;
+  allocated: number;
+  busyEmployees: number;
+  idleAgents: number;
+  offlineAgents: number;
 }
 
 interface EmployeeDto {
@@ -129,6 +151,19 @@ const EMPTY_OVERVIEW: OverviewDto = {
   employees: { total: 0, agents: 0, idle: 0, busy: 0, offline: 0 }
 };
 
+const EMPTY_QUEUE: QueueDto = {
+  asOf: "",
+  runs: { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0 },
+  waitingRetry: 0,
+  multiAttempt: 0,
+  workerMode: "headless",
+  maxConcurrentRuns: 0,
+  allocated: 0,
+  busyEmployees: 0,
+  idleAgents: 0,
+  offlineAgents: 0
+};
+
 const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, pendingAgentReview: 0, pendingHumanReview: 0, schedules: 0, workflows: 0, eventRules: 0 };
 
 const TABS: Array<{ key: WorkforceSection; label: string }> = [
@@ -153,6 +188,24 @@ const MODES: Array<{ value: WorkerMode; label: string; hint: string }> = [
 
 const TYPE_CHOICES = ["feature", "bug", "chore", "doc", "test"];
 const PRIORITY_CHOICES = ["low", "medium", "high"];
+
+const RUN_FILTER_OPTIONS: Array<{ key: RunFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "queued", label: "Queued" },
+  { key: "running", label: "Running" },
+  { key: "retrying", label: "Retrying" },
+  { key: "completed", label: "Completed" },
+  { key: "failed", label: "Failed" },
+  { key: "cancelled", label: "Cancelled" }
+];
+
+const FINDING_FILTER_OPTIONS: Array<{ key: FindingFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "agent", label: "Agent Review" },
+  { key: "human", label: "Human Review" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" }
+];
 
 function post(msg: any): void {
   try {
@@ -183,6 +236,23 @@ function statusColor(status: RunStatus): string {
     case "failed": return "#e53935";
     case "cancelled": return "#9e9e9e";
   }
+}
+
+function formatDuration(ms?: number): string {
+  if (ms === undefined || !isFinite(ms) || ms < 0) return "—";
+  const total = Math.round(ms / 1000);
+  if (total < 60) return `${total}s`;
+  return `${Math.floor(total / 60)}m ${total % 60}s`;
+}
+
+function isRetrying(run: RunDto): boolean {
+  return run.status === "queued" && !!run.availableAt && new Date(run.availableAt).getTime() > Date.now();
+}
+
+function reviewStateLabel(f: FindingDto): string {
+  if (f.status === "approved") return "approved";
+  if (f.status === "rejected") return "rejected";
+  return f.agentReview ? "pending human review" : "pending agent review";
 }
 
 function severityColor(severity: "low" | "medium" | "high"): string {
@@ -221,6 +291,34 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     backgroundColor: "var(--vscode-button-secondaryBackground, #2f3a4b)",
     color: "var(--vscode-button-secondaryForeground, #fff)"
+  },
+  statButton: {
+    fontSize: 12,
+    padding: "2px 8px",
+    borderRadius: 10,
+    cursor: "pointer",
+    border: "none",
+    backgroundColor: "var(--vscode-button-secondaryBackground, #2f3a4b)",
+    color: "var(--vscode-button-secondaryForeground, #fff)"
+  },
+  filterRow: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 },
+  filterChip: {
+    fontSize: 12,
+    padding: "2px 10px",
+    border: "1px solid var(--vscode-panel-border, #333)",
+    borderRadius: 10,
+    cursor: "pointer",
+    background: "transparent",
+    color: "var(--vscode-foreground, #ccc)"
+  },
+  filterChipActive: {
+    fontSize: 12,
+    padding: "2px 10px",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    backgroundColor: "var(--vscode-button-background, #0e7b6f)",
+    color: "var(--vscode-button-foreground, #fff)"
   },
   tabs: { display: "flex", gap: 2, flexWrap: "wrap", borderBottom: "1px solid var(--vscode-panel-border, #333)", marginBottom: 12 },
   tab: {
@@ -264,6 +362,13 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "auto",
     backgroundColor: "var(--vscode-textBlockQuote-background, #1e1e1e)",
     color: "var(--vscode-foreground, #ccc)"
+  },
+  detail: {
+    marginTop: 8,
+    fontSize: 12,
+    display: "flex",
+    flexDirection: "column",
+    gap: 3
   },
   button: {
     fontSize: 12,
@@ -316,6 +421,10 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [findings, setFindings] = React.useState<FindingDto[]>([]);
   const [overview, setOverview] = React.useState<OverviewDto>(EMPTY_OVERVIEW);
   const [counts, setCounts] = React.useState<CountsDto>(EMPTY_COUNTS);
+  const [queue, setQueue] = React.useState<QueueDto>(EMPTY_QUEUE);
+  const [runFilter, setRunFilter] = React.useState<RunFilter>("all");
+  const [findingFilter, setFindingFilter] = React.useState<FindingFilter>("all");
+  const [queueResult, setQueueResult] = React.useState<string>("");
 
   const [form, setForm] = React.useState<{
     title: string;
@@ -403,6 +512,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         if (payload?.overview) setOverview(payload.overview);
       } else if (command === "SET_WORKFORCE_COUNTS") {
         if (payload) setCounts(payload);
+      } else if (command === "SET_WORKFORCE_QUEUE") {
+        if (payload) setQueue(payload);
       } else if (command === "SET_WORKFORCE_EVENT_RULES") {
         setEventRules(payload || []);
       } else if (command === "SET_WORKFORCE_WORKFLOWS") {
@@ -430,6 +541,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setError("");
           if (payload?.rule) setRuleResult("Rule created.");
           if (payload?.deleted !== undefined) setRuleResult(payload?.deleted ? "Rule deleted." : "");
+          if (payload?.queueProcessed) setQueueResult(`Queue pass: ${payload.claimed} claimed, ${payload.started} started, ${payload.skipped} skipped.`);
+          if (payload?.retried) setQueueResult(`Run ${payload.run?.id} queued for retry.`);
         }
       }
     };
@@ -459,6 +572,26 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
   const cancelRun = (runId: string): void => {
     postRequest("WORKFORCE_CANCEL_RUN", { runId });
+  };
+
+  const retryRun = (runId: string): void => {
+    setQueueResult("");
+    postRequest("WORKFORCE_RETRY_RUN", { runId });
+  };
+
+  const processQueueNow = (): void => {
+    setQueueResult("");
+    postRequest("WORKFORCE_PROCESS_QUEUE");
+  };
+
+  const gotoRuns = (filter: RunFilter): void => {
+    setRunFilter(filter);
+    setTab("runs");
+  };
+
+  const gotoFindings = (filter: FindingFilter): void => {
+    setFindingFilter(filter);
+    setTab("findings");
   };
 
   const decideFinding = (findingId: string, decision: "approved" | "rejected"): void => {
@@ -589,6 +722,32 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const validators = employees.filter(e => e.permissions.includes("finding:validate"));
   const runningCount = overview.runs.running;
 
+  const filteredRuns = runs.filter(r => {
+    switch (runFilter) {
+      case "queued": return r.status === "queued" && !isRetrying(r);
+      case "running": return r.status === "running";
+      case "retrying": return isRetrying(r);
+      case "completed": return r.status === "completed";
+      case "failed": return r.status === "failed";
+      case "cancelled": return r.status === "cancelled";
+      default: return true;
+    }
+  });
+
+  const filteredFindings = findings.filter(f => {
+    switch (findingFilter) {
+      case "agent": return f.status === "pending" && !f.agentReview;
+      case "human": return f.status === "pending" && !!f.agentReview;
+      case "approved": return f.status === "approved";
+      case "rejected": return f.status === "rejected";
+      default: return true;
+    }
+  });
+
+  const StatChip = ({ label, onClick }: { label: string; onClick: () => void }) => (
+    <button style={styles.statButton} onClick={onClick}>{label}</button>
+  );
+
   return (
     <div style={styles.root}>
       <div style={styles.header}>
@@ -599,16 +758,19 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
       </div>
 
       <div style={styles.statRow}>
-        <span style={styles.stat}>Queued {overview.runs.queued}</span>
-        <span style={styles.stat}>Running {overview.runs.running}</span>
-        <span style={styles.stat}>Completed {overview.runs.completed}</span>
-        <span style={styles.stat}>Failed {overview.runs.failed}</span>
-        <span style={styles.stat}>Approvals {counts.pendingApprovals}</span>
-        <span style={styles.stat}>Agent Review {counts.pendingAgentReview}</span>
-        <span style={styles.stat}>Human Review {counts.pendingHumanReview}</span>
-        <span style={styles.stat}>Schedules {counts.schedules}</span>
-        <span style={styles.stat}>Workflows {counts.workflows}</span>
-        <span style={styles.stat}>Event Rules {counts.eventRules}</span>
+        <StatChip label={`Workers ${queue.busyEmployees}/${queue.maxConcurrentRuns}`} onClick={() => setTab("employees")} />
+        <StatChip label={`Running ${overview.runs.running}`} onClick={() => gotoRuns("running")} />
+        <StatChip label={`Queued ${overview.runs.queued}`} onClick={() => gotoRuns("queued")} />
+        <StatChip label={`Retrying ${queue.waitingRetry}`} onClick={() => gotoRuns("retrying")} />
+        <StatChip label={`Completed ${overview.runs.completed}`} onClick={() => gotoRuns("completed")} />
+        <StatChip label={`Failed ${overview.runs.failed}`} onClick={() => gotoRuns("failed")} />
+        <StatChip label={`Findings ${counts.pendingFindings}`} onClick={() => gotoFindings("all")} />
+        <StatChip label={`Agent Reviews ${counts.pendingAgentReview}`} onClick={() => gotoFindings("agent")} />
+        <StatChip label={`Human Reviews ${counts.pendingHumanReview}`} onClick={() => gotoFindings("human")} />
+        <StatChip label={`Approvals ${counts.pendingApprovals}`} onClick={() => setTab("approvals")} />
+        <StatChip label={`Schedules ${counts.schedules}`} onClick={() => setTab("schedules")} />
+        <StatChip label={`Workflows ${counts.workflows}`} onClick={() => setTab("workflows")} />
+        <StatChip label={`Event Rules ${counts.eventRules}`} onClick={() => setTab("event-rules")} />
       </div>
 
       <div style={styles.tabs}>
@@ -795,53 +957,131 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
       {tab === "runs" && (
         <div>
-          {runs.length === 0 && <div style={styles.empty}>No runs yet. Create a task &amp; run to see it here.</div>}
-          {runs.map(run => (
-            <div key={run.id} style={styles.card}>
-              <div style={styles.row}>
-                <span style={styles.name}>{run.taskTitle}</span>
-                <span style={{ ...styles.statusChip, color: statusColor(run.status) }}>{run.status}</span>
-                <span style={styles.muted}>Agent: {run.agentName}</span>
-                <span style={{ flex: 1 }} />
-                {run.startedAt && <span style={styles.muted}>Started {formatTime(run.startedAt)}</span>}
-                {(run.status === "queued" || run.status === "running") && (
-                  <button style={styles.buttonGhost} onClick={() => cancelRun(run.id)}>Cancel</button>
-                )}
-                <button style={styles.buttonGhost} onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}>
-                  {expandedRun === run.id ? "Hide" : "Details"}
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <div style={{ ...styles.filterRow, margin: 0, flex: 1 }}>
+              {RUN_FILTER_OPTIONS.map(o => (
+                <button
+                  key={o.key}
+                  style={runFilter === o.key ? styles.filterChipActive : styles.filterChip}
+                  onClick={() => setRunFilter(o.key)}
+                >
+                  {o.label}
                 </button>
-              </div>
-              {run.status === "completed" && run.summary && (
-                <div style={{ marginTop: 6, fontSize: 12 }}>
-                  <span style={styles.ok}>Findings: {run.summary.findings}</span>{" "}
-                  <span style={run.summary.errors > 0 ? styles.error : styles.muted}>Errors: {run.summary.errors}</span>
-                  {run.attempts > 1 && <span style={styles.muted}> · attempt {run.attempts}</span>}
-                </div>
-              )}
-              {run.status === "failed" && (
-                <div style={{ marginTop: 6, fontSize: 12 }}>
-                  <span style={styles.error}>Failed</span>
-                  {run.error && <span style={styles.muted}> · {run.error}</span>}
-                </div>
-              )}
-              {expandedRun === run.id && (
-                <div style={styles.output}>
-                  {run.result && <div><b>Output</b>{"\n"}{run.result}</div>}
-                  {run.error && <div>{run.result ? "\n\n" : ""}<b>Error</b>{"\n"}{run.error}</div>}
-                  {!run.result && !run.error && <div>No output captured.</div>}
-                </div>
-              )}
+              ))}
             </div>
-          ))}
+            <button style={styles.button} onClick={processQueueNow}>Process Queue</button>
+          </div>
+          {queueResult && <div style={styles.ok}>{queueResult}</div>}
+          <div style={{ fontSize: 12, marginBottom: 8 }}>
+            <span style={styles.muted}>
+              Worker: {queue.workerMode} (queue mode) · Occupancy {queue.allocated}/{queue.maxConcurrentRuns} · Attempts &gt;1: {queue.multiAttempt}
+            </span>
+          </div>
+          {filteredRuns.length === 0 && <div style={styles.empty}>No {runFilter === "all" ? "runs" : `${runFilter} runs`} yet.</div>}
+          {filteredRuns.map(run => {
+            const runFindings = findings.filter(f => f.runId === run.id);
+            return (
+              <div key={run.id} style={styles.card}>
+                <div style={styles.row}>
+                  <span style={styles.name}>{run.taskTitle}</span>
+                  <span style={styles.muted}>{run.taskCode}</span>
+                  <span style={{ ...styles.statusChip, color: statusColor(run.status) }}>
+                    {isRetrying(run) ? "retrying" : run.status}
+                  </span>
+                  <span style={styles.muted}>Agent: {run.agentName}</span>
+                  {run.attempts > 1 && <span style={styles.chip}>attempt {run.attempts}</span>}
+                  <span style={{ flex: 1 }} />
+                  {run.startedAt && <span style={styles.muted}>Started {formatTime(run.startedAt)}</span>}
+                  {run.durationMs !== undefined && <span style={styles.muted}>{formatDuration(run.durationMs)}</span>}
+                  {(run.status === "queued" || run.status === "running") && (
+                    <button style={styles.buttonGhost} onClick={() => cancelRun(run.id)}>Cancel</button>
+                  )}
+                  {(run.status === "failed" || run.status === "cancelled") && run.agentId && (
+                    <button style={styles.buttonGhost} onClick={() => retryRun(run.id)}>Retry</button>
+                  )}
+                  {run.status === "completed" && run.agentId && (
+                    <button style={styles.buttonGhost} onClick={() => retryRun(run.id)}>Run Again</button>
+                  )}
+                  <button style={styles.buttonGhost} onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}>
+                    {expandedRun === run.id ? "Hide" : "Details"}
+                  </button>
+                </div>
+                {run.status === "completed" && run.summary && (
+                  <div style={{ marginTop: 6, fontSize: 12 }}>
+                    <span style={styles.ok}>Findings: {run.summary.findings}</span>{" "}
+                    <span style={run.summary.errors > 0 ? styles.error : styles.muted}>Errors: {run.summary.errors}</span>
+                    {run.summary.findings > 0 && (
+                      <span style={styles.muted}> · {runFindings.length} linked</span>
+                    )}
+                  </div>
+                )}
+                {run.status === "failed" && (
+                  <div style={{ marginTop: 6, fontSize: 12 }}>
+                    <span style={styles.error}>Failed</span>
+                    {run.error && <span style={styles.muted}> · {run.error}</span>}
+                  </div>
+                )}
+                {expandedRun === run.id && (
+                  <div>
+                    <div style={styles.detail}>
+                      <div><span style={styles.muted}>Task: </span>{run.taskCode} — {run.taskTitle}</div>
+                      {run.taskWorkflow && <div><span style={styles.muted}>Workflow: </span>{run.taskWorkflow}</div>}
+                      {run.trigger && (
+                        <div><span style={styles.muted}>Trigger: </span>Event Rule "{run.trigger.ruleName}" ({run.trigger.eventType})</div>
+                      )}
+                      <div><span style={styles.muted}>Agent: </span>{run.agentName}{run.agentId ? ` (${run.agentId})` : ""}</div>
+                      <div>
+                        <span style={styles.muted}>Worker (queue): </span>{run.mode || "—"}
+                        <span style={styles.muted}> · Model: </span>{run.model || "—"}
+                      </div>
+                      <div><span style={styles.muted}>Attempt: </span>{run.attempts}</div>
+                      <div>
+                        <span style={styles.muted}>Created </span>{formatTime(run.createdAt)}
+                        {run.startedAt && <span><span style={styles.muted}> · Started </span>{formatTime(run.startedAt)}</span>}
+                        {run.finishedAt && <span><span style={styles.muted}> · Finished </span>{formatTime(run.finishedAt)}</span>}
+                        <span style={styles.muted}> · Duration </span>{formatDuration(run.durationMs)}
+                      </div>
+                    </div>
+                    {runFindings.length > 0 && (
+                      <div style={{ marginTop: 6, fontSize: 12 }}>
+                        <span style={styles.muted}>Findings ({runFindings.length}): </span>
+                        {runFindings.map(f => (
+                          <span key={f.id} style={{ ...styles.chip, marginRight: 4 }} title={f.title}>
+                            {f.title} · {reviewStateLabel(f)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={styles.output}>
+                      {run.result && <div><b>Output</b>{"\n"}{run.result}</div>}
+                      {run.error && <div>{run.result ? "\n\n" : ""}<b>Error</b>{"\n"}{run.error}</div>}
+                      {!run.result && !run.error && <div>No output captured.</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {tab === "findings" && (
         <div>
-          {findings.length === 0 && (
+          <div style={styles.filterRow}>
+            {FINDING_FILTER_OPTIONS.map(o => (
+              <button
+                key={o.key}
+                style={findingFilter === o.key ? styles.filterChipActive : styles.filterChip}
+                onClick={() => setFindingFilter(o.key)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {filteredFindings.length === 0 && (
             <div style={styles.empty}>No findings yet. Findings are captured from the Findings section of completed run output.</div>
           )}
-          {findings.map(f => (
+          {filteredFindings.map(f => (
             <div key={f.id} style={styles.card}>
               <div style={styles.row}>
                 <span style={styles.name}>{f.title}</span>

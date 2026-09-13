@@ -80,6 +80,38 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   blocked, persisted review, duplicate-safe validation, no human-approval bypass, idempotent re-request,
   agent-vs-human review counts, plus events + audit assertions. Version stays `0.9.0` during development.
 
+### v0.11 Slice 6 — Operational Execution / Runs + Queue Visibility
+
+- **Runs tab is now a live operations console.** Each run card shows title, code, status (including `retrying`
+  backoff from `availableAt`), agent, attempt count, start time, and duration; cards expand into full run detail:
+  task, originating **Workflow**, **Event Rule trigger** (`<rule> (<eventType>)`), agent, worker mode (queue
+  setting, read-only), model, attempt, created/started/finished timestamps, duration, linked findings with their
+  review state, and the raw output/error blocks.
+- **Run actions via existing queue ops — no new execution machinery:** **Cancel** on queued/running, **Retry** on
+  failed/cancelled, and **Run Again** on completed all route through `queueService` (`run:create`/`run:cancel`
+  permission gates preserved); **Process Queue** runs one queue pass and reports claimed/started/skipped back to
+  the panel.
+- **Operational strip is clickable:** Workers (`busy/max`), Running, Queued, Retrying, Completed, Failed, Findings,
+  Agent Reviews, Human Reviews, Approvals, Schedules, Workflows, Event Rules counters now navigate to the
+  corresponding filtered view instead of being dead readouts.
+- **Status filters:** Runs list filters All / Queued / Running / Retrying / Completed / Failed / Cancelled;
+  Findings list filters All / Agent Review / Human Review / Approved / Rejected — both client-side over the
+  existing snapshot payloads.
+- **Queue status header:** live worker mode, occupancy (`allocated/maxConcurrentRuns`), and `attempts > 1` count
+  above the runs list; queue snapshot counters available in the panel.
+- **Read-only run reports (no Run schema change):** `observability.getRunsByFilter` (status + retrying
+  classification), `runDetail` (task / employee / workflow / event-rule trigger via the existing recent-trigger
+  log / findings by run / duration), and `getQueueSnapshot` (run counts, waiting-for-retry, multi-attempt, worker
+  mode, occupancy, busy/idle/offline agents).
+- **Live refresh from the existing event stream:** new additive `subscribeEvents` in `events.ts` (keeps the
+  `setEventProcessor` hook used by Event Rules intact); the Control Center subscribes, debounces (~150ms),
+  filters operational event prefixes (`run.`/`finding.`/`workflow.`/`eventrule.`/`queue.`/`schedule.`), and
+  pushes a fresh snapshot — no new state store.
+- Tests: run listing + status filtering, retrying classification, queue pass (claim/start/skip), queue snapshot
+  counts and occupancy, run detail (task/agent/duration/linked findings), run → finding → validation chain,
+  run → workflow → event-rule trigger chain, retry/cancel permission handling, and snapshot/counter refresh
+  across run state changes. Version stays `0.9.0` during development.
+
 ## [Unreleased] - v0.10 Workforce Control Center
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution

@@ -5,10 +5,11 @@ import * as taskService from '../../services/taskService';
 import * as queueService from '../../services/workforce/queueService';
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
-import { getActivitySummary } from '../../services/workforce/observability';
+import { getActivitySummary, runDetail, getQueueSnapshot } from '../../services/workforce/observability';
 import * as findingsService from '../../services/workforce/findingsService';
 import * as workforceService from '../../services/workforce/workforceService';
 import * as eventRulesService from '../../services/workforce/eventRulesService';
+import { subscribeEvents } from '../../services/workforce/events';
 import { getDataService } from '../../data/DataService';
 import { Employee, EmployeeModelProfile, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
@@ -30,16 +31,23 @@ export interface RunDto {
   taskId: string;
   taskTitle: string;
   taskCode: string;
+  taskSource?: string;
+  taskWorkflow?: string;
+  trigger?: { ruleId: string; ruleName: string; eventType: string };
   agentName: string;
   agentId?: string;
   status: Run['status'];
   attempts: number;
+  availableAt?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
+  durationMs?: number;
   result?: string;
   error?: string;
   summary?: { findings: number; errors: number };
+  mode?: WorkerMode;
+  model?: string;
 }
 
 export interface EmployeeDto {
@@ -120,30 +128,54 @@ let panel: vscode.WebviewPanel | undefined;
 let panelContext: vscode.ExtensionContext | undefined;
 let pendingInit: { section?: WorkforceSection; focusAgentId?: string } | undefined;
 
+// v0.11 slice 6 — the Control Center refreshes from the existing event stream (no state store).
+const OPERATIONAL_EVENT_PREFIXES = ['run.', 'finding.', 'workflow.', 'eventrule.', 'queue.', 'schedule.', 'employee.'];
+
+function isOperationalEventType(type: string): boolean {
+  return OPERATIONAL_EVENT_PREFIXES.some(prefix => type.startsWith(prefix));
+}
+
+let snapshotTimer: NodeJS.Timeout | undefined;
+
+function scheduleSnapshotRefresh(panelRef: vscode.WebviewPanel): void {
+  if (snapshotTimer) {clearTimeout(snapshotTimer);}
+  snapshotTimer = setTimeout(() => {
+    snapshotTimer = undefined;
+    if (panelRef === panel) {pushSnapshot(panelRef);}
+  }, 150);
+}
+
 function dataService() {
   const ws = fileService.getWorkspaceRoot();
   return ws ? getDataService(ws) : undefined;
 }
 
 function getRunDto(run: Run): RunDto {
-  const ds = dataService();
-  const task = ds ? ds.getTask(run.taskId) : undefined;
-  const employee = run.agentId ? getStores().employees.getById(run.agentId) : undefined;
+  const detail = runDetail(run);
+  const task = detail.task;
+  const employee = detail.employee;
   return {
     id: run.id,
     taskId: run.taskId,
     taskTitle: task?.title || run.taskId,
     taskCode: task?.code || '',
+    taskSource: task?.source,
+    taskWorkflow: task?.workflow,
+    trigger: detail.trigger,
     agentName: employee?.name || run.agentId || '',
     agentId: run.agentId,
     status: run.status,
     attempts: run.attempts,
+    availableAt: run.availableAt,
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     createdAt: run.createdAt,
+    durationMs: detail.durationMs,
     result: run.result,
     error: run.error,
-    summary: run.summary
+    summary: run.summary,
+    mode: queueService.getQueueSettings().workerMode,
+    model: employee?.modelProfile?.model || employee?.agentConfig?.model
   };
 }
 
@@ -278,6 +310,7 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
   try {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_OVERVIEW', payload: { overview } });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_COUNTS', payload: counts });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_QUEUE', payload: getQueueSnapshot() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EMPLOYEES', payload: employeeDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_TASKS', payload: taskDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_RUNS', payload: allRunDtos() });
@@ -397,6 +430,10 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
   panel = newPanel;
   newPanel.webview.html = getWebviewContent(context, newPanel.webview, 'workforce');
 
+  const unsubscribeEvents = subscribeEvents(event => {
+    if (isOperationalEventType(event.type)) {scheduleSnapshotRefresh(newPanel);}
+  });
+
   newPanel.webview.onDidReceiveMessage(
     async (message) => {
       const command: string = message?.command || '';
@@ -478,7 +515,35 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
           }
         }
-        } else if (command === 'WORKFORCE_UPDATE_AGENT') {
+        } else if (command === 'WORKFORCE_RETRY_RUN') {
+        const runId: string | undefined = message?.payload?.runId;
+        const existing = runId ? getStores().runs.getById(runId) : undefined;
+        if (existing && ['failed', 'cancelled', 'completed'].includes(existing.status)) {
+          try {
+            const created = queueService.createRun(existing.taskId, existing.agentId, { actor: 'control-center' });
+            pushRun(newPanel, created);
+            postResponse(newPanel, message?.requestId, { retried: true, run: getRunDto(created) });
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+          workforceTreeDataProvider.refresh();
+          pushSnapshot(newPanel);
+        }
+      } else if (command === 'WORKFORCE_PROCESS_QUEUE') {
+        try {
+          const result = queueService.processQueue({ dryRun: false });
+          postResponse(newPanel, message?.requestId, {
+            queueProcessed: true,
+            claimed: result.claims.length,
+            started: result.started.length,
+            skipped: result.skipped.length
+          });
+        } catch (error) {
+          postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_UPDATE_AGENT') {
         const employeeId: string | undefined = message?.payload?.employeeId;
         const change = message?.payload?.change || {};
         const changes: workforceService.EmployeeConfigChange = {};
@@ -578,6 +643,7 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
   newPanel.onDidDispose(
     () => {
       if (panel === newPanel) {
+        unsubscribeEvents();
         panel = undefined;
         pendingInit = undefined;
       }
