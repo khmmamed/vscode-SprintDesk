@@ -12,7 +12,7 @@ export interface WorkerRequest {
   run: Run;
   task: Task;
   employee: Employee;
-  agentConfig: AgentConfig;
+  agentConfig?: AgentConfig;
   workspaceRoot: string;
   timeoutMs?: number;
   modelProfile?: EmployeeModelProfile;
@@ -45,6 +45,16 @@ export function getWorkerRuntime(mode?: WorkerMode): WorkerRuntime {
   }
 }
 
+export type RunnableState = { ok: true } | { ok: false; error: string };
+
+export function resolveRunnableState(employee: Employee, mode?: WorkerMode): RunnableState {
+  const effectiveMode: WorkerMode = mode || getQueueSettings().workerMode;
+  if (effectiveMode !== 'ollama' && !employee.agentConfig) {
+    return { ok: false, error: 'Agent not configured (set agentConfig.tool)' };
+  }
+  return { ok: true };
+}
+
 export async function executeRun(runId: string, mode?: WorkerMode): Promise<WorkerResult | undefined> {
   const wsRoot = getWorkspaceRoot();
   if (!wsRoot) {return undefined;}
@@ -58,9 +68,11 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
 
   const employee = getStores().employees.getById(run.agentId || '');
   if (!employee) {return undefined;}
-  if (!employee.agentConfig) {
-    finishRun(runId, { status: 'failed', error: 'Agent not configured', classification: 'invalid-config' });
-    return { status: 'failed', error: 'Agent not configured', classification: 'invalid-config' };
+
+  const runnable = resolveRunnableState(employee, mode);
+  if (!runnable.ok) {
+    finishRun(runId, { status: 'failed', error: runnable.error, classification: 'invalid-config' });
+    return { status: 'failed', error: runnable.error, classification: 'invalid-config' };
   }
 
   const runtime = getWorkerRuntime(mode);

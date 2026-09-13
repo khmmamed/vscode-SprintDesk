@@ -26,12 +26,15 @@ export function loadAgentRole(agentName: string): AgentRole | undefined {
 }
 
 export function buildAgentCommand(
-  config: AgentConfig,
+  config: AgentConfig | undefined,
   taskPath: string,
   taskDescription: string,
   taskTitle: string,
   agentName: string
 ): { command: string; args: string[] } {
+  if (!config) {
+    return { command: '', args: [] };
+  }
   const taskDir = taskPath && taskPath !== 'undefined' ? path.dirname(taskPath) : process.cwd();
   const taskFile = path.basename(taskPath);
   const roleFile = getRoleFilePath(agentName);

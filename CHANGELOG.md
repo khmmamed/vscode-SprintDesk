@@ -31,6 +31,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   default `agent` role); command-layer errors (offline agent, no agent assigned, missing permission) surface
   in the webview instead of hanging; the Workforce tree refreshes on every run transition driven by the
   Control Center; the Create & Run message distinguishes approval-required from plain queued.
+- **Ollama no longer requires `agentConfig`:** a `modelProfile` alone is sufficient for the LLM worker
+  (CLI modes `noop`/`terminal`/`headless` still need `agentConfig.tool`); the "Agent not configured"
+  failure is now mode-specific and actionable.
 - Architecture: `docs/v0.10-control-center.md`. Version stays `0.9.0` during development.
 
 ## [0.9.0] - 2026-09-13

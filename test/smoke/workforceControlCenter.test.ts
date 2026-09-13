@@ -3,7 +3,7 @@ import { makeEmployee, makeTask, makeRun, makeWorkspace, makeAgentConfig, TestWo
 import { getStores } from '../../src/data/stores';
 import * as queueService from '../../src/services/workforce/queueService';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
-import { getWorkerRuntime, executeRun } from '../../src/services/workforce/worker/worker';
+import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/services/workforce/worker/worker';
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
 import { setApprovalGate } from '../../src/services/workforce/gates';
 import { LLMProvider } from '../../src/services/workforce/llm/types';
@@ -295,6 +295,49 @@ describe('run lifecycle controls (control-center checklist)', () => {
   });
 });
 
+describe('resolveRunnableState gate (configuration per mode)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  it('allows ollama runs with a modelProfile only (no agentConfig)', () => {
+    const employee = makeEmployee({
+      modelProfile: { name: 'MorElectra', provider: 'ollama', model: 'gemma4:31b-cloud', baseUrl: 'http://localhost:11434' }
+    });
+    assert.deepStrictEqual(resolveRunnableState(employee, 'ollama'), { ok: true });
+  });
+
+  it('allows ollama runs with agentConfig.model but no modelProfile', () => {
+    const employee = makeEmployee({ agentConfig: makeAgentConfig({ tool: 'ollama', model: 'llama3' }) });
+    assert.deepStrictEqual(resolveRunnableState(employee, 'ollama'), { ok: true });
+  });
+
+  it('allows ollama runs even when no model is configured (worker reports invalid-config)', () => {
+    const employee = makeEmployee();
+    assert.deepStrictEqual(resolveRunnableState(employee, 'ollama'), { ok: true });
+  });
+
+  it('rejects noop, terminal and headless runs without agentConfig', () => {
+    const employee = makeEmployee();
+    for (const mode of ['noop', 'terminal', 'headless'] as const) {
+      const state = resolveRunnableState(employee, mode);
+      assert.strictEqual(state.ok, false);
+      if (!state.ok) {assert.match(state.error, /agentConfig\.tool/);}
+    }
+  });
+
+  it('allows noop runs when agentConfig is present', () => {
+    const employee = makeEmployee({ agentConfig: makeAgentConfig() });
+    assert.deepStrictEqual(resolveRunnableState(employee, 'noop'), { ok: true });
+  });
+});
+
 describe('ollama end-to-end against a local model', () => {
   const enabled = process.env.SPRINTDESK_OLLAMA_E2E === '1';
   const model = process.env.SPRINTDESK_OLLAMA_MODEL || 'gemma4:31b-cloud';
@@ -317,7 +360,6 @@ describe('ollama end-to-end against a local model', () => {
     this.timeout(180000);
     const employee = makeEmployee({
       name: 'Morocco News Agent',
-      agentConfig: makeAgentConfig({ tool: 'ollama', model }),
       modelProfile: { name: 'Morocco News Agent', provider: 'ollama', model, baseUrl: 'http://localhost:11434' }
     });
     getStores().employees.add(employee);
