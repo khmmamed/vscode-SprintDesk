@@ -86,6 +86,9 @@ export interface Employee {
   skills?: EmployeeSkill[];
   agentConfig?: AgentConfig;
   teamRole?: EmployeeTeamRole;
+
+  // v0.7 provider semantics (additive, non-breaking)
+  modelProfile?: EmployeeModelProfile;
 }
 
 export type EmployeeSkillLevel = 1 | 2 | 3;
@@ -305,6 +308,22 @@ export interface AgentRole {
   promptTemplate?: string;
   model?: string;
   command?: string;
+}
+
+// v0.7 provider semantics (additive, non-breaking)
+export type LLMProviderKind = 'ollama' | 'openai';
+
+export interface EmployeeModelProfile {
+  name: string;
+  provider: LLMProviderKind;
+  model: string;
+  baseUrl?: string;
+  apiKeyRef?: string;
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+    timeoutMs?: number;
+  };
 }
 
 export interface TeamMember {

@@ -4,3 +4,7 @@ node_modules
 .vscode-test/
 *.vsix
 releases/
+
+# SprintDesk secrets (resolved by reference only, never committed)
+**.SprintDesk/workforce/credentials.secret.json
+.SprintDesk/workforce/credentials.secret.json
