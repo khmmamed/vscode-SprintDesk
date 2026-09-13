@@ -1,7 +1,7 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { getDataService } from '../data/DataService';
+import { getHost } from '../host';
 import * as fileService from './fileService';
 import { Task } from '../data/types';
 
@@ -13,8 +13,7 @@ class TaskService {
   }
 
   private getDefaultWorkspaceRoot(): string {
-    const ws = vscode.workspace.workspaceFolders;
-    return ws?.[0]?.uri.fsPath || '';
+    return getHost().getWorkspaceRoot() || '';
   }
 
   setWorkspaceRoot(ws: string): void {
@@ -185,9 +184,9 @@ export function readTasks(ws: string): string[] {
 export function updateTaskByPath(taskPath: string, updates: Partial<Task>): void {
   let ws: string;
   try {
-    ws = fileService.getWorkspaceRoot();
+    ws = fileService.getWorkspaceRoot() || getHost().getWorkspaceRoot() || '';
   } catch {
-    ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+    ws = getHost().getWorkspaceRoot() || '';
   }
   if (!ws) return;
   

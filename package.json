@@ -3,7 +3,7 @@
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
   "description": "A Visual Studio Code extension for managing sprints and tasks in an agile development workflow",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -28,13 +28,14 @@
     "package": "npm run clean && npm-run-all --parallel package:*",
     "package:ext": "webpack --mode production --config ./webpack/extension.config.js",
     "package:wv": "webpack --mode production --config ./webpack/webview.config.js",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
+    "compile-tests": "tsc -p . --outDir out --noEmit false",
+    "watch-tests": "tsc -p . -w --outDir out --noEmit false",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "clean": "rimraf dist",
     "test": "node ./out/test/runTest.js",
-    "mcp": "node --loader ts-node/esm src/mcp/server.ts"
+    "mcp": "rimraf out && tsc -p . --outDir out --noEmit false && node out/mcp/stdioServer.js",
+    "standup": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/standup.js"
   },
   "contributes": {
     "keybindings": [
@@ -191,6 +192,46 @@
         "command": "sprintdesk.getItemHistory",
         "title": "SprintDesk: Get Item History",
         "icon": "$(clock)"
+      },
+      {
+        "command": "sprintdesk.viewWorkforce",
+        "title": "SprintDesk: View Workforce",
+        "icon": "$(organization)"
+      },
+      {
+        "command": "sprintdesk.addEmployee",
+        "title": "SprintDesk: Add Employee",
+        "icon": "$(person-add)"
+      },
+      {
+        "command": "sprintdesk.createTeam",
+        "title": "SprintDesk: Create Team",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "sprintdesk.assignToTeam",
+        "title": "SprintDesk: Assign to Team",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.setTeamLead",
+        "title": "SprintDesk: Set Team Lead",
+        "icon": "$(star)"
+      },
+      {
+        "command": "sprintdesk.setEmployeeStatus",
+        "title": "SprintDesk: Set Availability",
+        "icon": "$(circle-filled)"
+      },
+      {
+        "command": "sprintdesk.removeEmployee",
+        "title": "SprintDesk: Remove Employee",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sprintdesk.syncWorkforceFromTeam",
+        "title": "SprintDesk: Sync Workforce from Team",
+        "icon": "$(sync)"
       }
     ],
     "viewsContainers": {
@@ -227,6 +268,10 @@
         {
           "id": "sprintdesk-team",
           "name": "Team"
+        },
+        {
+          "id": "sprintdesk-workforce",
+          "name": "Workforce"
         },
         {
           "id": "sprintdesk-history",
@@ -282,6 +327,21 @@
           "command": "sprintdesk.addAgent",
           "when": "view == sprintdesk-team",
           "group": "navigation"
+        },
+        {
+          "command": "sprintdesk.addEmployee",
+          "when": "view == sprintdesk-workforce",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sprintdesk.createTeam",
+          "when": "view == sprintdesk-workforce",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sprintdesk.syncWorkforceFromTeam",
+          "when": "view == sprintdesk-workforce",
+          "group": "navigation@3"
         },
         {
           "command": "sprintdesk.getItemHistory",
@@ -361,6 +421,26 @@
           "command": "sprintdesk.runAgent",
           "when": "view == sprintdesk-team",
           "group": "inline@0"
+        },
+        {
+          "command": "sprintdesk.assignToTeam",
+          "when": "view == sprintdesk-workforce && viewItem =~ /^employee/",
+          "group": "inline@1"
+        },
+        {
+          "command": "sprintdesk.setEmployeeStatus",
+          "when": "view == sprintdesk-workforce && viewItem =~ /^employee/",
+          "group": "inline@2"
+        },
+        {
+          "command": "sprintdesk.removeEmployee",
+          "when": "view == sprintdesk-workforce && viewItem =~ /^employee/",
+          "group": "inline@3"
+        },
+        {
+          "command": "sprintdesk.setTeamLead",
+          "when": "view == sprintdesk-workforce && viewItem == workforceTeam",
+          "group": "inline@1"
         }
       ]
     },

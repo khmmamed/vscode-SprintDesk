@@ -1,69 +1,34 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
-import * as handlers from './handlers';
-const ALL_TOOLS = (handlers as any).ALL_TOOLS;
-const handleToolCall = (handlers as any).handleToolCall;
-import { getDataService } from '../data/DataService';
-import * as fileService from '../services/fileService';
+import { handleRequest } from './core';
+import { ALL_TOOLS } from './tools';
 
-const PORT = 3847;
-
-function createCorsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+export interface McpHttpTransportOptions {
+  port?: number;
+  onListen?: (port: number, server: http.Server) => void;
 }
 
-function sendJson(res: http.ServerResponse, statusCode: number, data: any) {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json', ...createCorsHeaders() });
-  res.end(JSON.stringify(data));
-}
+export function createMcpHttpTransport(options: McpHttpTransportOptions = {}): http.Server {
+  const port = options.port || 3847;
 
-function sendError(res: http.ServerResponse, statusCode: number, message: string) {
-  sendJson(res, statusCode, { error: message });
-}
-
-async function handleMcpRequest(body: any): Promise<any> {
-  const { id, method, params } = body;
-
-  if (method === 'initialize') {
-    const toolCapabilities: Record<string, any> = {};
-    for (const tool of ALL_TOOLS) {
-      toolCapabilities[tool.name] = {
-        description: tool.description,
-        inputSchema: tool.inputSchema
-      };
-    }
+  function createCorsHeaders() {
     return {
-      protocolVersion: '2024-11-05',
-      capabilities: { tools: toolCapabilities },
-      serverInfo: { name: 'sprintdesk-mcp', version: '1.0.0' }
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
     };
   }
 
-  if (method === 'tools/list') {
-    return { tools: ALL_TOOLS };
+  function sendJson(res: http.ServerResponse, statusCode: number, data: any) {
+    res.writeHead(statusCode, { 'Content-Type': 'application/json', ...createCorsHeaders() });
+    res.end(JSON.stringify(data));
   }
 
-  if (method === 'tools/call') {
-    const toolName = params?.name;
-    const toolArgs = params?.arguments || {};
-    const result = await handleToolCall(toolName, toolArgs);
-    return { content: result.content };
+  function sendError(res: http.ServerResponse, statusCode: number, message: string) {
+    sendJson(res, statusCode, { error: message });
   }
 
-  if (method === 'ping') {
-    return { content: [{ type: 'text', text: 'pong' }] };
-  }
-
-  return null;
-}
-
-export function startMcpServer() {
   const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, createCorsHeaders());
@@ -79,7 +44,7 @@ export function startMcpServer() {
     }
 
     if (req.method === 'GET' && url === '/tools') {
-      sendJson(res, 200, { tools: ALL_TOOLS.map((t: any) => t.name) });
+      sendJson(res, 200, { tools: ALL_TOOLS.map(t => t.name) });
       return;
     }
 
@@ -89,9 +54,9 @@ export function startMcpServer() {
       req.on('end', async () => {
         try {
           const request = JSON.parse(body);
-          const result = await handleMcpRequest(request);
-          if (result) {
-            sendJson(res, 200, { jsonrpc: '2.0', id: request.id, result });
+          const response = await handleRequest(request);
+          if (response.result || response.error) {
+            sendJson(res, 200, response);
           } else {
             sendJson(res, 400, { jsonrpc: '2.0', id: request.id, error: { code: -32601, message: 'Method not found' } });
           }
@@ -114,14 +79,12 @@ export function startMcpServer() {
     sendError(res, 404, 'Not found');
   });
 
-  server.listen(PORT, () => {
-    console.log(`🚀 SprintDesk MCP server running on http://localhost:${PORT}`);
-    vscode.window.showInformationMessage(`🚀 MCP server running on port ${PORT}`);
+  server.listen(port, () => {
+    console.log(`🚀 SprintDesk MCP server running on http://localhost:${port}`);
+    if (options.onListen) {
+      options.onListen(port, server);
+    }
   });
 
   return server;
-}
-
-export function stopMcpServer(server: http.Server) {
-  server.close();
 }

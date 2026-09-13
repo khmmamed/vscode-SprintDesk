@@ -1,5 +1,4 @@
 import * as path from 'path';
-import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as fileService from './fileService';
@@ -14,10 +13,10 @@ function getDs() {
 
 export async function createNewEpic(epicMetadata: SprintDesk.EpicMetadata): Promise<SprintDesk.EpicMetadata> {
   const ws = fileService.getWorkspaceRoot();
-  const title = epicMetadata.title || await vscode.window.showInputBox({ prompt: 'Epic Title' });
+  const title = epicMetadata.title;
   if (!title) throw new Error('Epic title is required');
 
-  const category = epicMetadata.category || await vscode.window.showInputBox({ prompt: 'Epic Category (e.g., SEO, FE, BE)', placeHolder: 'MISC' }) || 'MISC';
+  const category = epicMetadata.category || 'MISC';
 
   const dataService = getDataService(ws);
   const epicId = crypto.randomUUID();
@@ -201,20 +200,6 @@ export function addTaskToEpicByName(epicName: string, taskId: string) {
     dataService.updateTask(taskId, { epic: epic.name });
     dataService.saveTaskMd(taskObj);
   }
-}
-
-export async function createEpicInteractive() {
-  const epicName = await vscode.window.showInputBox({ prompt: 'Epic title' });
-  if (!epicName) return;
-
-  const category = await vscode.window.showInputBox({
-    prompt: 'Epic category (e.g., SEO, FE, BE)',
-    placeHolder: 'MISC'
-  });
-  const epicCategory = category || 'MISC';
-
-  createEpic(epicName, epicCategory);
-  vscode.window.showInformationMessage('Epic created.');
 }
 
 export function removeTaskFromEpic(epicTitleOrPath: string, taskPath: string) {

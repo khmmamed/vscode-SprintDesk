@@ -1,12 +1,11 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as yaml from 'js-yaml';
 import * as fileService from '../fileService';
 import { getDataService } from '../../data/DataService';
 import { HistoryEntry, HistoryData } from '../../data/types';
 import { PROJECT_CONSTANTS } from '../../utils/constant';
+import { getHost, getFileSystem } from '../../host';
 
 const HISTORY_FILE = 'history.yml';
 
@@ -17,8 +16,9 @@ function getHistoryPath(ws: string): string {
 function loadHistoryFromFile(ws: string): HistoryEntry[] {
   const historyPath = getHistoryPath(ws);
   try {
-    if (!fs.existsSync(historyPath)) return [];
-    const content = fs.readFileSync(historyPath, 'utf8');
+    const fileSystem = getFileSystem();
+    if (!fileSystem.exists(historyPath)) return [];
+    const content = fileSystem.readFile(historyPath);
     const data = yaml.load(content) as HistoryData;
     return data?.entries || [];
   } catch {
@@ -28,8 +28,9 @@ function loadHistoryFromFile(ws: string): HistoryEntry[] {
 
 function saveHistoryToFile(ws: string, entries: HistoryEntry[]): void {
   const historyPath = getHistoryPath(ws);
-  fs.mkdirSync(path.dirname(historyPath), { recursive: true });
-  fs.writeFileSync(historyPath, yaml.dump({ entries }), 'utf8');
+  const fileSystem = getFileSystem();
+  fileSystem.mkdir(path.dirname(historyPath), { recursive: true });
+  fileSystem.writeFile(historyPath, yaml.dump({ entries }));
 }
 
 export interface GitCommit {
@@ -47,17 +48,16 @@ export function getGitHistoryForItem(itemPath: string, itemType: HistoryEntry['i
 
   const ext = path.extname(itemPath);
   const baseName = path.basename(itemPath, ext);
-  
+
   try {
-    const { execSync } = require('child_process');
-    const log = execSync(`git log --all --format="%H|%an|%ae|%aI|%s" -- "**/${baseName}*" "**/*${itemType}*"`, {
-      cwd: ws,
-      encoding: 'utf8'
+    const host = getHost();
+    const { stdout } = host.execSync(`git log --all --format="%H|%an|%ae|%aI|%s" -- "**/${baseName}*" "**/*${itemType}*"`, {
+      cwd: ws
     });
-    
+
     const commits: GitCommit[] = [];
-    const lines = log.trim().split('\n').filter(Boolean);
-    
+    const lines = stdout.trim().split('\n').filter(Boolean);
+
     for (const line of lines) {
       const parts = line.split('|');
       if (parts.length >= 5) {
@@ -71,7 +71,7 @@ export function getGitHistoryForItem(itemPath: string, itemType: HistoryEntry['i
         });
       }
     }
-    
+
     return commits;
   } catch {
     return [];
@@ -83,18 +83,17 @@ export function getGitHistoryForSprintDesk(): GitCommit[] {
   if (!ws) return [];
 
   const sdPath = path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR);
-  
+
   try {
-    const { execSync } = require('child_process');
-    const log = execSync(`git log --all --format="%H|%an|%ae|%aI|%s" -- "${PROJECT_CONSTANTS.SPRINTDESK_DIR}/"`, {
+    const host = getHost();
+    const { stdout } = host.execSync(`git log --all --format="%H|%an|%ae|%aI|%s" -- "${PROJECT_CONSTANTS.SPRINTDESK_DIR}/"`, {
       cwd: ws,
-      encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024
     });
-    
+
     const commits: GitCommit[] = [];
-    const lines = log.trim().split('\n').filter(Boolean);
-    
+    const lines = stdout.trim().split('\n').filter(Boolean);
+
     for (const line of lines) {
       const parts = line.split('|');
       if (parts.length >= 5) {
@@ -108,7 +107,7 @@ export function getGitHistoryForSprintDesk(): GitCommit[] {
         });
       }
     }
-    
+
     return commits;
   } catch {
     return [];
@@ -131,7 +130,7 @@ export function trackChange(
   const authorEmail = gitUser?.email;
 
   const entries = loadHistoryFromFile(ws);
-  
+
   const entry: HistoryEntry = {
     id: crypto.randomUUID(),
     itemId,
@@ -147,7 +146,7 @@ export function trackChange(
 
   entries.push(entry);
   saveHistoryToFile(ws, entries);
-  
+
   return entry;
 }
 
@@ -171,7 +170,7 @@ export function getHistoryForItem(itemId: string, itemType: HistoryEntry['itemTy
 
   let git: GitCommit[] = [];
   const dataService = getDataService(ws);
-  
+
   if (itemType === 'task') {
     const task = dataService.getTask(itemId);
     if (task?.path) {
@@ -199,7 +198,7 @@ export function getHistoryForItem(itemId: string, itemType: HistoryEntry['itemTy
 export function getAllHistory(limit = 100): HistoryEntry[] {
   const ws = fileService.getWorkspaceRoot();
   if (!ws) return [];
-  
+
   return loadHistoryFromFile(ws)
     .slice(-limit)
     .reverse();
@@ -207,9 +206,9 @@ export function getAllHistory(limit = 100): HistoryEntry[] {
 
 function getCurrentGitUser(): { name: string; email: string } | null {
   try {
-    const { execSync } = require('child_process');
-    const name = execSync('git config user.name', { encoding: 'utf8' }).trim();
-    const email = execSync('git config user.email', { encoding: 'utf8' }).trim();
+    const host = getHost();
+    const name = host.execSync('git config user.name').stdout.trim();
+    const email = host.execSync('git config user.email').stdout.trim();
     return { name, email };
   } catch {
     return null;

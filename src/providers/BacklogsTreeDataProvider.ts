@@ -230,7 +230,7 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
     return treeItems.map(item => {
       const treeItem = new BacklogsTreeItem(
         item.label,
-        item.collapsibleState,
+        vscode.TreeItemCollapsibleState.None,
         [],
         undefined,
         item.path,
@@ -238,9 +238,11 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
         backlogId,
         item.id
       );
-      if (item.command) {
-        treeItem.command = item.command;
-      }
+      treeItem.command = {
+        command: 'vscode.open',
+        title: 'Open Task',
+        arguments: [vscode.Uri.file(item.path)]
+      };
       treeItem.tooltip = `Task: ${item.label}\nPath: ${item.path}`;
       return treeItem;
     });
@@ -250,7 +252,7 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
     return treeItems.map(item => {
       const treeItem = new BacklogsTreeItem(
         item.label,
-        item.collapsibleState,
+        vscode.TreeItemCollapsibleState.None,
         [],
         undefined,
         item.path,
@@ -258,9 +260,11 @@ private async addTaskToBacklog(backlogPath: string, taskPath: string): Promise<v
         backlogId,
         item.id
       );
-      if (item.command) {
-        treeItem.command = item.command;
-      }
+      treeItem.command = {
+        command: 'vscode.open',
+        title: 'Open Task',
+        arguments: [vscode.Uri.file(item.path)]
+      };
       treeItem.tooltip = `Task: ${item.label}\nPath: ${item.path}`;
       return treeItem;
     });

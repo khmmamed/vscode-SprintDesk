@@ -1,5 +1,3 @@
-import * as vscode from 'vscode';
-
 export interface Task {
   id: string;
   number: number;
@@ -16,6 +14,80 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   path?: string;
+
+  // v0.4 workforce / agent additions (all optional, additive, non-breaking)
+  source?: string;
+  workStatus?: TaskWorkStatus;
+  agent?: string;
+  workflow?: string;
+  parentTaskId?: string;
+  childTaskIds?: string[];
+  runId?: string;
+  attempts?: number;
+}
+
+export type TaskWorkStatus =
+  | 'waiting'
+  | 'assigned'
+  | 'claimed'
+  | 'in-progress'
+  | 'review'
+  | 'done'
+  | 'blocked'
+  | 'cancelled';
+
+export interface Run {
+  id: string;
+  taskId: string;
+  agentId?: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  attempts: number;
+  startedAt?: string;
+  finishedAt?: string;
+  result?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventRecord {
+  id: string;
+  type: string;
+  source: string;
+  payload: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  actor: string;
+  action: string;
+  targetType: string;
+  targetId?: string;
+  details?: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  role: 'agent' | 'human';
+  description?: string;
+  capabilities?: string[];
+  status?: 'idle' | 'busy' | 'offline';
+  gitAuthor?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeTeam {
+  id: string;
+  name: string;
+  description?: string;
+  memberIds: string[];
+  leadId?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Epic {
@@ -184,4 +256,24 @@ export interface TeamData {
 
 export interface HistoryData {
   entries: HistoryEntry[];
+}
+
+export interface RunsData {
+  runs: Run[];
+}
+
+export interface EventsData {
+  events: EventRecord[];
+}
+
+export interface AuditData {
+  entries: AuditEntry[];
+}
+
+export interface EmployeesData {
+  employees: Employee[];
+}
+
+export interface EmployeeTeamsData {
+  teams: EmployeeTeam[];
 }

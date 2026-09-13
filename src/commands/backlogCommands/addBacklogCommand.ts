@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { createBacklogInteractive } from '../../services/backlogService';
+import { createBacklogInteractive } from '../interactive/backlogInteractive';
 
 export function registerAddBacklogCommand(context: vscode.ExtensionContext, deps?: { createBacklogInteractive?: () => Promise<void> }) {
   context.subscriptions.push(

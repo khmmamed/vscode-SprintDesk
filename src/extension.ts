@@ -45,14 +45,19 @@ import { EpicsTreeDataProvider } from './providers/EpicsTreeDataProvider';
 import { RepositoriesTreeDataProvider } from './providers/RepositoriesTreeDataProvider';
 import { TeamTreeDataProvider, teamTreeDataProvider } from './providers/team/TeamTreeDataProvider';
 import { HistoryTreeDataProvider, historyTreeDataProvider } from './providers/history/HistoryTreeDataProvider';
+import { workforceTreeDataProvider } from './providers/workforce/WorkforceTreeDataProvider';
 // Services
-import { createSprintInteractive } from './services/sprintService';
-import { createEpicInteractive } from './services/epicService';
-import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './services/backlogService';
-import { addExistingTasksToSprint, startFeatureFromTask } from './services/sprintService';
+import { createSprintInteractive, addExistingTasksToSprint, startFeatureFromTask } from './commands/interactive/sprintInteractive';
+import { createEpicInteractive } from './commands/interactive/epicInteractive';
+import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './commands/interactive/backlogInteractive';
 import * as teamService from './services/team/teamService';
+import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
 // Tasks - import and create wrapper for API compatibility
 import { createTask as createTaskService } from "./services/taskService";
+// Host boundary
+import { setHost, setFileSystem } from './host';
+import { VSCodeHost } from './host/VSCodeHost';
+import { NodeFileSystem } from './host/NodeFileSystem';
 
 const createTask = async (repoPath?: string): Promise<void> => {
   const ws = repoPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -147,6 +152,10 @@ class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+  // Initialize host boundary (VSCode host + synchronous file system)
+  setHost(new VSCodeHost());
+  setFileSystem(new NodeFileSystem());
+
   // Register existing commands (delegated to `src/commands`)
   registerOpenWebviewCommand(context);
   registerViewTasksCommand(context);
@@ -182,6 +191,7 @@ const tasksProvider = new TasksTreeDataProvider();
 
   const teamProvider = teamTreeDataProvider;
   const historyProvider = historyTreeDataProvider;
+  const workforceProvider = workforceTreeDataProvider;
 
   // Create and register sprints tree view with drag and drop support
   const sprintsTreeView = vscode.window.createTreeView('sprintdesk-sprints', {
@@ -218,6 +228,11 @@ const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositori
   });
   context.subscriptions.push(teamTreeView);
 
+  const workforceTreeView = vscode.window.createTreeView('sprintdesk-workforce', {
+    treeDataProvider: workforceProvider
+  });
+  context.subscriptions.push(workforceTreeView);
+
   const historyTreeView = vscode.window.createTreeView('sprintdesk-history', {
     treeDataProvider: historyProvider
   });
@@ -239,7 +254,7 @@ const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositori
   registerCreateEpicFromRepoCommand(context, { repositoriesTreeView, epicsProvider, tasksProvider, sprintsProvider, backlogsProvider });
   registerCreateSprintFromRepoCommand(context, { repositoriesTreeView, sprintsProvider, tasksProvider, epicsProvider, backlogsProvider });
   registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
-registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider, teamProvider, historyProvider });
+registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider, teamProvider, historyProvider, workforceProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
   registerOpenSprintFileCommand(context);
   registerShowSprintCalendarCommand(context);
@@ -328,87 +343,23 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     })
   );
 
+  // Workforce commands
+  registerWorkforceCommands(context, workforceProvider);
+
 // Settings commands
   registerOpenSettingsCommand(context);
 
   // MCP server - auto-start on extension load
-  const http = require('http');
-  const mcpHandlers = require('./mcp/handlers');
-  const { handleToolCall } = mcpHandlers;
-  
-  // Build tools list from handlers
-  const ALL_TOOLS = Object.keys(mcpHandlers.HANDLERS || {}).map(name => ({
-    name,
-    description: `SprintDesk ${name.replace('sprintdesk_', '')} operation`
-  }));
-  
+  const { createMcpHttpTransport } = require('./mcp/httpServer');
   let mcpServer: any = null;
-  
+
   const startMcpServer = () => {
     if (mcpServer) return;
-    
-    const server = http.createServer(async (req: any, res: any) => {
-      const url = req.url?.split('?')[0] || '/';
-      
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
-        res.end();
-        return;
+    mcpServer = createMcpHttpTransport({
+      onListen: (port: number) => {
+        console.log(`🚀 MCP server running on port ${port}`);
+        vscode.window.showInformationMessage(`🚀 MCP server running on port ${port}`);
       }
-      
-      if (req.method === 'GET' && url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', server: 'sprintdesk-mcp' }));
-        return;
-      }
-      
-      if (req.method === 'GET' && url === '/tools') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ tools: ALL_TOOLS.map((t: any) => t.name) }));
-        return;
-      }
-      
-      if (req.method === 'POST' && url === '/mcp') {
-        let body = '';
-        req.on('data', (chunk: string) => body += chunk);
-        req.on('end', async () => {
-          try {
-            const request = JSON.parse(body);
-            const { id, method, params } = request;
-            
-            if (method === 'tools/list') {
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { tools: ALL_TOOLS } }));
-              return;
-            }
-            
-            if (method === 'tools/call') {
-              const toolName = params?.name;
-              const toolArgs = params?.arguments || {};
-              const result = await handleToolCall(toolName, toolArgs);
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', id, result: { content: result.content } }));
-              return;
-            }
-            
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } }));
-          } catch (e: any) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', id: 0, error: { code: -32700, message: e.message } }));
-          }
-        });
-        return;
-      }
-      
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found' }));
-    });
-    
-    const PORT = 3847;
-    server.listen(PORT, () => {
-      mcpServer = server;
-      console.log(`🚀 MCP server running on port ${PORT}`);
     });
   };
   
@@ -528,8 +479,8 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     const mcpManifestPath = path.join(sdPath, 'mcp', 'manifest.json');
     const mcpManifest = {
       name: 'sprintdesk-mcp',
-      version: '1.0.0',
-      description: 'MCP server for SprintDesk task management - exposes CRUD and query operations for AI agents',
+      version: '1.1.0',
+      description: 'MCP server for SprintDesk task management - exposes CRUD, query, workflow, run, and workforce operations for AI agents',
       author: 'SprintDesk',
       repository: 'https://github.com/khmmamed/vscode-SprintDesk',
       homepage: 'https://github.com/khmmamed/vscode-SprintDesk',
@@ -540,12 +491,18 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
       },
       tools: {
         task: ['sprintdesk_createTask', 'sprintdesk_getTask', 'sprintdesk_updateTask', 'sprintdesk_deleteTask', 'sprintdesk_listTasks', 'sprintdesk_searchTasks'],
+        workflow: ['sprintdesk_tasksClaim', 'sprintdesk_tasksComplete', 'sprintdesk_tasksAssign', 'sprintdesk_tasksUnassign'],
         epic: ['sprintdesk_createEpic', 'sprintdesk_getEpic', 'sprintdesk_updateEpic', 'sprintdesk_deleteEpic', 'sprintdesk_listEpics', 'sprintdesk_getTasksByEpic', 'sprintdesk_addTaskToEpic'],
         sprint: ['sprintdesk_createSprint', 'sprintdesk_getSprint', 'sprintdesk_updateSprint', 'sprintdesk_deleteSprint', 'sprintdesk_listSprints', 'sprintdesk_getTasksBySprint', 'sprintdesk_addTaskToSprint'],
         backlog: ['sprintdesk_createBacklog', 'sprintdesk_getBacklog', 'sprintdesk_listBacklogs', 'sprintdesk_addTaskToBacklog'],
-        team: ['sprintdesk_listTeam', 'sprintdesk_syncTeamFromGit', 'sprintdesk_addTeamMember', 'sprintdesk_removeTeamMember'],
-        history: ['sprintdesk_getHistory', 'sprintdesk_trackChange'],
-        move: ['sprintdesk_moveTaskToEpic', 'sprintdesk_moveTaskToSprint', 'sprintdesk_moveTaskToBacklog']
+        move: ['sprintdesk_moveTaskToEpic', 'sprintdesk_moveTaskToSprint', 'sprintdesk_moveTaskToBacklog'],
+        team: ['sprintdesk_listTeam', 'sprintdesk_syncTeamFromGit', 'sprintdesk_addTeamMember', 'sprintdesk_removeTeamMember', 'sprintdesk_runAgent'],
+        workforce: ['sprintdesk_agentsList', 'sprintdesk_agentsGet'],
+        run: ['sprintdesk_runsCreate', 'sprintdesk_runsList', 'sprintdesk_runsGet'],
+        event: ['sprintdesk_eventsPublish', 'sprintdesk_eventsList'],
+        audit: ['sprintdesk_auditList'],
+        context: ['sprintdesk_projectContext'],
+        history: ['sprintdesk_getHistory', 'sprintdesk_trackChange']
       },
       usage: {
         http_curl: "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}'",
@@ -580,6 +537,21 @@ Local MCP server for integrating SprintDesk with AI agents like Copilot, Claude,
 
 ### Move Tools
 - sprintdesk_moveTaskToEpic, sprintdesk_moveTaskToSprint, sprintdesk_moveTaskToBacklog
+
+### Workflow Tools
+- sprintdesk_tasksClaim, sprintdesk_tasksComplete, sprintdesk_tasksAssign, sprintdesk_tasksUnassign
+
+### Workforce Tools
+- sprintdesk_agentsList, sprintdesk_agentsGet, sprintdesk_runAgent
+
+### Run Tools
+- sprintdesk_runsCreate, sprintdesk_runsList, sprintdesk_runsGet
+
+### Event & Audit Tools
+- sprintdesk_eventsPublish, sprintdesk_eventsList, sprintdesk_auditList
+
+### Context Tools
+- sprintdesk_projectContext
 
 ## Usage
 

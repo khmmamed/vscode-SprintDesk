@@ -1,12 +1,11 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as yaml from 'js-yaml';
 import * as fileService from '../fileService';
 import { getDataService } from '../../data/DataService';
 import { TeamMember, TeamData } from '../../data/types';
 import { PROJECT_CONSTANTS } from '../../utils/constant';
+import { getHost, getFileSystem } from '../../host';
 
 const TEAM_FILE = 'team.yml';
 
@@ -17,8 +16,9 @@ function getTeamPath(ws: string): string {
 function loadTeamFromFile(ws: string): TeamMember[] {
   const teamPath = getTeamPath(ws);
   try {
-    if (!fs.existsSync(teamPath)) return [];
-    const content = fs.readFileSync(teamPath, 'utf8');
+    const fileSystem = getFileSystem();
+    if (!fileSystem.exists(teamPath)) return [];
+    const content = fileSystem.readFile(teamPath);
     const data = yaml.load(content) as TeamData;
     return data?.members || [];
   } catch {
@@ -28,53 +28,51 @@ function loadTeamFromFile(ws: string): TeamMember[] {
 
 function saveTeamToFile(ws: string, members: TeamMember[]): void {
   const teamPath = getTeamPath(ws);
-  fs.mkdirSync(path.dirname(teamPath), { recursive: true });
-  fs.writeFileSync(teamPath, yaml.dump({ members }), 'utf8');
+  const fileSystem = getFileSystem();
+  fileSystem.mkdir(path.dirname(teamPath), { recursive: true });
+  fileSystem.writeFile(teamPath, yaml.dump({ members }));
 }
 
 export async function syncTeamFromGit(): Promise<TeamMember[]> {
   const ws = fileService.getWorkspaceRoot();
   if (!ws) throw new Error('No workspace found');
 
-  return new Promise((resolve, reject) => {
-    const { exec } = require('child_process');
-    exec('git log --format="%ae|%an" --all', { cwd: ws }, (err: Error | null, stdout: string, stderr: string) => {
-      if (err) {
-        vscode.window.showWarningMessage('Git not available or no commits yet');
-        resolve([]);
-        return;
+  try {
+    const host = getHost();
+    const { stdout } = await host.exec('git log --format="%ae|%an" --all', { cwd: ws });
+
+    const authors = new Map<string, string>();
+    const lines = stdout.trim().split('\n').filter(Boolean);
+
+    for (const line of lines) {
+      const [email, name] = line.split('|');
+      if (email && name && !authors.has(email)) {
+        authors.set(email, name);
       }
+    }
 
-      const authors = new Map<string, string>();
-      const lines = stdout.trim().split('\n').filter(Boolean);
-      
-      for (const line of lines) {
-        const [email, name] = line.split('|');
-        if (email && name && !authors.has(email)) {
-          authors.set(email, name);
-        }
-      }
+    const existingMembers = loadTeamFromFile(ws);
+    const existingEmails = new Set(existingMembers.map(m => m.email));
+    const newAuthors = Array.from(authors.entries()).filter(([email]) => !existingEmails.has(email));
 
-      const existingMembers = loadTeamFromFile(ws);
-      const existingEmails = new Set(existingMembers.map(m => m.email));
-      const newAuthors = Array.from(authors.entries()).filter(([email]) => !existingEmails.has(email));
+    for (const [email, name] of newAuthors) {
+      existingMembers.push({
+        id: crypto.randomUUID(),
+        name,
+        email,
+        role: 'developer',
+        gitAuthor: name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
 
-      for (const [email, name] of newAuthors) {
-        existingMembers.push({
-          id: crypto.randomUUID(),
-          name,
-          email,
-          role: 'developer',
-          gitAuthor: name,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      }
-
-      saveTeamToFile(ws, existingMembers);
-      resolve(existingMembers);
-    });
-  });
+    saveTeamToFile(ws, existingMembers);
+    return existingMembers;
+  } catch {
+    getHost().showMessage('Git not available or no commits yet', 'warning');
+    return [];
+  }
 }
 
 export function getCurrentGitUser(): { name: string; email: string } | null {
@@ -82,9 +80,9 @@ export function getCurrentGitUser(): { name: string; email: string } | null {
   if (!ws) return null;
 
   try {
-    const { execSync } = require('child_process');
-    const name = execSync('git config user.name', { cwd: ws, encoding: 'utf8' }).trim();
-    const email = execSync('git config user.email', { cwd: ws, encoding: 'utf8' }).trim();
+    const host = getHost();
+    const name = host.execSync('git config user.name', { cwd: ws }).stdout.trim();
+    const email = host.execSync('git config user.email', { cwd: ws }).stdout.trim();
     return { name, email };
   } catch {
     return null;
@@ -107,7 +105,7 @@ export function addTeamMember(member: Omit<TeamMember, 'id' | 'createdAt' | 'upd
   if (!ws) throw new Error('No workspace found');
 
   const members = loadTeamFromFile(ws);
-  
+
   const existing = members.find(m => m.email === member.email);
   if (existing) {
     Object.assign(existing, member, { updatedAt: new Date().toISOString() });

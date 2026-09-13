@@ -12,7 +12,9 @@
   "connection": {
     "http": {
       "url": "http://localhost:3847/mcp",
-      "methods": ["POST"]
+      "methods": [
+        "POST"
+      ]
     },
     "stdio": {
       "command": "npm run mcp",
@@ -68,37 +70,9 @@
       "sprintdesk_moveTaskToBacklog"
     ]
   },
-  "configuration": {
-    "workspace": "auto-detect",
-    "dataDir": ".SprintDesk"
-  },
   "usage": {
     "http_curl": "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}'",
-    "http_call": "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_listTasks\",\"arguments\":{}}'",
+    "http_call": "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_listTasks\",\"arguments\":{}}}'",
     "stdio": "cd <workspace> && npm run mcp"
-  },
-  "examples": {
-    "list_tasks": {
-      "jsonrpc": "2.0",
-      "id": 1,
-      "method": "tools/call",
-      "params": {
-        "name": "sprintdesk_listTasks",
-        "arguments": {}
-      }
-    },
-    "create_task": {
-      "jsonrpc": "2.0",
-      "id": 2,
-      "method": "tools/call",
-      "params": {
-        "name": "sprintdesk_createTask",
-        "arguments": {
-          "title": "My new task",
-          "type": "feature",
-          "priority": "high"
-        }
-      }
-    }
   }
 }

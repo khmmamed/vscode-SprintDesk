@@ -332,12 +332,185 @@ export const MOVE_TOOLS = [
   },
 ];
 
+export const AGENT_TOOLS = [
+  {
+    name: 'sprintdesk_agentsList',
+    description: 'List available agents (workforce employees + team agents)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sprintdesk_agentsGet',
+    description: 'Get a single agent by ID',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        agentId: { type: 'string', description: 'Agent ID' },
+      },
+      required: ['agentId'],
+    },
+  },
+];
+
+export const TASK_WORK_TOOLS = [
+  {
+    name: 'sprintdesk_tasksClaim',
+    description: 'Claim a task for an agent (sets workStatus=claimed; does not change classic status)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID or code' },
+        agentId: { type: 'string', description: 'Agent ID claiming the task' },
+        runId: { type: 'string', description: 'Optional run ID to bind' },
+      },
+      required: ['taskId'],
+    },
+  },
+  {
+    name: 'sprintdesk_tasksComplete',
+    description: 'Mark a task complete in the workforce workflow (sets workStatus=done; does not change classic status)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID or code' },
+        runId: { type: 'string', description: 'Optional run ID to mark completed' },
+        result: { type: 'string', description: 'Optional run result summary' },
+      },
+      required: ['taskId'],
+    },
+  },
+  {
+    name: 'sprintdesk_tasksAssign',
+    description: 'Assign a task to an agent or employee (sets task.agent; adds audit entry)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID or code' },
+        agentId: { type: 'string', description: 'Agent/employee id or name from sprintdesk_agentsList' },
+      },
+      required: ['taskId', 'agentId'],
+    },
+  },
+  {
+    name: 'sprintdesk_tasksUnassign',
+    description: 'Remove the agent assignment from a task (clears task.agent; adds audit entry)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID or code' },
+      },
+      required: ['taskId'],
+    },
+  },
+];
+
+export const RUN_TOOLS = [
+  {
+    name: 'sprintdesk_runsCreate',
+    description: 'Create a new run record for a task (queued; no autonomous execution)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID or code' },
+        agentId: { type: 'string', description: 'Optional agent to assign' },
+      },
+      required: ['taskId'],
+    },
+  },
+  {
+    name: 'sprintdesk_runsList',
+    description: 'List run records, optionally filtered by taskId or status',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID to filter by' },
+        status: { type: 'string', enum: ['queued', 'running', 'completed', 'failed', 'cancelled'] },
+        limit: { type: 'number', description: 'Max runs to return' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_runsGet',
+    description: 'Get a run record by ID',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        runId: { type: 'string', description: 'Run ID' },
+      },
+      required: ['runId'],
+    },
+  },
+];
+
+export const EVENT_TOOLS = [
+  {
+    name: 'sprintdesk_eventsPublish',
+    description: 'Publish an event record',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        type: { type: 'string', description: 'Event type (e.g., task.created)' },
+        source: { type: 'string', description: 'Event source (e.g., mcp, agent, manual)' },
+        payload: { type: 'object', description: 'Optional event payload' },
+      },
+      required: ['type', 'source'],
+    },
+  },
+  {
+    name: 'sprintdesk_eventsList',
+    description: 'List recent events, optionally filtered',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        type: { type: 'string', description: 'Event type filter' },
+        source: { type: 'string', description: 'Event source filter' },
+        limit: { type: 'number', description: 'Max events to return' },
+      },
+    },
+  },
+];
+
+export const AUDIT_TOOLS = [
+  {
+    name: 'sprintdesk_auditList',
+    description: 'List audit entries, optionally filtered by actor or target',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        actor: { type: 'string', description: 'Actor filter' },
+        targetType: { type: 'string', description: 'Target type filter' },
+        targetId: { type: 'string', description: 'Target ID filter' },
+        limit: { type: 'number', description: 'Max entries to return' },
+      },
+    },
+  },
+];
+
+export const CONTEXT_TOOLS = [
+  {
+    name: 'sprintdesk_projectContext',
+    description: 'Get a compact snapshot of the project: counts, statuses, active runs, recent events',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+];
+
 export const ALL_TOOLS = [
   ...TASK_TOOLS,
   ...EPIC_TOOLS,
   ...SPRINT_TOOLS,
   ...BACKLOG_TOOLS,
   ...MOVE_TOOLS,
+  ...AGENT_TOOLS,
+  ...TASK_WORK_TOOLS,
+  ...RUN_TOOLS,
+  ...EVENT_TOOLS,
+  ...AUDIT_TOOLS,
+  ...CONTEXT_TOOLS,
 ];
 
 export function getToolByName(name: string) {

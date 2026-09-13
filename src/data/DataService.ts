@@ -1,7 +1,6 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import yaml from 'js-yaml';
+import { getHost, getFileSystem, IFileSystem } from '../host';
 import { Config, Task, Epic, Backlog, Sprint, TasksData, EpicsData, BacklogsData, SprintsData, DEFAULT_CONFIG } from './types';
 
 const SPRINTDESK_DIR = '.SprintDesk';
@@ -12,18 +11,25 @@ export class DataService {
   private workspaceRoot: string;
   private configCache: Config | null = null;
 
+  private get fileSystem(): IFileSystem {
+    return getFileSystem();
+  }
+
   constructor(workspaceRoot?: string) {
     this.workspaceRoot = workspaceRoot || this.getDefaultWorkspaceRoot();
   }
 
   private getDefaultWorkspaceRoot(): string {
-    const ws = vscode.workspace.workspaceFolders;
-    return ws?.[0]?.uri.fsPath || '';
+    return getHost().getWorkspaceRoot() || '';
   }
 
   setWorkspaceRoot(root: string) {
     this.workspaceRoot = root;
     this.configCache = null;
+  }
+
+  getWorkspaceRoot(): string {
+    return this.workspaceRoot;
   }
 
   clearConfigCache(): void {
@@ -48,22 +54,22 @@ export class DataService {
       return this.configCache;
     }
 
-    const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const taskPrefix = cfg.get<string>('taskPrefix') || 'task_';
-    const taskStart = cfg.get<number>('taskStartNumber') || 100;
-    const taskPad = cfg.get<number>('taskPadding') || 3;
-    const epicPrefix = cfg.get<string>('epicPrefix') || 'epic_';
-    const epicStart = cfg.get<number>('epicStartNumber') || 1;
-    const epicPad = cfg.get<number>('epicPadding') || 2;
-    const sprintPrefix = cfg.get<string>('sprintPrefix') || 'sprint_';
-    const sprintStart = cfg.get<number>('sprintStartNumber') || 1;
-    const sprintPad = cfg.get<number>('sprintPadding') || 1;
-    const defaultBacklog = cfg.get<string>('defaultBacklog') || 'features';
-    const defaultStatus = cfg.get<string>('defaultStatus') || 'waiting';
-    const defaultPriority = cfg.get<string>('defaultPriority') || 'medium';
-    const showIds = cfg.get<boolean>('showIds') ?? true;
-    const showCompleted = cfg.get<boolean>('showCompleted') ?? false;
-    const projectPrefix = cfg.get<string>('projectPrefix') || 'SPD';
+    const host = getHost();
+    const taskPrefix = host.getConfig<string>('taskPrefix') || 'task_';
+    const taskStart = host.getConfig<number>('taskStartNumber') || 100;
+    const taskPad = host.getConfig<number>('taskPadding') || 3;
+    const epicPrefix = host.getConfig<string>('epicPrefix') || 'epic_';
+    const epicStart = host.getConfig<number>('epicStartNumber') || 1;
+    const epicPad = host.getConfig<number>('epicPadding') || 2;
+    const sprintPrefix = host.getConfig<string>('sprintPrefix') || 'sprint_';
+    const sprintStart = host.getConfig<number>('sprintStartNumber') || 1;
+    const sprintPad = host.getConfig<number>('sprintPadding') || 1;
+    const defaultBacklog = host.getConfig<string>('defaultBacklog') || 'features';
+    const defaultStatus = host.getConfig<string>('defaultStatus') || 'waiting';
+    const defaultPriority = host.getConfig<string>('defaultPriority') || 'medium';
+    const showIds = host.getConfig<boolean>('showIds') ?? true;
+    const showCompleted = host.getConfig<boolean>('showCompleted') ?? false;
+    const projectPrefix = host.getConfig<string>('projectPrefix') || 'SPD';
 
     this.configCache = {
       projectPrefix,
@@ -204,8 +210,8 @@ export class DataService {
   loadTasks(): Task[] {
     const tasksPath = path.join(this.getDataPath(), 'tasks.yml');
     try {
-      if (!fs.existsSync(tasksPath)) return [];
-      const content = fs.readFileSync(tasksPath, 'utf8');
+      if (!this.fileSystem.exists(tasksPath)) return [];
+      const content = this.fileSystem.readFile(tasksPath);
       const data = yaml.load(content) as TasksData;
       return data.tasks || [];
     } catch (e) {
@@ -215,8 +221,8 @@ export class DataService {
 
   saveTasks(tasks: Task[]): void {
     const tasksPath = path.join(this.getDataPath(), 'tasks.yml');
-    fs.mkdirSync(path.dirname(tasksPath), { recursive: true });
-    fs.writeFileSync(tasksPath, yaml.dump({ tasks }), 'utf8');
+    this.fileSystem.mkdir(path.dirname(tasksPath), { recursive: true });
+    this.fileSystem.writeFile(tasksPath, yaml.dump({ tasks }));
   }
 
   addTask(task: Task): void {
@@ -242,8 +248,8 @@ export class DataService {
   deleteTaskMd(taskId: string): void {
     const tasksDir = this.getTasksDir();
     const filePath = path.join(tasksDir, `${taskId}.md`);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    if (this.fileSystem.exists(filePath)) {
+      this.fileSystem.delete(filePath);
     }
   }
 
@@ -259,8 +265,8 @@ getTask(taskId: string): Task | undefined {
   loadEpics(): Epic[] {
     const epicsPath = path.join(this.getDataPath(), 'epics.yml');
     try {
-      if (!fs.existsSync(epicsPath)) return [];
-      const content = fs.readFileSync(epicsPath, 'utf8');
+      if (!this.fileSystem.exists(epicsPath)) return [];
+      const content = this.fileSystem.readFile(epicsPath);
       const data = yaml.load(content) as EpicsData;
       return data.epics || [];
     } catch (e) {
@@ -270,8 +276,8 @@ getTask(taskId: string): Task | undefined {
 
   saveEpics(epics: Epic[]): void {
     const epicsPath = path.join(this.getDataPath(), 'epics.yml');
-    fs.mkdirSync(path.dirname(epicsPath), { recursive: true });
-    fs.writeFileSync(epicsPath, yaml.dump({ epics }), 'utf8');
+    this.fileSystem.mkdir(path.dirname(epicsPath), { recursive: true });
+    this.fileSystem.writeFile(epicsPath, yaml.dump({ epics }));
   }
 
   addEpic(epic: Epic): void {
@@ -302,8 +308,8 @@ getTask(taskId: string): Task | undefined {
   loadBacklogs(): Backlog[] {
     const backlogsPath = path.join(this.getDataPath(), 'backlogs.yml');
     try {
-      if (!fs.existsSync(backlogsPath)) return [];
-      const content = fs.readFileSync(backlogsPath, 'utf8');
+      if (!this.fileSystem.exists(backlogsPath)) return [];
+      const content = this.fileSystem.readFile(backlogsPath);
       const data = yaml.load(content) as BacklogsData;
       return data.backlogs || [];
     } catch (e) {
@@ -313,8 +319,8 @@ getTask(taskId: string): Task | undefined {
 
   saveBacklogs(backlogs: Backlog[]): void {
     const backlogsPath = path.join(this.getDataPath(), 'backlogs.yml');
-    fs.mkdirSync(path.dirname(backlogsPath), { recursive: true });
-    fs.writeFileSync(backlogsPath, yaml.dump({ backlogs }), 'utf8');
+    this.fileSystem.mkdir(path.dirname(backlogsPath), { recursive: true });
+    this.fileSystem.writeFile(backlogsPath, yaml.dump({ backlogs }));
   }
 
   addBacklog(backlog: Backlog): void {
@@ -381,8 +387,8 @@ getTask(taskId: string): Task | undefined {
   loadSprints(): Sprint[] {
     const sprintsPath = path.join(this.getDataPath(), 'sprints.yml');
     try {
-      if (!fs.existsSync(sprintsPath)) return [];
-      const content = fs.readFileSync(sprintsPath, 'utf8');
+      if (!this.fileSystem.exists(sprintsPath)) return [];
+      const content = this.fileSystem.readFile(sprintsPath);
       const data = yaml.load(content) as SprintsData;
       return data.sprints || [];
     } catch (e) {
@@ -392,8 +398,8 @@ getTask(taskId: string): Task | undefined {
 
   saveSprints(sprints: Sprint[]): void {
     const sprintsPath = path.join(this.getDataPath(), 'sprints.yml');
-    fs.mkdirSync(path.dirname(sprintsPath), { recursive: true });
-    fs.writeFileSync(sprintsPath, yaml.dump({ sprints }), 'utf8');
+    this.fileSystem.mkdir(path.dirname(sprintsPath), { recursive: true });
+    this.fileSystem.writeFile(sprintsPath, yaml.dump({ sprints }));
   }
 
   addSprint(sprint: Sprint): void {
@@ -566,7 +572,7 @@ getTask(taskId: string): Task | undefined {
   // === MD File Operations (YAML source + MD read-only) ===
   saveTaskMd(task: Task, preserveUserContent: boolean = true): void {
     const tasksDir = this.getTasksDir();
-    fs.mkdirSync(tasksDir, { recursive: true });
+    this.fileSystem.mkdir(tasksDir, { recursive: true });
 
     const filename = this.getTaskFilename(task);
     const newFilePath = path.join(tasksDir, filename);
@@ -574,24 +580,24 @@ getTask(taskId: string): Task | undefined {
 
     let additionalContent: string | undefined;
     if (preserveUserContent) {
-      if (fs.existsSync(newFilePath)) {
-        const existingContent = fs.readFileSync(newFilePath, 'utf8');
+      if (this.fileSystem.exists(newFilePath)) {
+        const existingContent = this.fileSystem.readFile(newFilePath);
         const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
         additionalContent = userContentMatch ? userContentMatch[1] : existingContent;
-      } else if (fs.existsSync(oldFilePath)) {
-        const existingContent = fs.readFileSync(oldFilePath, 'utf8');
+      } else if (this.fileSystem.exists(oldFilePath)) {
+        const existingContent = this.fileSystem.readFile(oldFilePath);
         const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
         additionalContent = userContentMatch ? userContentMatch[1] : existingContent;
       }
     }
 
     const md = this.generateTaskMd(task, additionalContent);
-    fs.writeFileSync(newFilePath, md, 'utf8');
+    this.fileSystem.writeFile(newFilePath, md);
 
     // remove legacy id-based file if it exists and is different
     try {
-      if (fs.existsSync(oldFilePath) && oldFilePath !== newFilePath) {
-        fs.unlinkSync(oldFilePath);
+      if (this.fileSystem.exists(oldFilePath) && oldFilePath !== newFilePath) {
+        this.fileSystem.delete(oldFilePath);
       }
     } catch (e) {
       // ignore deletion errors
@@ -600,14 +606,14 @@ getTask(taskId: string): Task | undefined {
 
   saveBacklogMd(backlog: Backlog, preserveUserContent: boolean = true): void {
     const backlogsDir = this.getBacklogsDir();
-    fs.mkdirSync(backlogsDir, { recursive: true });
+    this.fileSystem.mkdir(backlogsDir, { recursive: true });
 
     const filename = this.getBacklogFilename(backlog);
     const filePath = path.join(backlogsDir, filename);
     let additionalContent: string | undefined;
 
-    if (preserveUserContent && fs.existsSync(filePath)) {
-      const existingContent = fs.readFileSync(filePath, 'utf8');
+    if (preserveUserContent && this.fileSystem.exists(filePath)) {
+      const existingContent = this.fileSystem.readFile(filePath);
       const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
       if (userContentMatch) {
         additionalContent = userContentMatch[1];
@@ -619,19 +625,19 @@ getTask(taskId: string): Task | undefined {
     const tasks = this.getTasksByBacklog(backlog.id);
     let md = this.generateBacklogMd(backlog, tasks);
     if (additionalContent) md += '\n' + additionalContent;
-    fs.writeFileSync(filePath, md, 'utf8');
+    this.fileSystem.writeFile(filePath, md);
   }
 
   saveEpicMd(epic: Epic, preserveUserContent: boolean = true): void {
     const epicsDir = this.getEpicsDir();
-    fs.mkdirSync(epicsDir, { recursive: true });
+    this.fileSystem.mkdir(epicsDir, { recursive: true });
 
     const filename = this.getEpicFilename(epic);
     const filePath = path.join(epicsDir, filename);
     let additionalContent: string | undefined;
 
-    if (preserveUserContent && fs.existsSync(filePath)) {
-      const existingContent = fs.readFileSync(filePath, 'utf8');
+    if (preserveUserContent && this.fileSystem.exists(filePath)) {
+      const existingContent = this.fileSystem.readFile(filePath);
       const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
       if (userContentMatch) {
         additionalContent = userContentMatch[1];
@@ -643,19 +649,19 @@ getTask(taskId: string): Task | undefined {
     const tasks = this.getTasksByEpic(epic.id);
     let md = this.generateEpicMd(epic, tasks);
     if (additionalContent) md += '\n' + additionalContent;
-    fs.writeFileSync(filePath, md, 'utf8');
+    this.fileSystem.writeFile(filePath, md);
   }
 
   saveSprintMd(sprint: Sprint, preserveUserContent: boolean = true): void {
     const sprintsDir = this.getSprintsDir();
-    fs.mkdirSync(sprintsDir, { recursive: true });
+    this.fileSystem.mkdir(sprintsDir, { recursive: true });
 
     const filename = this.getSprintFilename(sprint);
     const filePath = path.join(sprintsDir, filename);
     let additionalContent: string | undefined;
 
-    if (preserveUserContent && fs.existsSync(filePath)) {
-      const existingContent = fs.readFileSync(filePath, 'utf8');
+    if (preserveUserContent && this.fileSystem.exists(filePath)) {
+      const existingContent = this.fileSystem.readFile(filePath);
       const userContentMatch = existingContent.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/m);
       if (userContentMatch) {
         additionalContent = userContentMatch[1];
@@ -667,7 +673,7 @@ getTask(taskId: string): Task | undefined {
     const tasks = this.getTasksBySprint(sprint.id);
     let md = this.generateSprintMd(sprint, tasks);
     if (additionalContent) md += '\n' + additionalContent;
-    fs.writeFileSync(filePath, md, 'utf8');
+    this.fileSystem.writeFile(filePath, md);
   }
 
   refresh(): void {
