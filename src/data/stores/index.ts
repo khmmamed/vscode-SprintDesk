@@ -14,6 +14,7 @@ import { FindingStore } from './FindingStore';
 import { ScheduleStore } from './ScheduleStore';
 import { WorkflowStore } from './WorkflowStore';
 import { EventRuleStore } from './EventRuleStore';
+import { ExecutionWindowStore } from './ExecutionWindowStore';
 import {
   ProjectMcpManifest,
   defaultProjectMcpManifest,
@@ -37,6 +38,7 @@ export interface Stores {
   schedules: ScheduleStore;
   workflows: WorkflowStore;
   eventRules: EventRuleStore;
+  executionWindows: ExecutionWindowStore;
 }
 
 export interface ProjectMcpFacade {
@@ -72,7 +74,8 @@ export function getStores(workspaceRoot?: string): Stores {
       findings: new FindingStore(root),
       schedules: new ScheduleStore(root),
       workflows: new WorkflowStore(root),
-      eventRules: new EventRuleStore(root)
+      eventRules: new EventRuleStore(root),
+      executionWindows: new ExecutionWindowStore(root)
     };
     activeStoresRoot = root;
   }

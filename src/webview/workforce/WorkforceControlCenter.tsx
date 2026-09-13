@@ -11,6 +11,7 @@ type WorkforceSection =
   | "schedules"
   | "workflows"
   | "event-rules"
+  | "windows"
   | "activity"
   | "create-task";
 
@@ -20,6 +21,7 @@ type FindingFilter = "all" | "agent" | "human" | "approved" | "rejected";
 type FindingStatus = "pending" | "approved" | "rejected";
 type WorkerMode = "headless" | "terminal" | "noop" | "ollama";
 type RuleTriggerStatus = "completed" | "failed";
+type ExecWindowStatus = "planned" | "running" | "completed" | "cancelled";
 
 interface RunDto {
   id: string;
@@ -82,6 +84,29 @@ interface CountsDto {
   schedules: number;
   workflows: number;
   eventRules: number;
+  exeWindows: number;
+}
+
+interface ExecutionWindowDto {
+  id: string;
+  name: string;
+  goal?: string;
+  status: ExecWindowStatus;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  workflowIds: string[];
+  workflowNames: string[];
+  agentIds: string[];
+  agentNames: string[];
+  workerMode?: WorkerMode;
+  maxConcurrentRuns?: number;
+  runCount: number;
+  runs: { queued: number; running: number; completed: number; failed: number; cancelled: number };
+  taskCount: number;
+  findings: { total: number; pendingAgentReview: number; pendingHumanReview: number; approved: number; rejected: number };
+  completionSummary?: { runsCompleted: number; runsFailed: number; runsCancelled: number; findings: number; errors: number };
 }
 
 interface EventRuleMatcherDto {
@@ -164,7 +189,7 @@ const EMPTY_QUEUE: QueueDto = {
   offlineAgents: 0
 };
 
-const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, pendingAgentReview: 0, pendingHumanReview: 0, schedules: 0, workflows: 0, eventRules: 0 };
+const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, pendingAgentReview: 0, pendingHumanReview: 0, schedules: 0, workflows: 0, eventRules: 0, exeWindows: 0 };
 
 const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "employees", label: "Employees" },
@@ -175,6 +200,7 @@ const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "schedules", label: "Schedules" },
   { key: "workflows", label: "Workflows" },
   { key: "event-rules", label: "Event Rules" },
+  { key: "windows", label: "Execution Windows" },
   { key: "activity", label: "Activity" },
   { key: "create-task", label: "Create Task" }
 ];
@@ -453,6 +479,17 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
   const [eventRules, setEventRules] = React.useState<EventRuleDto[]>([]);
   const [workflows, setWorkflows] = React.useState<WorkflowDto[]>([]);
+  const [execWindows, setExecWindows] = React.useState<ExecutionWindowDto[]>([]);
+  const [windowError, setWindowError] = React.useState<string>("");
+  const [windowResult, setWindowResult] = React.useState<string>("");
+  const [expandedWindow, setExpandedWindow] = React.useState<string | null>(null);
+  const [windowForm, setWindowForm] = React.useState<{
+    name: string;
+    goal: string;
+    workflowIds: string[];
+    agentIds: string[];
+    workerMode: string;
+  }>({ name: "", goal: "", workflowIds: [], agentIds: [], workerMode: "" });
   const [ruleError, setRuleError] = React.useState<string>("");
   const [ruleResult, setRuleResult] = React.useState<string>("");
   const [ruleForm, setRuleForm] = React.useState<{
@@ -516,6 +553,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         if (payload) setQueue(payload);
       } else if (command === "SET_WORKFORCE_EVENT_RULES") {
         setEventRules(payload || []);
+      } else if (command === "SET_WORKFORCE_EXEC_WINDOWS") {
+        setExecWindows(payload || []);
       } else if (command === "SET_WORKFORCE_WORKFLOWS") {
         setWorkflows(payload || []);
       } else if (command === "RUN_UPDATED") {
@@ -534,6 +573,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setConfigResult(messageError);
           setRuleError(messageError);
           setValidateError(messageError);
+          setWindowError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -543,6 +583,11 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (payload?.deleted !== undefined) setRuleResult(payload?.deleted ? "Rule deleted." : "");
           if (payload?.queueProcessed) setQueueResult(`Queue pass: ${payload.claimed} claimed, ${payload.started} started, ${payload.skipped} skipped.`);
           if (payload?.retried) setQueueResult(`Run ${payload.run?.id} queued for retry.`);
+          if (payload?.window) {
+            if (payload?.started) setWindowResult(`Execution window "${payload.window.name}" started.`);
+            else if (payload?.cancelled) setWindowResult(`Execution window "${payload.window.name}" cancelled.`);
+            else setWindowResult(`Execution window "${payload.window.name}" created.`);
+          }
         }
       }
     };
@@ -659,6 +704,55 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     postRequest("WORKFORCE_DELETE_EVENT_RULE", { ruleId });
   };
 
+  const setWindowField = (field: "name" | "goal" | "workerMode", value: string): void => {
+    setWindowForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const toggleWindowWorkflow = (workflowId: string): void => {
+    setWindowForm(prev => ({
+      ...prev,
+      workflowIds: prev.workflowIds.includes(workflowId)
+        ? prev.workflowIds.filter(id => id !== workflowId)
+        : [...prev.workflowIds, workflowId]
+    }));
+  };
+
+  const toggleWindowAgent = (agentId: string): void => {
+    setWindowForm(prev => ({
+      ...prev,
+      agentIds: prev.agentIds.includes(agentId)
+        ? prev.agentIds.filter(id => id !== agentId)
+        : [...prev.agentIds, agentId]
+    }));
+  };
+
+  const createExecutionWindow = (): void => {
+    if (!windowForm.name.trim()) {setWindowError("Enter a window name"); return;}
+    if (windowForm.workflowIds.length === 0) {setWindowError("Select at least one workflow"); return;}
+    setWindowError("");
+    setWindowResult("");
+    postRequest("WORKFORCE_CREATE_EXEC_WINDOW", {
+      name: windowForm.name.trim(),
+      goal: windowForm.goal.trim() || undefined,
+      workflowIds: windowForm.workflowIds,
+      agentIds: windowForm.agentIds,
+      workerMode: windowForm.workerMode || undefined
+    });
+    setWindowForm({ name: "", goal: "", workflowIds: [], agentIds: [], workerMode: "" });
+  };
+
+  const startExecutionWindow = (windowId: string): void => {
+    setWindowError("");
+    setWindowResult("");
+    postRequest("WORKFORCE_START_EXEC_WINDOW", { windowId });
+  };
+
+  const cancelExecutionWindow = (windowId: string): void => {
+    setWindowError("");
+    setWindowResult("");
+    postRequest("WORKFORCE_CANCEL_EXEC_WINDOW", { windowId });
+  };
+
   const ruleMatcherText = (matcher: EventRuleMatcherDto): string => {
     const parts: string[] = [];
     if (matcher.eventType) parts.push(`type: ${matcher.eventType}`);
@@ -771,6 +865,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         <StatChip label={`Schedules ${counts.schedules}`} onClick={() => setTab("schedules")} />
         <StatChip label={`Workflows ${counts.workflows}`} onClick={() => setTab("workflows")} />
         <StatChip label={`Event Rules ${counts.eventRules}`} onClick={() => setTab("event-rules")} />
+        <StatChip label={`Windows ${counts.exeWindows}`} onClick={() => setTab("windows")} />
       </div>
 
       <div style={styles.tabs}>
@@ -1288,6 +1383,137 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                       <span style={styles.muted}>· {formatTime(trigger.createdAt)}</span>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === "windows" && (
+        <div>
+          <div style={styles.card}>
+            <div style={styles.row}>
+              <span style={styles.name}>New Execution Window</span>
+              <span style={{ flex: 1 }} />
+              <span style={styles.muted}>A deliberate synchronous batch of autonomous work — Run Now is a single execution.</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Window name</label>
+                <input style={styles.input} value={windowForm.name} placeholder="e.g. Product Brief Research Session" onChange={ev => setWindowField("name", ev.target.value)} />
+              </div>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Goal (optional)</label>
+                <input style={styles.input} value={windowForm.goal} placeholder="e.g. Research and summarize the market" onChange={ev => setWindowField("goal", ev.target.value)} />
+              </div>
+            </div>
+
+            <div style={styles.field}>
+              <label style={styles.label}>Workflows to run</label>
+              <div style={styles.filterRow}>
+                {workflows.filter(wf => wf.enabled).length === 0 && <span style={styles.muted}>No enabled workflows yet — define one first.</span>}
+                {workflows.filter(wf => wf.enabled).map(wf => (
+                  <button
+                    key={wf.id}
+                    style={windowForm.workflowIds.includes(wf.id) ? styles.filterChipActive : styles.filterChip}
+                    onClick={() => toggleWindowWorkflow(wf.id)}
+                  >
+                    {wf.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={styles.field}>
+              <label style={styles.label}>Agents / workers (optional — all agents when empty)</label>
+              <div style={styles.filterRow}>
+                {agents.length === 0 && <span style={styles.muted}>No agents registered.</span>}
+                {agents.map(ag => (
+                  <button
+                    key={ag.id}
+                    style={windowForm.agentIds.includes(ag.id) ? styles.filterChipActive : styles.filterChip}
+                    onClick={() => toggleWindowAgent(ag.id)}
+                  >
+                    {ag.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ ...styles.field, width: 220 }}>
+              <label style={styles.label}>Worker mode (optional)</label>
+              <select style={styles.select} value={windowForm.workerMode} onChange={ev => setWindowField("workerMode", ev.target.value)}>
+                <option value="">— Queue default —</option>
+                <option value="noop">noop</option>
+                <option value="headless">headless</option>
+                <option value="terminal">terminal</option>
+                <option value="ollama">ollama</option>
+              </select>
+            </div>
+
+            {windowError && <div style={styles.error}>{windowError}</div>}
+            {windowResult && <div style={styles.ok}>{windowResult}</div>}
+
+            <button style={styles.button} onClick={createExecutionWindow}>Create Window</button>
+          </div>
+
+          {execWindows.length === 0 && (
+            <div style={styles.empty}>No execution windows yet. A window runs one or more workflows as a synchronous session through the queue.</div>
+          )}
+          {execWindows.map(win => (
+            <div key={win.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{win.name}</span>
+                <span style={{ ...styles.statusChip, color: win.status === "running" ? "#4caf50" : win.status === "completed" ? "#90caf9" : win.status === "cancelled" ? "#9e9e9e" : "#ffb74d" }}>
+                  {win.status}
+                </span>
+                {win.workerMode && <span style={styles.chip}>{win.workerMode}</span>}
+                {win.runCount > 0 && <span style={styles.chip}>{win.runCount} run{win.runCount === 1 ? "" : "s"}</span>}
+                <span style={{ flex: 1 }} />
+                {win.startedAt && <span style={styles.muted}>Started {formatTime(win.startedAt)}</span>}
+                {win.durationMs !== undefined && <span style={styles.muted}>{formatDuration(win.durationMs)}</span>}
+                {win.status === "planned" && (
+                  <button style={styles.buttonGhost} onClick={() => startExecutionWindow(win.id)}>Execute Window</button>
+                )}
+                {(win.status === "planned" || win.status === "running") && (
+                  <button style={styles.buttonGhost} onClick={() => cancelExecutionWindow(win.id)}>Cancel</button>
+                )}
+                <button style={styles.buttonGhost} onClick={() => setExpandedWindow(expandedWindow === win.id ? null : win.id)}>
+                  {expandedWindow === win.id ? "Hide" : "Details"}
+                </button>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                {win.goal && <span style={styles.muted}>{win.goal}</span>}
+                <span style={styles.muted}>
+                  {win.workflowNames.length > 0 && "Workflows: " + win.workflowNames.join(", ")}
+                  {win.workerMode === "ollama" && " · LLM worker"}
+                </span>
+              </div>
+              {expandedWindow === win.id && (
+                <div style={styles.detail}>
+                  <div>
+                    <span style={styles.muted}>Workflows: </span>{win.workflowNames.join(", ") || "—"}
+                    <span style={styles.muted}> · Agents: </span>{win.agentNames.join(", ") || "any registered agent"}
+                    <span style={styles.muted}> · Tasks: </span>{win.taskCount}
+                  </div>
+                  <div>
+                    <span style={styles.muted}>Runs — queued {win.runs.queued} · running {win.runs.running} · completed {win.runs.completed} · failed {win.runs.failed} · cancelled {win.runs.cancelled}</span>
+                  </div>
+                  <div>
+                    <span style={styles.muted}>Validation — {win.findings.total} findings · agent review {win.findings.pendingAgentReview} · human review {win.findings.pendingHumanReview} · approved {win.findings.approved} · rejected {win.findings.rejected}</span>
+                  </div>
+                  {win.completionSummary && (
+                    <div>
+                      <span style={styles.ok}>Completion — completed {win.completionSummary.runsCompleted} · failed {win.completionSummary.runsFailed} · cancelled {win.completionSummary.runsCancelled}</span>
+                      {win.completionSummary.findings > 0 && (
+                        <span style={styles.muted}> · findings {win.completionSummary.findings}</span>
+                      )}
+                      {win.completionSummary.errors > 0 && (
+                        <span style={styles.error}> · errors {win.completionSummary.errors}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

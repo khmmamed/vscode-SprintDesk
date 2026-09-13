@@ -5,13 +5,14 @@ import * as taskService from '../../services/taskService';
 import * as queueService from '../../services/workforce/queueService';
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
-import { getActivitySummary, runDetail, getQueueSnapshot } from '../../services/workforce/observability';
+import { getActivitySummary, runDetail, getQueueSnapshot, getExecutionWindowReport } from '../../services/workforce/observability';
 import * as findingsService from '../../services/workforce/findingsService';
 import * as workforceService from '../../services/workforce/workforceService';
 import * as eventRulesService from '../../services/workforce/eventRulesService';
+import * as executionWindowService from '../../services/workforce/executionWindowService';
 import { subscribeEvents } from '../../services/workforce/events';
 import { getDataService } from '../../data/DataService';
-import { Employee, EmployeeModelProfile, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
+import { Employee, EmployeeModelProfile, ExecutionWindow, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
@@ -23,6 +24,7 @@ export type WorkforceSection =
   | 'schedules'
   | 'workflows'
   | 'event-rules'
+  | 'windows'
   | 'activity'
   | 'create-task';
 
@@ -124,12 +126,34 @@ export interface WorkflowDto {
   updatedAt: string;
 }
 
+export interface ExecutionWindowDto {
+  id: string;
+  name: string;
+  goal?: string;
+  status: ExecutionWindow['status'];
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  workflowIds: string[];
+  workflowNames: string[];
+  agentIds: string[];
+  agentNames: string[];
+  workerMode?: WorkerMode;
+  maxConcurrentRuns?: number;
+  runCount: number;
+  runs: { queued: number; running: number; completed: number; failed: number; cancelled: number };
+  taskCount: number;
+  findings: { total: number; pendingAgentReview: number; pendingHumanReview: number; approved: number; rejected: number };
+  completionSummary?: ExecutionWindow['completionSummary'];
+}
+
 let panel: vscode.WebviewPanel | undefined;
 let panelContext: vscode.ExtensionContext | undefined;
 let pendingInit: { section?: WorkforceSection; focusAgentId?: string } | undefined;
 
 // v0.11 slice 6 — the Control Center refreshes from the existing event stream (no state store).
-const OPERATIONAL_EVENT_PREFIXES = ['run.', 'finding.', 'workflow.', 'eventrule.', 'queue.', 'schedule.', 'employee.'];
+const OPERATIONAL_EVENT_PREFIXES = ['run.', 'finding.', 'workflow.', 'eventrule.', 'queue.', 'schedule.', 'employee.', 'execwindow.'];
 
 function isOperationalEventType(type: string): boolean {
   return OPERATIONAL_EVENT_PREFIXES.some(prefix => type.startsWith(prefix));
@@ -288,6 +312,33 @@ function workflowDtos(): WorkflowDto[] {
   }));
 }
 
+function executionWindowDtos(): ExecutionWindowDto[] {
+  return executionWindowService.getExecutionWindows().map(w => {
+    const r = getExecutionWindowReport(w);
+    return {
+      id: w.id,
+      name: w.name,
+      goal: w.goal,
+      status: w.status,
+      createdAt: w.createdAt,
+      startedAt: w.startedAt,
+      finishedAt: w.finishedAt,
+      durationMs: r.durationMs,
+      workflowIds: w.workflowIds,
+      workflowNames: r.workflowNames,
+      agentIds: w.agentIds,
+      agentNames: r.agentNames,
+      workerMode: w.workerMode,
+      maxConcurrentRuns: w.maxConcurrentRuns,
+      runCount: r.runCount,
+      runs: r.runs,
+      taskCount: r.taskCount,
+      findings: r.findings,
+      completionSummary: r.completionSummary
+    };
+  });
+}
+
 function pushRun(panelRef: vscode.WebviewPanel, run: Run): void {
   const message = { command: 'RUN_UPDATED', payload: { run: getRunDto(run) } };
   try {
@@ -305,7 +356,8 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     ...findingsService.getFindingReviewCounts(),
     schedules: getStores().schedules.loadAll().length,
     workflows: getStores().workflows.loadAll().length,
-    eventRules: getStores().eventRules.loadAll().length
+    eventRules: getStores().eventRules.loadAll().length,
+    exeWindows: getStores().executionWindows.loadAll().length
   };
   try {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_OVERVIEW', payload: { overview } });
@@ -317,6 +369,7 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_FINDINGS', payload: findingDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EVENT_RULES', payload: eventRuleDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_WORKFLOWS', payload: workflowDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EXEC_WINDOWS', payload: executionWindowDtos() });
   } catch {
     // panel may be disposed mid-flight
   }
@@ -515,7 +568,68 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
           }
         }
-        } else if (command === 'WORKFORCE_RETRY_RUN') {
+        } else if (command === 'WORKFORCE_CREATE_EXEC_WINDOW') {
+        const payload = message?.payload || {};
+        const name = String(payload.name || '').trim();
+        const workflowIds = Array.isArray(payload.workflowIds)
+          ? payload.workflowIds.map((x: unknown) => String(x)).filter(Boolean)
+          : [];
+        const agentIds = Array.isArray(payload.agentIds)
+          ? payload.agentIds.map((x: unknown) => String(x)).filter(Boolean)
+          : [];
+        const workerMode: WorkerMode | undefined =
+          typeof payload.workerMode === 'string' &&
+          ['headless', 'terminal', 'noop', 'ollama'].includes(payload.workerMode)
+            ? payload.workerMode
+            : undefined;
+        const maxConcurrentRuns: number | undefined =
+          typeof payload.maxConcurrentRuns === 'number' && Number.isFinite(payload.maxConcurrentRuns)
+            ? payload.maxConcurrentRuns
+            : undefined;
+        if (!name || workflowIds.length === 0) {
+          postResponse(newPanel, message?.requestId, undefined, 'Window name and at least one workflow are required');
+        } else {
+          try {
+            const created = executionWindowService.createExecutionWindow({
+              name,
+              goal: payload.goal,
+              workflowIds,
+              agentIds,
+              workerMode,
+              maxConcurrentRuns
+            });
+            postResponse(newPanel, message?.requestId, { window: executionWindowDtos().find(d => d.id === created.id) });
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_START_EXEC_WINDOW') {
+        const windowId: string | undefined = message?.payload?.windowId;
+        if (windowId) {
+          try {
+            const started = await executionWindowService.startExecutionWindow(windowId);
+            postResponse(newPanel, message?.requestId, { started: true, window: executionWindowDtos().find(d => d.id === started.id) });
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_CANCEL_EXEC_WINDOW') {
+        const windowId: string | undefined = message?.payload?.windowId;
+        if (windowId) {
+          try {
+            const cancelled = executionWindowService.cancelExecutionWindow(windowId);
+            postResponse(newPanel, message?.requestId, { cancelled: true, window: executionWindowDtos().find(d => d.id === cancelled.id) });
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_RETRY_RUN') {
         const runId: string | undefined = message?.payload?.runId;
         const existing = runId ? getStores().runs.getById(runId) : undefined;
         if (existing && ['failed', 'cancelled', 'completed'].includes(existing.status)) {

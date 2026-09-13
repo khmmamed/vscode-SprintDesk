@@ -112,6 +112,43 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   run → workflow → event-rule trigger chain, retry/cancel permission handling, and snapshot/counter refresh
   across run state changes. Version stays `0.9.0` during development.
 
+### v0.11 Slice 7 — Execution Windows / Synchronous Work
+
+- **Execution Windows are a new persistent domain object** repurposing the legacy "Sprint" concept for
+  **deliberate synchronous batches** of work: `Human → Execution Window → Workflow → Task/Run → Queue → Worker
+  → Finding → Validation → Human Decision`. Windows live in `.SprintDesk/workforce/executionWindows.yml`
+  (`ExecutionWindowStore`, same pattern as workflows/event rules) with name, goal, selected workflows, selected
+  agents, worker mode, status `planned | running | completed | cancelled`, timestamps, task/run ids, and a
+  completion summary — so every window is historical, auditable, and reviewable after the fact. The old
+  project-management Sprint model is not brought back and the legacy `Sprint` data service is untouched.
+  **Run Now** (single immediate execution) and **Execution Window** (synchronous session) are distinct paths in
+  the UI.
+- **Start scope only — no new classification/validation logic:** `startExecutionWindow` (async, awaits the
+  workflow engine) plans tasks + queued runs for each selected workflow (ids via `task.runId` /
+  `runs.findByTaskId`), assigns agents round-robin from the window's agent pool (selected ids, or all agents;
+  filtered to non-offline + `run:create` permission, idle-first), and writes `run.agentId` + `task.agent`.
+  Runs still execute through the existing queue/workers exactly like any other run.
+- **Completion without polling:** a module-level subscriber reacts to run lifecycle events for a running window —
+  all of its runs terminal → window finalizes (`completed` + `completionSummary {runsCompleted, runsFailed,
+  runsCancelled, findings, errors}`); otherwise it kicks one guarded queue pass (respecting worker mode and
+  `maxConcurrentRuns`). `setAutoAdvanceEnabled` test hook keeps tests deterministic.
+- **Cancel semantics:** cancels outstanding queued/running runs through `queueService.cancelRun` and marks the
+  window `cancelled` with `finishedAt`; only `planned`/`running` windows can be cancelled.
+- **Control Center:** new **Execution Windows** tab with a create form (name, goal, enabled-workflow and agent
+  pickers, optional worker mode) plus per-window actions — **Execute Window** (start), **Cancel**, **Details**
+  (workflows/agents, runs breakdown, findings + validation progress, duration, completion summary). Windows stat
+  chip in the operational strip navigates to the tab. Counts + DTOs merged from
+  `observability.getExecutionWindowReport`.
+- **Observability:** `getExecutionWindowReport` joins workflow/agent names, breaks down runs by status and
+  findings by validation stage (agent review / human review / approved / rejected), and reports duration —
+  reused by both the DTO layer and tests.
+- **Events + audit:** windows emit `execwindow.created/started/completed/cancelled` into the existing stream and
+  write `execwindow.create/start/complete/cancel` audit entries; the operational prefix list (`execwindow.`)
+  keeps the Control Center live-refreshing.
+- Tests: create/persist, missing-workflow rejection, start → tasks+runs+agent assignment, non-assignable agents
+  skipped, cancel, drive-through-queue to completion (noop), validation progress in the report, and
+  audit/event milestones. Version stays `0.9.0` during development.
+
 ## [Unreleased] - v0.10 Workforce Control Center
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution

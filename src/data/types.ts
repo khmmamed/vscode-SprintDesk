@@ -712,3 +712,39 @@ export interface WorkflowRunResult {
 export interface WorkflowsData {
   workflows: WorkflowDefinition[];
 }
+
+// v0.11 slice 7 — execution windows: a persistent, synchronous batch of autonomous work
+// (repurposes the old Sprint concept; NOT the legacy project-management sprint model)
+export type ExecutionWindowStatus = 'planned' | 'running' | 'completed' | 'cancelled';
+
+export interface ExecutionWindowCompletionSummary {
+  runsCompleted: number;
+  runsFailed: number;
+  runsCancelled: number;
+  findings: number;
+  errors: number;
+}
+
+export interface ExecutionWindow {
+  id: string;
+  name: string;
+  goal?: string;
+  status: ExecutionWindowStatus;
+  workflowIds: string[];
+  agentIds: string[];
+  workerMode?: WorkerMode;
+  maxConcurrentRuns?: number;
+  scheduledStartAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  taskIds: string[];
+  runIds: string[];
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  completionSummary?: ExecutionWindowCompletionSummary;
+}
+
+export interface ExecutionWindowsData {
+  executionWindows: ExecutionWindow[];
+}

@@ -7,7 +7,8 @@ import * as workforceService from '../../src/services/workforce/workforceService
 import * as approvals from '../../src/services/workforce/approvals';
 import * as eventRulesService from '../../src/services/workforce/eventRulesService';
 import { emitEvent } from '../../src/services/workforce/events';
-import { getRunsByFilter, runDetail, getQueueSnapshot, getActivitySummary } from '../../src/services/workforce/observability';
+import { getRunsByFilter, runDetail, getQueueSnapshot, getActivitySummary, getExecutionWindowReport } from '../../src/services/workforce/observability';
+import * as executionWindowService from '../../src/services/workforce/executionWindowService';
 import { getDataService } from '../../src/data/DataService';
 import { EventRecord, WorkflowDefinition } from '../../src/data/types';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
@@ -1110,6 +1111,190 @@ describe('operational execution & queue visibility (v0.11)', () => {
     findingsService.validateFinding(finding.id, { recommendation: 'recommend-approve' }, reviewer.id);
     assert.strictEqual(findingsService.getFindingReviewCounts().pendingAgentReview, 0);
     assert.strictEqual(findingsService.getFindingReviewCounts().pendingHumanReview, 1);
+  });
+});
+
+describe('execution windows — synchronous work (v0.11)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    executionWindowService.setAutoAdvanceEnabled(false);
+  });
+
+  afterEach(() => {
+    executionWindowService.setAutoAdvanceEnabled(true);
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function seedWorkflow(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+    const now = new Date().toISOString();
+    const wf: WorkflowDefinition = {
+      id: `wf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: 'Research Flow',
+      version: '1',
+      enabled: true,
+      steps: [{ id: 'tasks', type: 'task', title: 'Research {topic}', taskType: 'feature', priority: 'medium' }],
+      createdAt: now,
+      updatedAt: now,
+      ...overrides
+    };
+    getStores().workflows.add(wf);
+    return wf;
+  }
+
+  async function waitFor(check: () => boolean, timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    while (!check()) {
+      if (Date.now() - start > timeoutMs) {throw new Error('timed out waiting for condition');}
+      await new Promise(r => setTimeout(r, 20));
+    }
+  }
+
+  it('creates a persisted planned execution window', () => {
+    const wf = seedWorkflow({ name: 'Brief Flow' });
+    const created = executionWindowService.createExecutionWindow({
+      name: 'Research Session',
+      goal: 'gather intel',
+      workflowIds: [wf.id]
+    });
+
+    assert.strictEqual(created.status, 'planned');
+    assert.strictEqual(getStores().executionWindows.getById(created.id)?.name, 'Research Session');
+    assert.strictEqual(getExecutionWindowReport(created).workflowNames[0], 'Brief Flow');
+  });
+
+  it('refuses to create a window without a workflow', () => {
+    assert.throws(() => executionWindowService.createExecutionWindow({ name: 'Empty', workflowIds: [] }), /workflow/);
+  });
+
+  it('starts a window: plans tasks + runs and assigns them to a selected agent', async () => {
+    const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const wf = seedWorkflow({ name: 'Research Flow' });
+    const window = executionWindowService.createExecutionWindow({ name: 'Session 1', workflowIds: [wf.id], agentIds: [agent.id] });
+
+    const started = await executionWindowService.startExecutionWindow(window.id);
+    assert.strictEqual(started.status, 'running');
+    assert.ok(started.startedAt);
+    assert.strictEqual(started.taskIds.length, 1);
+    assert.strictEqual(started.runIds.length, 1);
+
+    const run = getStores().runs.getById(started.runIds[0])!;
+    assert.strictEqual(run.agentId, agent.id);
+    assert.strictEqual(run.status, 'queued');
+
+    const task = getDataService(ws.root).getTask(started.taskIds[0])!;
+    assert.strictEqual(task.agent, agent.id);
+    assert.strictEqual(task.source, 'workflow');
+    assert.strictEqual(task.workflow, 'Research Flow');
+  });
+
+  it("skips agents without run:create permission when assigning", async () => {
+    const observer = seedAgent({ name: 'Observer', teamRole: 'observer', agentConfig: makeAgentConfig() });
+    const worker = seedAgent({ name: 'Worker', agentConfig: makeAgentConfig() });
+    const wf = seedWorkflow();
+    const window = executionWindowService.createExecutionWindow({ name: 'W2', workflowIds: [wf.id], agentIds: [observer.id, worker.id] });
+
+    const started = await executionWindowService.startExecutionWindow(window.id);
+    const run = getStores().runs.getById(started.runIds[0])!;
+    assert.strictEqual(run.agentId, worker.id);
+  });
+
+  it('cancels outstanding runs and marks the window cancelled', async () => {
+    const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const wf = seedWorkflow({ name: 'Flow A' });
+    const wf2 = seedWorkflow({ name: 'Flow B', steps: [{ id: 't2', type: 'task', title: 'Second', taskType: 'bug', priority: 'low' }] });
+    const window = executionWindowService.createExecutionWindow({ name: 'Session 3', workflowIds: [wf.id, wf2.id], agentIds: [agent.id] });
+
+    const started = await executionWindowService.startExecutionWindow(window.id);
+    assert.strictEqual(started.runIds.length, 2);
+
+    const cancelled = executionWindowService.cancelExecutionWindow(window.id);
+    assert.strictEqual(cancelled.status, 'cancelled');
+    assert.ok(cancelled.finishedAt);
+    for (const runId of cancelled.runIds) {
+      assert.strictEqual(getStores().runs.getById(runId)?.status, 'cancelled');
+    }
+  });
+
+  it('drives the window through the queue to completion', async function () {
+    this.timeout(10000);
+    executionWindowService.setAutoAdvanceEnabled(true);
+    const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const wf = seedWorkflow({ name: 'Research Flow' });
+    const window = executionWindowService.createExecutionWindow({ name: 'Session Auto', workflowIds: [wf.id], agentIds: [agent.id], workerMode: 'noop' });
+
+    await executionWindowService.startExecutionWindow(window.id);
+    await waitFor(() => executionWindowService.getExecutionWindowById(window.id)?.status === 'completed');
+
+    const finished = executionWindowService.getExecutionWindowById(window.id)!;
+    assert.ok(finished.completionSummary, 'completion summary written on finalization');
+    assert.strictEqual(finished.completionSummary!.runsCompleted, 1);
+    const runId = finished.runIds[0];
+    getStores().runs.update(runId, { result: 'Findings:\n- claim one\nErrors:\n0' });
+    findingsService.materializeFindings(runId);
+    const report = getExecutionWindowReport(finished);
+    assert.strictEqual(report.runs.completed, 1);
+    assert.strictEqual(report.runs.running, 0);
+    assert.ok(report.durationMs !== undefined);
+    assert.strictEqual(report.findings.total, 1, 'findings materialized from run output');
+  });
+
+  it('exposes validation progress in the window report', async function () {
+    this.timeout(10000);
+    executionWindowService.setAutoAdvanceEnabled(true);
+    const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Reviewer' });
+    const wf = seedWorkflow({ name: 'Research Flow' });
+    const window = executionWindowService.createExecutionWindow({ name: 'Session Val', workflowIds: [wf.id], agentIds: [agent.id], workerMode: 'noop' });
+
+    await executionWindowService.startExecutionWindow(window.id);
+    await waitFor(() => executionWindowService.getExecutionWindowById(window.id)?.status === 'completed');
+
+    const completed = executionWindowService.getExecutionWindowById(window.id)!;
+    getStores().runs.update(completed.runIds[0], { result: 'Findings:\n- claim one\nErrors:\n0' });
+    findingsService.materializeFindings(completed.runIds[0]);
+
+    let report = getExecutionWindowReport(completed);
+    assert.strictEqual(report.findings.total, 1);
+    assert.strictEqual(report.findings.pendingAgentReview, 1);
+
+    const [finding] = findingsService.allFindings();
+    assert.ok(finding, 'finding materialized');
+    findingsService.validateFinding(finding.id, { recommendation: 'recommend-approve' }, reviewer.id);
+
+    report = getExecutionWindowReport(completed);
+    assert.strictEqual(report.findings.pendingAgentReview, 0);
+    assert.strictEqual(report.findings.pendingHumanReview, 1);
+  });
+
+  it('writes audit entries and milestone events for create/start/complete', async function () {
+    this.timeout(10000);
+    executionWindowService.setAutoAdvanceEnabled(true);
+    const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const wf = seedWorkflow();
+    const window = executionWindowService.createExecutionWindow({ name: 'Session Audit', workflowIds: [wf.id], agentIds: [agent.id], workerMode: 'noop' });
+
+    await executionWindowService.startExecutionWindow(window.id);
+    await waitFor(() => executionWindowService.getExecutionWindowById(window.id)?.status === 'completed');
+
+    const actions = getStores().audit.loadAll()
+      .filter(a => a.targetType === 'executionWindow' && a.targetId === window.id)
+      .map(a => a.action);
+    assert.ok(actions.includes('execwindow.create'));
+    assert.ok(actions.includes('execwindow.start'));
+    assert.ok(actions.includes('execwindow.complete'));
+
+    const types = getStores().events.loadAll().map(e => e.type).filter(t => t.startsWith('execwindow.'));
+    assert.ok(types.includes('execwindow.created'));
+    assert.ok(types.includes('execwindow.started'));
+    assert.ok(types.includes('execwindow.completed'));
   });
 });
 

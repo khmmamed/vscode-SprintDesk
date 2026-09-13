@@ -1,7 +1,7 @@
 import * as fileService from '../fileService';
 import { getDataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
-import { EventRecord, Employee, Finding, Run, QueueSettings, Task, WorkerMode } from '../../data/types';
+import { EventRecord, Employee, ExecutionWindow, Finding, Run, QueueSettings, Task, WorkerMode } from '../../data/types';
 import { getQueueSettings } from './queueService';
 
 export interface RunCounts {
@@ -138,6 +138,68 @@ function countEmployees(employees: Employee[]): EmployeeCounts {
     idle: employees.filter(e => e.status === 'idle').length,
     busy: employees.filter(e => e.status === 'busy').length,
     offline: employees.filter(e => e.status === 'offline').length
+  };
+}
+
+// v0.11 slice 7 — execution windows report (runs/findings/validation progress, derived live)
+export interface ExecutionWindowReport {
+  id: string;
+  name: string;
+  goal?: string;
+  status: ExecutionWindow['status'];
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  workflowNames: string[];
+  agentNames: string[];
+  runCount: number;
+  runs: RunCounts;
+  taskCount: number;
+  findings: { total: number; pendingAgentReview: number; pendingHumanReview: number; approved: number; rejected: number };
+  completionSummary?: ExecutionWindow['completionSummary'];
+}
+
+export function getExecutionWindowReport(window: ExecutionWindow): ExecutionWindowReport {
+  const stores = getStores();
+  const runs = window.runIds.map(id => stores.runs.getById(id)).filter((r): r is Run => !!r);
+  const findings = stores.findings.loadAll().filter(f => f.source?.runId && window.runIds.includes(f.source.runId));
+  const durationMs =
+    window.startedAt && window.finishedAt
+      ? new Date(window.finishedAt).getTime() - new Date(window.startedAt).getTime()
+      : undefined;
+  return {
+    id: window.id,
+    name: window.name,
+    goal: window.goal,
+    status: window.status,
+    createdAt: window.createdAt,
+    startedAt: window.startedAt,
+    finishedAt: window.finishedAt,
+    durationMs,
+    workflowNames: window.workflowIds
+      .map(id => stores.workflows.getById(id)?.name)
+      .filter((n): n is string => !!n),
+    agentNames: window.agentIds
+      .map(id => stores.employees.getById(id)?.name)
+      .filter((n): n is string => !!n),
+    runCount: runs.length,
+    runs: {
+      queued: runs.filter(r => r.status === 'queued').length,
+      running: runs.filter(r => r.status === 'running').length,
+      completed: runs.filter(r => r.status === 'completed').length,
+      failed: runs.filter(r => r.status === 'failed').length,
+      cancelled: runs.filter(r => r.status === 'cancelled').length
+    },
+    taskCount: window.taskIds.length,
+    findings: {
+      total: findings.length,
+      pendingAgentReview: findings.filter(f => f.status === 'pending' && !f.agentReview).length,
+      pendingHumanReview: findings.filter(f => f.status === 'pending' && !!f.agentReview).length,
+      approved: findings.filter(f => f.status === 'approved').length,
+      rejected: findings.filter(f => f.status === 'rejected').length
+    },
+    completionSummary: window.completionSummary
   };
 }
 
