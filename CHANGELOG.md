@@ -34,6 +34,28 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   refreshed employee) back to the webview; tree + snapshot refreshed.
 - Architecture: `docs/v0.11-upcomming.md`. Version stays `0.9.0` during development.
 
+### v0.11 Slice 4 — Event Rules (event-based asynchronous automation)
+
+- **Event Rules turn emitted events into workflow runs** — the event-based counterpart to the time-based scheduler,
+  reusing the existing workflow engine and queue (no new engine, no new scheduler):
+  `Event → Event Rule → Workflow → Task/Run → Finding → Validation`.
+- **Conditions match existing `EventRecord` data** by event `type`, `source`, and `payload` keys (dotted paths
+  supported) with optional value matching; an empty matcher matches any event.
+- **Deterministic, idempotent, re-entrancy-safe triggering:** rules are evaluated in id order, each event triggers a
+  rule at most once (bounded recent-trigger log), and a module-level guard prevents workflow-emitted events from
+  re-evaluating rules mid-trigger (no recursion) while still recording them.
+- **Rules manage workflows through the Control Center:** new Event Rules tab with a create form (conditions +
+  workflow picker), active/paused toggle, delete, per-rule run count, last fired time, and the 3 most recent
+  trigger/result lines (status, event type, created task count, error). The Workflows tab now lists workflows
+  read-only to back the picker.
+- **Authorization and audit:** rule CRUD requires `event-rule:manage` (granted to `lead` and `human` roles via the
+  existing policy engine — policy overrides keep working); every create/update/enable/disable/delete/trigger is
+  written to the audit trail, and triggers emit an `eventrule.fired` event into the existing stream.
+- **Narrow trigger hook:** events wire to rules through a subscriber hook (`setEventProcessor`) on `emitEvent`,
+  keeping `events.ts` free of import cycles with the workflow engine.
+- Tests: matching / non-matching / disabled / idempotent / re-entrancy / auto-wire via `emitEvent` / audit /
+  missing-workflow failure / permission checks / update-toggle-delete. Version stays `0.9.0` during development.
+
 ## [Unreleased] - v0.10 Workforce Control Center
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution

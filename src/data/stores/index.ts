@@ -13,6 +13,7 @@ import { ApprovalStore } from './ApprovalStore';
 import { FindingStore } from './FindingStore';
 import { ScheduleStore } from './ScheduleStore';
 import { WorkflowStore } from './WorkflowStore';
+import { EventRuleStore } from './EventRuleStore';
 import {
   ProjectMcpManifest,
   defaultProjectMcpManifest,
@@ -35,6 +36,7 @@ export interface Stores {
   findings: FindingStore;
   schedules: ScheduleStore;
   workflows: WorkflowStore;
+  eventRules: EventRuleStore;
 }
 
 export interface ProjectMcpFacade {
@@ -69,7 +71,8 @@ export function getStores(workspaceRoot?: string): Stores {
       approvals: new ApprovalStore(root),
       findings: new FindingStore(root),
       schedules: new ScheduleStore(root),
-      workflows: new WorkflowStore(root)
+      workflows: new WorkflowStore(root),
+      eventRules: new EventRuleStore(root)
     };
     activeStoresRoot = root;
   }

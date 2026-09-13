@@ -10,12 +10,14 @@ type WorkforceSection =
   | "approvals"
   | "schedules"
   | "workflows"
+  | "event-rules"
   | "activity"
   | "create-task";
 
 type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 type FindingStatus = "pending" | "approved" | "rejected";
 type WorkerMode = "headless" | "terminal" | "noop" | "ollama";
+type RuleTriggerStatus = "completed" | "failed";
 
 interface RunDto {
   id: string;
@@ -55,6 +57,44 @@ interface CountsDto {
   pendingFindings: number;
   schedules: number;
   workflows: number;
+  eventRules: number;
+}
+
+interface EventRuleMatcherDto {
+  eventType?: string;
+  source?: string;
+  payloadKey?: string;
+  payloadValue?: string;
+}
+
+interface EventRuleTriggerDto {
+  eventId: string;
+  eventType: string;
+  status: RuleTriggerStatus;
+  createdAt: string;
+  createdTaskIds?: string[];
+  error?: string;
+}
+
+interface EventRuleDto {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  matcher: EventRuleMatcherDto;
+  workflowId: string;
+  workflowName?: string;
+  runCount: number;
+  lastTriggeredAt?: string;
+  recentTriggers: EventRuleTriggerDto[];
+}
+
+interface WorkflowDto {
+  id: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+  updatedAt: string;
 }
 
 interface FindingDto {
@@ -78,7 +118,7 @@ const EMPTY_OVERVIEW: OverviewDto = {
   employees: { total: 0, agents: 0, idle: 0, busy: 0, offline: 0 }
 };
 
-const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, schedules: 0, workflows: 0 };
+const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, schedules: 0, workflows: 0, eventRules: 0 };
 
 const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "employees", label: "Employees" },
@@ -88,6 +128,7 @@ const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "approvals", label: "Approvals" },
   { key: "schedules", label: "Schedules" },
   { key: "workflows", label: "Workflows" },
+  { key: "event-rules", label: "Event Rules" },
   { key: "activity", label: "Activity" },
   { key: "create-task", label: "Create Task" }
 ];
@@ -274,6 +315,20 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   }>({ provider: "", model: "", baseUrl: "", tool: "", command: "", capabilities: "" });
   const [configResult, setConfigResult] = React.useState<string>("");
 
+  const [eventRules, setEventRules] = React.useState<EventRuleDto[]>([]);
+  const [workflows, setWorkflows] = React.useState<WorkflowDto[]>([]);
+  const [ruleError, setRuleError] = React.useState<string>("");
+  const [ruleResult, setRuleResult] = React.useState<string>("");
+  const [ruleForm, setRuleForm] = React.useState<{
+    name: string;
+    description: string;
+    eventType: string;
+    source: string;
+    payloadKey: string;
+    payloadValue: string;
+    workflowId: string;
+  }>({ name: "", description: "", eventType: "", source: "", payloadKey: "", payloadValue: "", workflowId: "" });
+
   React.useEffect(() => {
     const handler = (event: MessageEvent) => {
       const { command, payload, error: messageError } = event.data || {};
@@ -311,6 +366,10 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         if (payload?.overview) setOverview(payload.overview);
       } else if (command === "SET_WORKFORCE_COUNTS") {
         if (payload) setCounts(payload);
+      } else if (command === "SET_WORKFORCE_EVENT_RULES") {
+        setEventRules(payload || []);
+      } else if (command === "SET_WORKFORCE_WORKFLOWS") {
+        setWorkflows(payload || []);
       } else if (command === "RUN_UPDATED") {
         const run: RunDto | undefined = payload?.run;
         if (run) {
@@ -325,11 +384,14 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         if (messageError) {
           setError(messageError);
           setConfigResult(messageError);
+          setRuleError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
           setBusy(payload?.ran ? "done" : "idle");
           setError("");
+          if (payload?.rule) setRuleResult("Rule created.");
+          if (payload?.deleted !== undefined) setRuleResult(payload?.deleted ? "Rule deleted." : "");
         }
       }
     };
@@ -363,6 +425,49 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
   const decideFinding = (findingId: string, decision: "approved" | "rejected"): void => {
     postRequest("WORKFORCE_DECIDE_FINDING", { findingId, decision });
+  };
+
+  const setRuleFormField = (field: keyof typeof ruleForm, value: string): void => {
+    setRuleForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const createEventRule = (): void => {
+    if (!ruleForm.name.trim()) {setRuleError("Enter a rule name"); return;}
+    if (!ruleForm.workflowId) {setRuleError("Select a workflow to trigger"); return;}
+    setRuleError("");
+    setRuleResult("");
+    postRequest("WORKFORCE_CREATE_EVENT_RULE", {
+      name: ruleForm.name.trim(),
+      description: ruleForm.description.trim() || undefined,
+      matcher: {
+        eventType: ruleForm.eventType.trim() || undefined,
+        source: ruleForm.source.trim() || undefined,
+        payloadKey: ruleForm.payloadKey.trim() || undefined,
+        payloadValue: ruleForm.payloadValue.trim() || undefined
+      },
+      workflowId: ruleForm.workflowId
+    });
+    setRuleForm({ name: "", description: "", eventType: "", source: "", payloadKey: "", payloadValue: "", workflowId: "" });
+  };
+
+  const toggleEventRule = (ruleId: string, enabled: boolean): void => {
+    setRuleError("");
+    postRequest("WORKFORCE_SET_EVENT_RULE_ENABLED", { ruleId, enabled });
+  };
+
+  const deleteEventRule = (ruleId: string): void => {
+    setRuleError("");
+    postRequest("WORKFORCE_DELETE_EVENT_RULE", { ruleId });
+  };
+
+  const ruleMatcherText = (matcher: EventRuleMatcherDto): string => {
+    const parts: string[] = [];
+    if (matcher.eventType) parts.push(`type: ${matcher.eventType}`);
+    if (matcher.source) parts.push(`source: ${matcher.source}`);
+    if (matcher.payloadKey) {
+      parts.push(`payload.${matcher.payloadKey}${matcher.payloadValue ? ` = ${matcher.payloadValue}` : " present"}`);
+    }
+    return parts.length > 0 ? parts.join(" · ") : "any event";
   };
 
   const startCreateForAgent = (agentId: string): void => {
@@ -435,6 +540,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         <span style={styles.stat}>Findings {counts.pendingFindings} pending</span>
         <span style={styles.stat}>Schedules {counts.schedules}</span>
         <span style={styles.stat}>Workflows {counts.workflows}</span>
+        <span style={styles.stat}>Event Rules {counts.eventRules}</span>
       </div>
 
       <div style={styles.tabs}>
@@ -706,8 +812,118 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         </div>
       )}
       {tab === "workflows" && (
-        <div style={styles.empty}>
-          Workflows: {counts.workflows} defined. The workflow editor UI lands in a later increment.
+        <div>
+          {workflows.length === 0 && (
+            <div style={styles.empty}>No workflows defined yet. Workflows define the steps a triggered rule runs.</div>
+          )}
+          {workflows.map(wf => (
+            <div key={wf.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{wf.name}</span>
+                <span style={{ ...styles.statusChip, color: wf.enabled ? "#4caf50" : "#9e9e9e" }}>{wf.enabled ? "enabled" : "disabled"}</span>
+                <span style={styles.muted}>v{wf.version}</span>
+                <span style={{ flex: 1 }} />
+                <span style={styles.muted}>updated {formatTime(wf.updatedAt)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === "event-rules" && (
+        <div>
+          <div style={styles.card}>
+            <div style={styles.row}>
+              <span style={styles.name}>New Event Rule</span>
+              <span style={{ flex: 1 }} />
+              <span style={styles.muted}>Emitted events matching the conditions trigger the workflow.</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Rule name</label>
+                <input style={styles.input} value={ruleForm.name} placeholder="e.g. Triage merged PRs" onChange={ev => setRuleFormField("name", ev.target.value)} />
+              </div>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Workflow to run</label>
+                <select style={styles.select} value={ruleForm.workflowId} onChange={ev => setRuleFormField("workflowId", ev.target.value)}>
+                  <option value="">— Select workflow —</option>
+                  {workflows.map(wf => <option key={wf.id} value={wf.id}>{wf.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={styles.field}>
+              <label style={styles.label}>Description (optional)</label>
+              <input style={styles.input} value={ruleForm.description} onChange={ev => setRuleFormField("description", ev.target.value)} />
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Event type (optional)</label>
+                <input style={styles.input} value={ruleForm.eventType} placeholder="e.g. pull_request.merged" onChange={ev => setRuleFormField("eventType", ev.target.value)} />
+              </div>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Source (optional)</label>
+                <input style={styles.input} value={ruleForm.source} placeholder="e.g. github" onChange={ev => setRuleFormField("source", ev.target.value)} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Payload key (optional)</label>
+                <input style={styles.input} value={ruleForm.payloadKey} placeholder="e.g. taskId or repo.name" onChange={ev => setRuleFormField("payloadKey", ev.target.value)} />
+              </div>
+              <div style={{ ...styles.field, flex: 1 }}>
+                <label style={styles.label}>Payload value (optional)</label>
+                <input style={styles.input} value={ruleForm.payloadValue} placeholder="e.g. morocco-news" onChange={ev => setRuleFormField("payloadValue", ev.target.value)} />
+              </div>
+            </div>
+
+            {ruleError && <div style={styles.error}>{ruleError}</div>}
+            {ruleResult && <div style={styles.ok}>{ruleResult}</div>}
+
+            <button style={styles.button} onClick={createEventRule}>Create Rule</button>
+          </div>
+
+          {eventRules.length === 0 && (
+            <div style={styles.empty}>No event rules yet. A rule turns matching events into workflow runs — the scheduler stays time-based, this is event-based.</div>
+          )}
+          {eventRules.map(rule => (
+            <div key={rule.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{rule.name}</span>
+                <span style={{ ...styles.statusChip, color: rule.enabled ? "#4caf50" : "#9e9e9e" }}>
+                  {rule.enabled ? "active" : "paused"}
+                </span>
+                {rule.workflowName && <span style={styles.chip}>workflow: {rule.workflowName}</span>}
+                {rule.runCount > 0 && <span style={styles.chip}>{rule.runCount} run{rule.runCount === 1 ? "" : "s"}</span>}
+                <span style={{ flex: 1 }} />
+                <button style={styles.buttonGhost} onClick={() => toggleEventRule(rule.id, !rule.enabled)}>
+                  {rule.enabled ? "Pause" : "Activate"}
+                </button>
+                <button style={styles.buttonGhost} onClick={() => deleteEventRule(rule.id)}>Delete</button>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={styles.muted}>{ruleMatcherText(rule.matcher)}</span>
+                {rule.lastTriggeredAt && <span style={styles.muted}> · last fired {formatTime(rule.lastTriggeredAt)}</span>}
+              </div>
+              {rule.recentTriggers.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: 12 }}>
+                  {rule.recentTriggers.slice(0, 3).map(trigger => (
+                    <div key={trigger.eventId} style={styles.row}>
+                      <span style={{ ...styles.statusChip, color: trigger.status === "failed" ? "#e53935" : "#4caf50" }}>{trigger.status}</span>
+                      <span style={styles.muted}>{trigger.eventType}</span>
+                      {trigger.createdTaskIds && trigger.createdTaskIds.length > 0 && (
+                        <span style={styles.muted}>· created {trigger.createdTaskIds.length} task{trigger.createdTaskIds.length === 1 ? "" : "s"}</span>
+                      )}
+                      {trigger.error && <span style={styles.error}>{trigger.error}</span>}
+                      <span style={styles.muted}>· {formatTime(trigger.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
       {tab === "activity" && (

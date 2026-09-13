@@ -164,12 +164,12 @@ export interface Policy {
 
 export const DEFAULT_POLICY: Policy = {
   roles: {
-    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure'],
+    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage'],
     developer: ['task:claim', 'run:create'],
     reviewer: ['task:assign', 'task:claim'],
     observer: [],
     agent: ['run:create', 'run:update', 'run:cancel', 'task:claim', 'mcp:list', 'mcp:call'],
-    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure']
+    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure', 'event-rule:manage']
   },
   overrides: []
 };
@@ -556,6 +556,46 @@ export interface SchedulesData {
 
 export interface FindingsData {
   findings: Finding[];
+}
+
+// v0.11 event rules: event-based asynchronous automation (additive, non-breaking)
+export interface EventRuleMatcher {
+  eventType?: string;
+  source?: string;
+  payloadKey?: string;
+  payloadValue?: string;
+}
+
+export type EventRuleTriggerStatus = 'completed' | 'failed';
+
+export interface EventRuleTrigger {
+  eventId: string;
+  eventType: string;
+  workflowId: string;
+  status: EventRuleTriggerStatus;
+  createdAt: string;
+  createdTaskIds?: string[];
+  error?: string;
+}
+
+export interface EventRule {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  matcher: EventRuleMatcher;
+  workflowId: string;
+  workflowName?: string;
+  runCount: number;
+  lastTriggeredAt?: string;
+  lastEventId?: string;
+  recentTriggers: EventRuleTrigger[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventRulesData {
+  eventRules: EventRule[];
 }
 
 export interface McpServersData {

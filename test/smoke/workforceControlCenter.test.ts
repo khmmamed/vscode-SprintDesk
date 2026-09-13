@@ -5,6 +5,10 @@ import * as queueService from '../../src/services/workforce/queueService';
 import * as findingsService from '../../src/services/workforce/findingsService';
 import * as workforceService from '../../src/services/workforce/workforceService';
 import * as approvals from '../../src/services/workforce/approvals';
+import * as eventRulesService from '../../src/services/workforce/eventRulesService';
+import { emitEvent } from '../../src/services/workforce/events';
+import { getDataService } from '../../src/data/DataService';
+import { EventRecord, WorkflowDefinition } from '../../src/data/types';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
 import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/services/workforce/worker/worker';
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
@@ -527,6 +531,228 @@ describe('applyConfigChange (agent model/configuration, v0.11)', () => {
 
   it('throws for a missing employee', () => {
     assert.throws(() => workforceService.applyConfigChange('emp_nope', { capabilities: ['x'] }), /not found/);
+  });
+});
+
+describe('event rules (async automation, v0.11)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function makeWorkflow(id: string, title: string): WorkflowDefinition {
+    const now = new Date().toISOString();
+    const wf: WorkflowDefinition = {
+      id,
+      name: `Workflow ${id}`,
+      version: '1.0.0',
+      enabled: true,
+      steps: [{ id: 's1', type: 'task', title, taskType: 'chore', priority: 'low', backlog: 'features' }],
+      createdAt: now,
+      updatedAt: now
+    };
+    getStores().workflows.add(wf);
+    return wf;
+  }
+
+  function makeEvent(type = 'custom.event', source = 'test', payload: Record<string, unknown> = {}): EventRecord {
+    return {
+      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      source,
+      payload,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  it('matches events on type, source and payload conditions', () => {
+    const wf = makeWorkflow('wf-triage', 'Triage');
+    const rule = eventRulesService.createEventRule({
+      name: 'PR merged',
+      matcher: { eventType: 'pull_request.merged', source: 'github', payloadKey: 'repo.name', payloadValue: 'morocco-news' },
+      workflowId: wf.id
+    });
+
+    assert.strictEqual(eventRulesService.ruleMatches(rule, makeEvent('pull_request.merged', 'github', { repo: { name: 'morocco-news' } })), true);
+    assert.strictEqual(eventRulesService.ruleMatches(rule, makeEvent('pull_request.closed', 'github', { repo: { name: 'morocco-news' } })), false);
+    assert.strictEqual(eventRulesService.ruleMatches(rule, makeEvent('pull_request.merged', 'github', { repo: { name: 'other' } })), false);
+    assert.strictEqual(eventRulesService.ruleMatches(rule, makeEvent('pull_request.merged', 'gitlab', { repo: { name: 'morocco-news' } })), false);
+  });
+
+  it('matches with a key-only payload condition and an empty matcher', () => {
+    const wf = makeWorkflow('wf-any', 'Any');
+    const keyRule = eventRulesService.createEventRule({
+      name: 'has-task',
+      matcher: { eventType: 'run.finished', payloadKey: 'taskId' },
+      workflowId: wf.id
+    });
+    assert.strictEqual(eventRulesService.ruleMatches(keyRule, makeEvent('run.finished', 'worker', { taskId: 'task_1' })), true);
+    assert.strictEqual(eventRulesService.ruleMatches(keyRule, makeEvent('run.finished', 'worker', { other: 1 })), false);
+
+    const anyRule = eventRulesService.createEventRule({ name: 'any', matcher: {}, workflowId: wf.id });
+    assert.strictEqual(eventRulesService.ruleMatches(anyRule, makeEvent('whatever', 'whoever', { x: 1 })), true);
+  });
+
+  it('triggers the workflow for a matching event and records the occasion', async () => {
+    const wf = makeWorkflow('wf-news', 'News Briefing');
+    const rule = eventRulesService.createEventRule({
+      name: 'PR merged to news agent',
+      matcher: { eventType: 'pull_request.merged', source: 'github' },
+      workflowId: wf.id
+    });
+
+    const event = makeEvent('pull_request.merged', 'github', { repo: { name: 'morocco-news' } });
+    const results = await eventRulesService.processEventRules(event);
+
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].matched, true);
+    assert.strictEqual(results[0].triggered, true);
+    assert.strictEqual(results[0].status, 'completed');
+    assert.strictEqual(results[0].createdTaskIds?.length, 1);
+
+    const stored = getStores().eventRules.getById(rule.id);
+    assert.strictEqual(stored?.runCount, 1);
+    assert.strictEqual(stored?.lastEventId, event.id);
+    assert.ok(stored?.lastTriggeredAt);
+    assert.strictEqual(stored?.recentTriggers[0]?.eventId, event.id);
+    assert.strictEqual(stored?.recentTriggers[0]?.status, 'completed');
+    assert.strictEqual(stored?.recentTriggers[0]?.createdTaskIds?.length, 1);
+    assert.strictEqual(getDataService().loadTasks().length, 1);
+    assert.strictEqual(getStores().runs.loadAll().length, 1);
+    assert.strictEqual(getStores().events.findByType('eventrule.fired').length, 1);
+  });
+
+  it('does not trigger for a non-matching event', async () => {
+    const wf = makeWorkflow('wf-nomatch', 'No');
+    const rule = eventRulesService.createEventRule({ name: 'Only PRs', matcher: { eventType: 'pull_request.merged' }, workflowId: wf.id });
+
+    const results = await eventRulesService.processEventRules(makeEvent('push', 'github', {}));
+
+    assert.strictEqual(results[0]?.skipReason, 'non-matching');
+    assert.strictEqual(getStores().eventRules.getById(rule.id)?.runCount, 0);
+    assert.strictEqual(getDataService().loadTasks().length, 0);
+  });
+
+  it('ignores disabled rules', async () => {
+    const wf = makeWorkflow('wf-off', 'Off');
+    const rule = eventRulesService.createEventRule({ name: 'Off rule', matcher: { eventType: 'pull_request.merged' }, workflowId: wf.id });
+    eventRulesService.setEventRuleEnabled(rule.id, false);
+
+    const results = await eventRulesService.processEventRules(makeEvent('pull_request.merged', 'github', {}));
+
+    assert.strictEqual(results[0]?.skipReason, 'disabled');
+    assert.strictEqual(getStores().eventRules.getById(rule.id)?.runCount, 0);
+  });
+
+  it('is idempotent: one trigger per event', async () => {
+    const wf = makeWorkflow('wf-idem', 'Idem');
+    const rule = eventRulesService.createEventRule({ name: 'Once', matcher: { eventType: 'pull_request.merged' }, workflowId: wf.id });
+    const event = makeEvent('pull_request.merged', 'github', {});
+
+    await eventRulesService.processEventRules(event);
+    const second = await eventRulesService.processEventRules(event);
+
+    assert.strictEqual(second[0]?.matched, true);
+    assert.strictEqual(second[0]?.skipReason, 'already-triggered');
+    assert.strictEqual(second[0]?.triggered, false);
+    assert.strictEqual(getStores().eventRules.getById(rule.id)?.runCount, 1);
+    assert.strictEqual(getStores().runs.loadAll().length, 1);
+  });
+
+  it('re-entrancy guard: events emitted while a rule runs do not re-evaluate rules', async () => {
+    const wf = makeWorkflow('wf-loopguard', 'Loop Guard');
+    eventRulesService.createEventRule({ name: 'Queue watcher', matcher: { eventType: 'run.queued' }, workflowId: wf.id });
+
+    const results = await eventRulesService.processEventRules(makeEvent('run.queued', 'worker', { taskId: 'task_x' }));
+
+    assert.strictEqual(getStores().eventRules.loadAll()[0]?.runCount, 1);
+    assert.strictEqual(getStores().runs.loadAll().length, 1);
+    assert.strictEqual(results.length, 1);
+  });
+
+  it('wires rules into emitEvent automatically', async () => {
+    const wf = makeWorkflow('wf-auto', 'Auto');
+    eventRulesService.createEventRule({ name: 'PR merged', matcher: { eventType: 'pull_request.merged' }, workflowId: wf.id });
+
+    emitEvent('pull_request.merged', 'github', { repo: { name: 'morocco-news' } });
+    await new Promise(resolve => setTimeout(resolve, 30));
+
+    assert.strictEqual(getStores().eventRules.loadAll()[0]?.runCount, 1);
+    assert.strictEqual(getStores().runs.loadAll().length, 1);
+  });
+
+  it('records audit events for creation, triggering and disable', async () => {
+    const wf = makeWorkflow('wf-audit', 'Audit');
+    const rule = eventRulesService.createEventRule({ name: 'Audited', matcher: { eventType: 'pull_request.merged' }, workflowId: wf.id });
+
+    const event = makeEvent('pull_request.merged', 'github', {});
+    await eventRulesService.processEventRules(event);
+    eventRulesService.setEventRuleEnabled(rule.id, false);
+
+    const actions = getStores().audit.loadAll().map(a => a.action).filter(a => a.startsWith('eventrule'));
+    assert.deepStrictEqual(actions, ['eventrule.created', 'eventrule.triggered', 'eventrule.disabled']);
+  });
+
+  it('records a failed trigger and does not crash when the workflow is missing', async () => {
+    const wf = makeWorkflow('wf-gone', 'Gone');
+    const rule = eventRulesService.createEventRule({ name: 'Ghost', matcher: { eventType: 'pull_request.merged' }, workflowId: wf.id });
+    getStores().workflows.delete(wf.id);
+
+    const results = await eventRulesService.processEventRules(makeEvent('pull_request.merged', 'github', {}));
+
+    assert.strictEqual(results[0]?.triggered, true);
+    assert.strictEqual(results[0]?.status, 'failed');
+    assert.match(results[0]?.error || '', /not found/);
+    assert.strictEqual(getStores().eventRules.getById(rule.id)?.recentTriggers[0]?.status, 'failed');
+  });
+
+  it('requires event-rule:manage to create, toggle and delete rules', () => {
+    const wf = makeWorkflow('wf-perm', 'Perm');
+    const agent = seedAgent({ role: 'agent', teamRole: 'agent', name: 'No Rights' });
+    const observer = seedAgent({ role: 'human', teamRole: 'observer', name: 'Observer' });
+
+    assert.throws(() => eventRulesService.createEventRule({ name: 'x', matcher: {}, workflowId: wf.id }, agent.id), /event-rule:manage/);
+    assert.throws(() => eventRulesService.createEventRule({ name: 'x', matcher: {}, workflowId: wf.id }, observer.id), /event-rule:manage/);
+
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead' });
+    const rule = eventRulesService.createEventRule({ name: 'Allowed', matcher: {}, workflowId: wf.id }, lead.id);
+    assert.strictEqual(rule.name, 'Allowed');
+
+    assert.throws(() => eventRulesService.setEventRuleEnabled(rule.id, false, agent.id), /event-rule:manage/);
+    assert.throws(() => eventRulesService.deleteEventRule(rule.id, observer.id), /event-rule:manage/);
+    assert.strictEqual(getStores().eventRules.getById(rule.id)?.enabled, true);
+  });
+
+  it('rejects creation for a missing workflow and supports update, toggle and delete', () => {
+    assert.throws(
+      () => eventRulesService.createEventRule({ name: 'x', matcher: {}, workflowId: 'wf_nope' }),
+      /Workflow 'wf_nope' not found/
+    );
+
+    const wf = makeWorkflow('wf-upd', 'Upd');
+    const rule = eventRulesService.createEventRule({ name: 'Old name', matcher: { eventType: 'a' }, workflowId: wf.id });
+
+    const updated = eventRulesService.updateEventRule(rule.id, { name: 'New name', matcher: { eventType: 'b', source: 'github' } });
+    assert.strictEqual(updated.name, 'New name');
+    assert.deepStrictEqual(updated.matcher, { eventType: 'b', source: 'github' });
+
+    const toggled = eventRulesService.setEventRuleEnabled(rule.id, false);
+    assert.strictEqual(toggled.enabled, false);
+
+    const deleted = eventRulesService.deleteEventRule(rule.id);
+    assert.strictEqual(deleted, true);
+    assert.strictEqual(getStores().eventRules.getById(rule.id), undefined);
   });
 });
 

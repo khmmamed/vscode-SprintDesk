@@ -8,6 +8,7 @@ import { getStores } from '../../data/stores';
 import { getActivitySummary } from '../../services/workforce/observability';
 import * as findingsService from '../../services/workforce/findingsService';
 import * as workforceService from '../../services/workforce/workforceService';
+import * as eventRulesService from '../../services/workforce/eventRulesService';
 import { getDataService } from '../../data/DataService';
 import { Employee, EmployeeModelProfile, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
@@ -20,6 +21,7 @@ export type WorkforceSection =
   | 'approvals'
   | 'schedules'
   | 'workflows'
+  | 'event-rules'
   | 'activity'
   | 'create-task';
 
@@ -75,6 +77,34 @@ export interface FindingDto {
   taskId?: string;
   taskTitle?: string;
   category?: string;
+}
+
+export interface EventRuleDto {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  matcher: { eventType?: string; source?: string; payloadKey?: string; payloadValue?: string };
+  workflowId: string;
+  workflowName?: string;
+  runCount: number;
+  lastTriggeredAt?: string;
+  recentTriggers: Array<{
+    eventId: string;
+    eventType: string;
+    status: 'completed' | 'failed';
+    createdAt: string;
+    createdTaskIds?: string[];
+    error?: string;
+  }>;
+}
+
+export interface WorkflowDto {
+  id: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+  updatedAt: string;
 }
 
 let panel: vscode.WebviewPanel | undefined;
@@ -169,6 +199,43 @@ function findingDtos(): FindingDto[] {
   });
 }
 
+function eventRuleDtos(): EventRuleDto[] {
+  return eventRulesService.getEventRules().map(r => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    enabled: r.enabled,
+    matcher: {
+      eventType: r.matcher?.eventType,
+      source: r.matcher?.source,
+      payloadKey: r.matcher?.payloadKey,
+      payloadValue: r.matcher?.payloadValue
+    },
+    workflowId: r.workflowId,
+    workflowName: r.workflowName,
+    runCount: r.runCount,
+    lastTriggeredAt: r.lastTriggeredAt,
+    recentTriggers: (r.recentTriggers || []).map(t => ({
+      eventId: t.eventId,
+      eventType: t.eventType,
+      status: t.status,
+      createdAt: t.createdAt,
+      createdTaskIds: t.createdTaskIds,
+      error: t.error
+    }))
+  }));
+}
+
+function workflowDtos(): WorkflowDto[] {
+  return getStores().workflows.loadAll().map(w => ({
+    id: w.id,
+    name: w.name,
+    version: w.version,
+    enabled: w.enabled,
+    updatedAt: w.updatedAt
+  }));
+}
+
 function pushRun(panelRef: vscode.WebviewPanel, run: Run): void {
   const message = { command: 'RUN_UPDATED', payload: { run: getRunDto(run) } };
   try {
@@ -184,7 +251,8 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     pendingApprovals: getStores().approvals.loadAll().filter(a => a.status === 'pending').length,
     pendingFindings: findingsService.pendingFindingCount(),
     schedules: getStores().schedules.loadAll().length,
-    workflows: getStores().workflows.loadAll().length
+    workflows: getStores().workflows.loadAll().length,
+    eventRules: getStores().eventRules.loadAll().length
   };
   try {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_OVERVIEW', payload: { overview } });
@@ -193,6 +261,8 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_TASKS', payload: taskDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_RUNS', payload: allRunDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_FINDINGS', payload: findingDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EVENT_RULES', payload: eventRuleDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_WORKFLOWS', payload: workflowDtos() });
   } catch {
     // panel may be disposed mid-flight
   }
@@ -398,6 +468,57 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
           workforceTreeDataProvider.refresh();
           pushSnapshot(newPanel);
         }
+      } else if (command === 'WORKFORCE_CREATE_EVENT_RULE') {
+        const payload = message?.payload || {};
+        const name = String(payload.name || '').trim();
+        const workflowId = String(payload.workflowId || '').trim();
+        if (!name || !workflowId) {
+          postResponse(newPanel, message?.requestId, undefined, 'Event rule name and workflow are required');
+          return;
+        }
+        try {
+          const created = eventRulesService.createEventRule({
+            name,
+            description: payload.description,
+            matcher: {
+              eventType: payload.matcher?.eventType,
+              source: payload.matcher?.source,
+              payloadKey: payload.matcher?.payloadKey,
+              payloadValue: payload.matcher?.payloadValue
+            },
+            workflowId
+          });
+          postResponse(newPanel, message?.requestId, { rule: eventRuleDtos().find(r => r.id === created.id) });
+        } catch (error) {
+          postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_SET_EVENT_RULE_ENABLED') {
+        const ruleId: string | undefined = message?.payload?.ruleId;
+        const enabled = Boolean(message?.payload?.enabled);
+        if (ruleId) {
+          try {
+            eventRulesService.setEventRuleEnabled(ruleId, enabled);
+            postResponse(newPanel, message?.requestId, { ok: true });
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_DELETE_EVENT_RULE') {
+        const ruleId: string | undefined = message?.payload?.ruleId;
+        if (ruleId) {
+          try {
+            const deleted = eventRulesService.deleteEventRule(ruleId);
+            postResponse(newPanel, message?.requestId, { deleted });
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
       }
     },
     undefined,

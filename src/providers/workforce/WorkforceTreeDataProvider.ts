@@ -143,6 +143,8 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     const pendingFindings = getStores().findings.pending().length;
     const schedules = getStores().schedules.loadAll().length;
     const workflows = getStores().workflows.loadAll().length;
+    const eventRules = getStores().eventRules.loadAll();
+    const eventRulesActive = eventRules.filter(r => r.enabled).length;
     const running = getStores().runs.loadAll().filter(r => r.status === 'running').length;
     const lastEvent = getStores().events.latest(1)[0];
     const assignedTasks = this.assignedTaskCount();
@@ -205,6 +207,16 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
         'project',
         undefined,
         'Manage workflows in the Control Center'
+      ),
+      new WorkforceItem(
+        `Event Rules (${eventRulesActive} active)`,
+        vscode.TreeItemCollapsibleState.None,
+        'workforceEventRules',
+        undefined, undefined, undefined, undefined,
+        'event-rules',
+        'zap',
+        undefined,
+        'Automate workflows from emitted events in the Control Center'
       ),
       new WorkforceItem(
         'Activity',
