@@ -162,6 +162,22 @@ export function updateTask(taskId: string, updates: Partial<Task>): void {
   getTaskService().updateTask(taskId, updates);
 }
 
+export function setTaskStatus(taskId: string, status: Task['status']): void {
+  getTaskService().updateTask(taskId, { status });
+}
+
+export function startTask(taskId: string): void {
+  setTaskStatus(taskId, 'in-progress');
+}
+
+export function markTaskForReview(taskId: string): void {
+  setTaskStatus(taskId, 'review');
+}
+
+export function completeTask(taskId: string): void {
+  setTaskStatus(taskId, 'done');
+}
+
 export function createTaskFromData(ws: string, taskData: Task): Task {
   return getTaskService(ws).createTaskFromData(taskData);
 }

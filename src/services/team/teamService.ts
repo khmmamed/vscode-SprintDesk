@@ -1,9 +1,10 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import * as fileService from '../fileService';
 import { getDataService } from '../../data/DataService';
-import { TeamMember, TeamData } from '../../data/types';
+import { TeamMember, TeamData, AgentRole } from '../../data/types';
 import { PROJECT_CONSTANTS } from '../../utils/constant';
 import { getHost, getFileSystem } from '../../host';
 
@@ -163,4 +164,88 @@ export function getAgents(): TeamMember[] {
 export function getAgent(id: string): TeamMember | undefined {
   const agents = getAgents();
   return agents.find(a => a.id === id || a.name === id);
+}
+
+export function assignTaskToMember(taskId: string, memberId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  dataService.updateTask(taskId, { assignee: memberId });
+  const task = dataService.getTask(taskId);
+  if (task) dataService.saveTaskMd(task);
+}
+
+export function unassignTaskFromMember(taskId: string): void {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return;
+  
+  const dataService = getDataService(ws);
+  dataService.updateTask(taskId, { assignee: '' });
+  const task = dataService.getTask(taskId);
+  if (task) dataService.saveTaskMd(task);
+}
+
+const TEAMS_DIR = 'teams';
+
+function getTeamsPath(ws: string): string {
+  return path.join(ws, PROJECT_CONSTANTS.SPRINTDESK_DIR, TEAMS_DIR);
+}
+
+function getAgentRolePath(ws: string, agentName: string): string {
+  return path.join(getTeamsPath(ws), `${agentName}.json`);
+}
+
+export function loadAgentRole(agentName: string): AgentRole | undefined {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return undefined;
+  
+  const rolePath = getAgentRolePath(ws, agentName);
+  try {
+    if (!fs.existsSync(rolePath)) return undefined;
+    const content = fs.readFileSync(rolePath, 'utf8');
+    return JSON.parse(content) as AgentRole;
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveAgentRole(role: AgentRole): boolean {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return false;
+  
+  const teamsPath = getTeamsPath(ws);
+  if (!fs.existsSync(teamsPath)) {
+    fs.mkdirSync(teamsPath, { recursive: true });
+  }
+  
+  const rolePath = getAgentRolePath(ws, role.name);
+  try {
+    fs.writeFileSync(rolePath, JSON.stringify(role, null, 2), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getAllAgentRoles(): AgentRole[] {
+  const ws = fileService.getWorkspaceRoot();
+  if (!ws) return [];
+  
+  const teamsPath = getTeamsPath(ws);
+  if (!fs.existsSync(teamsPath)) return [];
+  
+  const files = fs.readdirSync(teamsPath).filter(f => f.endsWith('.json'));
+  const roles: AgentRole[] = [];
+  
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(path.join(teamsPath, file), 'utf8');
+      roles.push(JSON.parse(content));
+    } catch {
+      // Skip invalid files
+    }
+  }
+  
+  return roles;
 }

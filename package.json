@@ -3,7 +3,7 @@
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
   "description": "A Visual Studio Code extension for managing sprints and tasks in an agile development workflow",
-  "version": "0.5.0",
+"version": "0.5.0",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -98,6 +98,21 @@
         "icon": "$(git-branch)"
       },
       {
+        "command": "sprintdesk.markTaskForReview",
+        "title": "SprintDesk: Mark Task for Review",
+        "icon": "$(eye)"
+      },
+{
+      "command": "sprintdesk.completeTask",
+      "title": "SprintDesk: Complete Task",
+      "icon": "$(check)"
+    },
+    {
+      "command": "sprintdesk.setTaskStatus",
+      "title": "SprintDesk: Set Task Status",
+      "icon": "$(list-selection)"
+    },
+      {
         "command": "sprintdesk.openSprintFile",
         "title": "SprintDesk: Open Sprint File",
         "icon": "$(go-to-file)"
@@ -173,7 +188,12 @@
         "title": "SprintDesk: View Team",
         "icon": "$(account)"
       },
-{
+      {
+        "command": "sprintdesk.addAgent",
+        "title": "SprintDesk: Add Agent",
+        "icon": "$(robot)"
+      },
+      {
         "command": "sprintdesk.runAgent",
         "title": "SprintDesk: Run Agent",
         "icon": "$(play)"
@@ -427,7 +447,7 @@
           "when": "view == sprintdesk-repositories && viewItem == repository",
           "group": "create@4"
         },
-        {
+{
           "command": "sprintdesk.runAgent",
           "when": "view == sprintdesk-team",
           "group": "inline@0"
@@ -450,6 +470,16 @@
         {
           "command": "sprintdesk.setTeamLead",
           "when": "view == sprintdesk-workforce && viewItem == workforceTeam",
+          "group": "inline@4"
+        },
+        {
+          "command": "sprintdesk.markTaskForReview",
+          "when": "view == sprintdesk-team && viewItem == assignedTask",
+          "group": "inline"
+        },
+        {
+          "command": "sprintdesk.completeTask",
+          "when": "view == sprintdesk-team && viewItem == assignedTask",
           "group": "inline@1"
         }
       ]

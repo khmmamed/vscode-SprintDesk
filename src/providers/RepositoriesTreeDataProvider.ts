@@ -1,66 +1,108 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
+import { PROJECT_CONSTANTS } from '../utils/constant';
+import { RepositoryStateService } from '../services/repositoryState';
+import { DataService, getDataService } from '../data/DataService';
 
 export class RepositoriesTreeItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-    // fullPath points to repository root for repo nodes, or to a file for file nodes
     public readonly fullPath: string,
-    // type: 'repo' | 'category' | 'file'
-    public readonly nodeType: 'repo' | 'category' | 'file' = 'repo',
-    // categoryName used when nodeType === 'category'
-    public readonly categoryName?: string
+    public readonly nodeType: 'repo' | 'category' | 'item' = 'repo',
+    public readonly categoryName?: string,
+    public readonly isActive: boolean = false,
+    public readonly itemStatus?: string,
+    public readonly itemId?: string
   ) {
     super(label, collapsibleState);
 
     if (fullPath) this.resourceUri = vscode.Uri.file(fullPath);
 
-    this.tooltip = `${fullPath}`;
-
     if (nodeType === 'repo') {
-      // Add context menu for repository nodes
       this.contextValue = 'repository';
-      this.iconPath = new vscode.ThemeIcon('folder');
-      this.tooltip = `Right-click for options: ${fullPath}`;
+      this.iconPath = this.isActive 
+        ? new vscode.ThemeIcon('folder-active', new vscode.ThemeColor('list.activeSelectionForeground'))
+        : new vscode.ThemeIcon('folder');
+      if (this.isActive) {
+        this.description = 'Active';
+        this.tooltip = `Active Repository: ${fullPath}`;
+      } else {
+        this.tooltip = `Right-click for options: ${fullPath}`;
+      }
     } else if (nodeType === 'category') {
       this.contextValue = `repoCategory`;
       this.iconPath = new vscode.ThemeIcon('root-folder');
+      this.tooltip = `${fullPath}/${PROJECT_CONSTANTS.SPRINTDESK_DIR}/${categoryName}`;
     } else {
-      // file node: allow opening
-      this.contextValue = 'file';
-      this.iconPath = new vscode.ThemeIcon('file');
-      this.command = {
-        command: 'vscode.open',
-        title: 'Open File',
-        arguments: [vscode.Uri.file(fullPath)]
-      };
+      this.contextValue = 'item';
+      this.iconPath = this.getStatusIcon(itemStatus);
+      this.description = itemStatus || '';
+      this.tooltip = `${itemId || ''} - ${itemStatus || ''}`;
+      if (fullPath) {
+        this.command = {
+          command: 'vscode.open',
+          title: 'Open File',
+          arguments: [vscode.Uri.file(fullPath)]
+        };
+      }
     }
   }
-}
 
-function humanizeFileLabel(filename: string): string {
-  const base = filename.replace(/\.[^.]+$/, '');
-  const cleaned = base
-    .replace(/^[\[]?(?:task|backlog|epic|sprint)[\]]?_?/i, '')
-    .replace(/[_-]+/g, ' ')
-    .trim();
-  return cleaned || base;
+  private getStatusIcon(status?: string): vscode.ThemeIcon {
+    switch (status?.toLowerCase()) {
+      case 'done':
+      case 'completed':
+        return new vscode.ThemeIcon('check');
+      case 'in-progress':
+      case 'started':
+        return new vscode.ThemeIcon('sync~spin');
+      case 'blocked':
+        return new vscode.ThemeIcon('error');
+      case 'cancelled':
+        return new vscode.ThemeIcon('close');
+      default:
+        return new vscode.ThemeIcon('circle-outline');
+    }
+  }
 }
 
 export class RepositoriesTreeDataProvider implements vscode.TreeDataProvider<RepositoriesTreeItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<RepositoriesTreeItem | undefined | void> = new vscode.EventEmitter<RepositoriesTreeItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<RepositoriesTreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
-  private workspaceRoots: string[] = [];
+  public workspaceRoots: string[] = [];
   private excludeDirs = new Set(['node_modules', '.git', 'dist', 'out', 'build', '.vscode', 'vendor', 'bower_components']);
 
-  constructor() {
+  private stateService: RepositoryStateService | undefined;
+  private disposables: vscode.Disposable[] = [];
+
+  constructor(stateService?: RepositoryStateService) {
+    this.stateService = stateService;
+    this.updateWorkspaceRoots();
+
+    if (this.stateService) {
+      this.disposables.push(
+        this.stateService.onDidChangeActiveRepo(() => {
+          this.refresh();
+        })
+      );
+    }
+  }
+
+  public dispose(): void {
+    for (const d of this.disposables) {
+      d.dispose();
+    }
+  }
+
+  public updateWorkspaceRoots(): void {
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length > 0) {
       this.workspaceRoots = folders.map(f => f.uri.fsPath);
+    } else {
+      this.workspaceRoots = [];
     }
   }
 
@@ -75,7 +117,6 @@ export class RepositoriesTreeDataProvider implements vscode.TreeDataProvider<Rep
   async getChildren(element?: RepositoriesTreeItem): Promise<RepositoriesTreeItem[]> {
     if (!this.workspaceRoots || this.workspaceRoots.length === 0) return [];
 
-    // Root level: list repositories that contain .SprintDesk
     if (!element) {
       const parents = new Set<string>();
 
@@ -83,21 +124,31 @@ export class RepositoriesTreeDataProvider implements vscode.TreeDataProvider<Rep
         try {
           await this.scanForSprintDesk(root, parents);
         } catch (err) {
-          // ignore errors for individual roots
           console.error('Error scanning root', root, err);
         }
       }
 
+      const activeRepo = this.stateService?.getActiveRepo();
       const items = Array.from(parents).map(p => {
-        return new RepositoriesTreeItem(path.basename(p) || p, vscode.TreeItemCollapsibleState.Collapsed, p, 'repo');
+        return new RepositoriesTreeItem(
+          path.basename(p) || p,
+          vscode.TreeItemCollapsibleState.Collapsed,
+          p,
+          'repo',
+          undefined,
+          activeRepo === p
+        );
       });
 
-      items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
+      items.sort((a, b) => {
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+      });
 
       return items;
     }
 
-    // If a repository node was expanded, show category nodes
     if (element.nodeType === 'repo') {
       const categories = [
         { label: 'Backlogs', key: PROJECT_CONSTANTS.BACKLOGS_DIR },
@@ -109,43 +160,84 @@ export class RepositoriesTreeDataProvider implements vscode.TreeDataProvider<Rep
       return categories.map(c => new RepositoriesTreeItem(c.label, vscode.TreeItemCollapsibleState.Collapsed, element.fullPath, 'category', c.label));
     }
 
-    // If a category node was expanded, list files inside <repo>/.SprintDesk/<Category>
     if (element.nodeType === 'category') {
-      const mapping: Record<string, string> = {
-        Backlogs: PROJECT_CONSTANTS.BACKLOGS_DIR,
-        Epics: PROJECT_CONSTANTS.EPICS_DIR,
-        Sprints: PROJECT_CONSTANTS.SPRINTS_DIR,
-        Tasks: PROJECT_CONSTANTS.TASKS_DIR
-      };
+      const repoPath = element.fullPath;
+      const dataService = getDataService(repoPath);
+      const categoryName = element.categoryName || '';
+      const items: RepositoriesTreeItem[] = [];
 
-      const prefixMap: Record<string, string> = {
-        Backlogs: PROJECT_CONSTANTS.FILE_PREFIX.BACKLOG,
-        Epics: PROJECT_CONSTANTS.FILE_PREFIX.EPIC,
-        Sprints: PROJECT_CONSTANTS.FILE_PREFIX.SPRINT,
-        Tasks: PROJECT_CONSTANTS.FILE_PREFIX.TASK
-      };
-
-      const catDirName = mapping[element.categoryName || ''];
-      if (!catDirName) return [];
-
-      const dirPath = path.join(element.fullPath, PROJECT_CONSTANTS.SPRINTDESK_DIR, catDirName);
-      try {
-        const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
-        const files = entries.filter(e => e.isFile()).map(e => e.name);
-
-        const filtered = files.filter(f => f.endsWith(PROJECT_CONSTANTS.MD_FILE_EXTENSION) && f.startsWith(prefixMap[element.categoryName || ''] || ''));
-
-        const items = filtered.map(fname => {
-          const filePath = path.join(dirPath, fname);
-          const label = humanizeFileLabel(fname);
-          return new RepositoriesTreeItem(label, vscode.TreeItemCollapsibleState.None, filePath, 'file', element.categoryName);
-        });
-
-        items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
-        return items;
-      } catch (err) {
-        return [];
+      if (categoryName === 'Tasks') {
+        const tasks = dataService.loadTasks();
+        for (const task of tasks) {
+          const mdPath = dataService.getItemMdPath('task', task.id);
+          items.push(new RepositoriesTreeItem(
+            task.title,
+            vscode.TreeItemCollapsibleState.None,
+            mdPath,
+            'item',
+            categoryName,
+            false,
+            task.status,
+            task.id
+          ));
+        }
+      } else if (categoryName === 'Epics') {
+        const epics = dataService.loadEpics();
+        for (const epic of epics) {
+          const mdPath = dataService.getItemMdPath('epic', epic.id);
+          items.push(new RepositoriesTreeItem(
+            epic.title,
+            vscode.TreeItemCollapsibleState.None,
+            mdPath,
+            'item',
+            categoryName,
+            false,
+            epic.status,
+            epic.id
+          ));
+        }
+      } else if (categoryName === 'Sprints') {
+        const sprints = dataService.loadSprints();
+        for (const sprint of sprints) {
+          const mdPath = dataService.getItemMdPath('sprint', sprint.id);
+          items.push(new RepositoriesTreeItem(
+            sprint.name,
+            vscode.TreeItemCollapsibleState.None,
+            mdPath,
+            'item',
+            categoryName,
+            false,
+            sprint.status,
+            sprint.id
+          ));
+        }
+      } else if (categoryName === 'Backlogs') {
+        const backlogs = dataService.loadBacklogs();
+        for (const backlog of backlogs) {
+          const mdPath = dataService.getItemMdPath('backlog', backlog.id);
+          const taskCount = backlog.tasks?.length || 0;
+          items.push(new RepositoriesTreeItem(
+            backlog.title || backlog.name,
+            vscode.TreeItemCollapsibleState.None,
+            mdPath,
+            'item',
+            categoryName,
+            false,
+            `${taskCount} tasks`,
+            backlog.id
+          ));
+        }
       }
+
+      items.sort((a, b) => {
+        const statusOrder = ['in-progress', 'started', 'upcoming', 'waiting', 'blocked', 'done', 'completed', 'cancelled'];
+        const aIdx = statusOrder.indexOf(a.itemStatus?.toLowerCase() || '');
+        const bIdx = statusOrder.indexOf(b.itemStatus?.toLowerCase() || '');
+        if (aIdx !== bIdx) return aIdx - bIdx;
+        return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+      });
+
+      return items;
     }
 
     return [];
@@ -160,7 +252,6 @@ export class RepositoriesTreeDataProvider implements vscode.TreeDataProvider<Rep
       try {
         entries = await fs.promises.readdir(dir, { withFileTypes: true });
       } catch (err) {
-        // unreadable directory, skip
         continue;
       }
 
@@ -168,19 +259,15 @@ export class RepositoriesTreeDataProvider implements vscode.TreeDataProvider<Rep
         try {
           if (e.isDirectory()) {
             if (e.name === '.SprintDesk') {
-              // parent directory is the repository/project root we want
               outSet.add(dir);
-              // do not descend into the .SprintDesk folder
               continue;
             }
 
             if (this.excludeDirs.has(e.name)) continue;
 
-            // push subdirectory to stack to scan
             stack.push(path.join(dir, e.name));
           }
         } catch (err) {
-          // skip problematic entry
           continue;
         }
       }

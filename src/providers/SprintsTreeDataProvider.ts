@@ -5,9 +5,7 @@ import * as fileService from '../services/fileService';
 import * as sprintService from '../services/sprintService';
 import { UI_CONSTANTS, PROJECT_CONSTANTS, TASK_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
-import { getTaskPath, removeEmojiFromTaskLabel } from '../utils/taskUtils';
 import { getDataService } from '../data/DataService';
-import { getSprintPath } from '../services/sprintService';
 import { Task, Sprint } from '../data/types';
 
 export class SprintsTreeItem extends vscode.TreeItem {
@@ -101,12 +99,13 @@ export class SprintsTreeDataProvider implements vscode.TreeDataProvider<SprintsT
   private workspaceRoot: string;
 
   // DragAndDrop interface implementation
-  readonly dropMimeTypes = [
+readonly dropMimeTypes = [
     'text/uri-list',
     'application/vnd.code.tree.sprintdesk-backlogs',
     'application/vnd.code.tree.sprintdesk-tasks',
     'application/vnd.code.tree.sprintdesk-epics',
-    'application/vnd.code.tree.sprintdesk-sprints'
+    'application/vnd.code.tree.sprintdesk-sprints',
+    'application/vnd.code.tree.sprintdesk-team'
   ];
   readonly dragMimeTypes = ['application/vnd.code.tree.sprintdesk-sprints'];
 

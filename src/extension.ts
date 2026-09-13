@@ -22,13 +22,13 @@ import {
   registerCreateSprintFromRepoCommand,
   registerCreateBacklogFromRepoCommand,
   registerOpenWebviewCommand,
-  registerViewTasksCommand,
   registerViewTaskPreviewCommand,
   registerEditTaskRawCommand,
   registerViewEpicsCommand,
   registerViewBacklogsCommand,
   addMultipleTasksCommand,
-  registerAddTaskCommand
+  registerAddTaskCommand,
+  registerSetTaskStatusCommand
 } from './commands';
 import { registerViewProjectStructureCommand } from "./commands/viewProjectStructure";
 import { registerViewProjectsCommand } from "./commands/viewProjects";
@@ -43,6 +43,8 @@ import { TasksTreeDataProvider } from './providers/TasksTreeDataProvider';
 import { BacklogsTreeDataProvider } from './providers/BacklogsTreeDataProvider';
 import { EpicsTreeDataProvider } from './providers/EpicsTreeDataProvider';
 import { RepositoriesTreeDataProvider } from './providers/RepositoriesTreeDataProvider';
+import { RepositoryStateService } from './services/repositoryState';
+import * as fileService from './services/fileService';
 import { TeamTreeDataProvider, teamTreeDataProvider } from './providers/team/TeamTreeDataProvider';
 import { HistoryTreeDataProvider, historyTreeDataProvider } from './providers/history/HistoryTreeDataProvider';
 import { workforceTreeDataProvider } from './providers/workforce/WorkforceTreeDataProvider';
@@ -157,9 +159,9 @@ export async function activate(context: vscode.ExtensionContext) {
   setHost(new VSCodeHost());
   setFileSystem(new NodeFileSystem());
 
-  // Register existing commands (delegated to `src/commands`)
+  const repoState = new RepositoryStateService(context.globalState);
+
   registerOpenWebviewCommand(context);
-  registerViewTasksCommand(context);
   registerViewTaskPreviewCommand(context);
   registerEditTaskRawCommand(context);
   registerViewBacklogsCommand(context);
@@ -169,7 +171,6 @@ export async function activate(context: vscode.ExtensionContext) {
   registerViewProjectStructureCommand(context);
   registerViewEpicsCommand(context);
 
-  // Register WebviewViewProviders for non-tree views
   const treeViewIds = ['sprintdesk-repositories', 'sprintdesk-epics', 'sprintdesk-tasks', 'sprintdesk-sprints', 'sprintdesk-backlogs'];
   const webviewIds = SIDEBAR_VIEW_IDS.filter(id => !treeViewIds.includes(id));
 
@@ -182,12 +183,11 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  // Tree providers
   const sprintsProvider = new SprintsTreeDataProvider();
   const backlogsProvider = new BacklogsTreeDataProvider();
-  const repositoriesProvider = new RepositoriesTreeDataProvider();
+  const repositoriesProvider = new RepositoriesTreeDataProvider(repoState);
 
-const tasksProvider = new TasksTreeDataProvider();
+  const tasksProvider = new TasksTreeDataProvider();
   const epicsProvider = new EpicsTreeDataProvider();
 
   const teamProvider = teamTreeDataProvider;
@@ -225,7 +225,8 @@ const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositori
   context.subscriptions.push(repositoriesTreeView);
 
   const teamTreeView = vscode.window.createTreeView('sprintdesk-team', {
-    treeDataProvider: teamProvider
+    treeDataProvider: teamProvider,
+    dragAndDropController: teamProvider
   });
   context.subscriptions.push(teamTreeView);
 
@@ -257,6 +258,7 @@ const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositori
   registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
 registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider, teamProvider, historyProvider, workforceProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
+  registerSetTaskStatusCommand(context);
   registerOpenSprintFileCommand(context);
   registerShowSprintCalendarCommand(context);
 
@@ -345,11 +347,16 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     }),
 
     vscode.commands.registerCommand('sprintdesk.addAgent', async () => {
-      const { addTeamMember } = require('./services/team/teamService');
+      const { addTeamMember, saveAgentRole } = require('./services/team/teamService');
       
-      const name = await vscode.window.showInputBox({ prompt: 'Enter agent name (e.g., opencode, ollama)' });
+      const name = await vscode.window.showInputBox({ prompt: 'Enter agent name (e.g., opencode, mohamed)' });
       if (!name) return;
 
+      const roleDesc = await vscode.window.showInputBox({ 
+        prompt: 'Enter agent role description (e.g., Senior Developer - creates features)',
+        placeHolder: 'Agent role description'
+      });
+      
       const tool = await vscode.window.showQuickPick(
         ['opencode', 'ollama', 'claude-code', 'custom'],
         { placeHolder: 'Select agent tool' }
@@ -357,28 +364,49 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
       if (!tool) return;
 
       let agentConfig: any = { tool };
+      let model: string | undefined;
+      let command: string | undefined;
       
       if (tool === 'ollama') {
-        const model = await vscode.window.showInputBox({ prompt: 'Enter model name (e.g., llama3, codellama)' });
-        if (model) agentConfig.model = model;
+        model = await vscode.window.showInputBox({ prompt: 'Enter model name (e.g., llama3, codellama)' });
       }
       
       if (tool === 'custom') {
-        const command = await vscode.window.showInputBox({ 
+        command = await vscode.window.showInputBox({ 
           prompt: 'Enter custom command (use {task_path}, {task_dir}, {description} as placeholders)'
         });
-        if (command) agentConfig.command = command;
       }
+      
+      if (model) agentConfig.model = model;
+      if (command) agentConfig.command = command;
+
+      const promptTemplate = await vscode.window.showInputBox({
+        prompt: 'Enter prompt template (optional, use {roleFile}, {taskFile}, {taskTitle}, {taskDir})',
+        value: "Read your role from {roleFile} and work on task {taskFile}"
+      });
 
       try {
+        // Save to team.yml
         const member = addTeamMember({
           name,
           email: `${name}@agent.local`,
           role: 'agent',
           agentConfig
         });
+        
+        // Save role JSON file
+        saveAgentRole({
+          name,
+          role: roleDesc || 'AI Agent',
+          tool: tool as any,
+          workingDir: '',
+          promptTemplate: promptTemplate || '',
+          model,
+          command
+        });
+        
         teamProvider.refresh();
-        vscode.window.showInformationMessage(`Agent ${name} added successfully!`);
+        vscode.window.showInformationMessage(`Agent ${name} added! Role file: .SprintDesk/teams/${name}.json`);
       } catch (e: any) {
         vscode.window.showErrorMessage(`Failed to add agent: ${e.message}`);
       }
@@ -438,55 +466,69 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     })
   );
 
-  // When user selects a repository in the repositories tree, switch the Tasks provider to read from that repo
+// When user selects a repository in the repositories tree, switch all providers to that repo
   repositoriesTreeView.onDidChangeSelection(e => {
     try {
       const sel = (e.selection && e.selection[0]) as any;
-      // Try to read our repo path from the selection -- either 'fullPath' (our custom item) or resourceUri
       let selectedPath = sel?.fullPath ?? sel?.resourceUri?.fsPath;
       let repoPath: string | undefined = undefined;
       if (selectedPath) {
-        const path = require('path');
-        // If the selected path is a repo node or category, it already points to the repo root
         if (sel?.nodeType === 'repo' || sel?.nodeType === 'category') {
           repoPath = sel.fullPath || sel.resourceUri?.fsPath;
         } else {
-          // File node selected: try to locate the repository root by trimming at the .SprintDesk segment
           const parts = String(selectedPath).split(path.sep);
           const sdIndex = parts.indexOf('.SprintDesk');
           if (sdIndex > 0) {
             repoPath = parts.slice(0, sdIndex).join(path.sep);
           } else {
-            // fallback: assume parent 3 levels up (repo/.SprintDesk/<category>/file.md)
             repoPath = path.resolve(selectedPath, '..', '..', '..');
           }
         }
       }
 
-      // If a repository is selected, set override; if selection is empty, clear override
       if (repoPath) {
-        // Persist override to fileService so services also pick it up
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const fileService = require('./services/fileService');
+        repoState.setActiveRepo(repoPath);
         fileService.setWorkspaceRootOverride(repoPath);
-
-        // Update all providers that support setWorkspaceRoot
-        try { (tasksProvider as any).setWorkspaceRoot(repoPath); } catch { }
-        try { (backlogsProvider as any).setWorkspaceRoot(repoPath); } catch { }
-        try { (epicsProvider as any).setWorkspaceRoot(repoPath); } catch { }
-        try { (sprintsProvider as any).setWorkspaceRoot(repoPath); } catch { }
+        (tasksProvider as any).setWorkspaceRoot?.(repoPath);
+        (backlogsProvider as any).setWorkspaceRoot?.(repoPath);
+        (epicsProvider as any).setWorkspaceRoot?.(repoPath);
+        (sprintsProvider as any).setWorkspaceRoot?.(repoPath);
+        (teamProvider as any).setWorkspaceRoot?.(repoPath);
+        (historyProvider as any).setWorkspaceRoot?.(repoPath);
       } else {
-        const fileService = require('./services/fileService');
+        repoState.setActiveRepo(undefined);
         fileService.setWorkspaceRootOverride(undefined);
-        try { (tasksProvider as any).setWorkspaceRoot(undefined); } catch { }
-        try { (backlogsProvider as any).setWorkspaceRoot(undefined); } catch { }
-        try { (epicsProvider as any).setWorkspaceRoot(undefined); } catch { }
-        try { (sprintsProvider as any).setWorkspaceRoot(undefined); } catch { }
+        (tasksProvider as any).setWorkspaceRoot?.(undefined);
+        (backlogsProvider as any).setWorkspaceRoot?.(undefined);
+        (epicsProvider as any).setWorkspaceRoot?.(undefined);
+        (sprintsProvider as any).setWorkspaceRoot?.(undefined);
+        (teamProvider as any).setWorkspaceRoot?.(undefined);
+        (historyProvider as any).setWorkspaceRoot?.(undefined);
       }
     } catch (err) {
-      console.error('Failed to switch tasks provider workspace root on repo selection', err);
+      console.error('Failed to switch providers on repo selection', err);
     }
   });
+
+  // Listen for workspace folder changes
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(e => {
+      repositoriesProvider.updateWorkspaceRoots();
+      repositoriesProvider.refresh();
+    })
+  );
+
+  // Restore active repo on startup
+  const activeRepo = repoState.getActiveRepo();
+  if (activeRepo) {
+    fileService.setWorkspaceRootOverride(activeRepo);
+    (tasksProvider as any).setWorkspaceRoot?.(activeRepo);
+    (backlogsProvider as any).setWorkspaceRoot?.(activeRepo);
+    (epicsProvider as any).setWorkspaceRoot?.(activeRepo);
+    (sprintsProvider as any).setWorkspaceRoot?.(activeRepo);
+    (teamProvider as any).setWorkspaceRoot?.(activeRepo);
+    (historyProvider as any).setWorkspaceRoot?.(activeRepo);
+  }
 
   // === Ensure .SprintDesk folder structure on activation ===
   try {
@@ -498,8 +540,8 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     const ws = workspaceFolders[0].uri.fsPath;
     const sdPath = path.join(ws, '.SprintDesk');
 
-    // Ensure all directories exist
-    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp'];
+// Ensure all directories exist
+    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp', 'teams'];
     for (const dir of dirs) {
       const fullPath = path.join(sdPath, dir);
       if (!fs.existsSync(fullPath)) {

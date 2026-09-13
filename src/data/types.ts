@@ -5,7 +5,7 @@ export interface Task {
   name: string;
   title: string;
   type: 'feature' | 'bug' | 'chore' | 'doc' | 'test';
-  status: 'waiting' | 'in-progress' | 'done' | 'blocked' | 'cancelled';
+  status: 'waiting' | 'in-progress' | 'review' | 'done' | 'blocked' | 'cancelled';
   priority: 'high' | 'medium' | 'low';
   epic: string | null;
   backlog: string;
@@ -215,6 +215,7 @@ export interface DirectoriesConfig {
 
 export interface Config {
   projectPrefix: string;
+  developBranch: string;
   ids: IdsConfig;
   defaults: DefaultsConfig;
   ui: UIConfig;
@@ -223,6 +224,7 @@ export interface Config {
 
 export const DEFAULT_CONFIG: Config = {
   projectPrefix: 'SPD',
+  developBranch: 'develop',
   ids: {
     task: { prefix: 'task_', startNumber: 100, padding: 3 },
     epic: { prefix: 'epic_', startNumber: 1, padding: 2 },
@@ -273,6 +275,16 @@ export interface AgentConfig {
   tool: 'opencode' | 'ollama' | 'claude-code' | 'custom';
   command?: string;
   model?: string;
+}
+
+export interface AgentRole {
+  name: string;
+  role: string;
+  tool: 'opencode' | 'ollama' | 'claude-code' | 'custom';
+  workingDir?: string;
+  promptTemplate?: string;
+  model?: string;
+  command?: string;
 }
 
 export interface TeamMember {

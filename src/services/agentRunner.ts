@@ -2,9 +2,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { TeamMember, AgentConfig, Task } from '../data/types';
+import { TeamMember, AgentConfig, Task, AgentRole } from '../data/types';
 import { getDataService } from '../data/DataService';
 import { getWorkspaceRoot } from '../services/fileService';
+import * as taskService from '../services/taskService';
 
 export interface AgentRunResult {
   success: boolean;
@@ -33,7 +34,7 @@ export async function getTasksAssignedToAgent(agent: TeamMember): Promise<Task[]
   const dataService = getDataService(wsRoot);
   const tasks = dataService.loadTasks();
   
-  return tasks.filter(t => t.assignee === agent.name);
+  return tasks.filter(t => t.assignee === agent.id || t.assignee === agent.name);
 }
 
 export async function pickTaskForAgent(agent: TeamMember): Promise<Task | undefined> {
@@ -62,30 +63,54 @@ function sanitizeBranchName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
 
-function buildAgentCommand(config: AgentConfig, taskPath: string, taskDescription: string): { command: string; args: string[] } {
+function getRoleFilePath(agentName: string): string {
+  const wsRoot = getWorkspaceRoot();
+  if (!wsRoot) return '';
+  return path.join(wsRoot, '.SprintDesk', 'teams', `${agentName}.json`);
+}
+
+function loadAgentRole(agentName: string): AgentRole | undefined {
+  const rolePath = getRoleFilePath(agentName);
+  if (!rolePath || !fs.existsSync(rolePath)) return undefined;
+  
+  try {
+    const content = fs.readFileSync(rolePath, 'utf8');
+    return JSON.parse(content);
+  } catch {
+    return undefined;
+  }
+}
+
+function buildAgentCommand(config: AgentConfig, taskPath: string, taskDescription: string, taskTitle: string, agentName: string): { command: string; args: string[] } {
   const taskDir = taskPath && taskPath !== 'undefined' ? path.dirname(taskPath) : process.cwd();
   const taskFile = path.basename(taskPath);
+  const roleFile = getRoleFilePath(agentName);
+  
+  const role = loadAgentRole(agentName);
+  const roleDescription = role?.role || '';
+  const defaultTemplate = "Read your role from {roleFile} and work on task {taskFile}";
+  const template = role?.promptTemplate || defaultTemplate;
+  
+  const fullPrompt = `[${roleDescription}] Read role from ${roleFile} and work on task ${taskPath}`;
 
   switch (config.tool) {
     case 'opencode': {
-      const fullPrompt = `Task: ${taskDescription}`;
-      return { command: 'opencode', args: ['-c', '--prompt', fullPrompt, taskDir] };
+      return { command: 'opencode', args: ['-s', '--prompt', fullPrompt] };
     }
     case 'ollama': {
-      const model = config.model || 'llama3';
-      const prompt = `Task: ${taskDescription}\n\nWork on this task in directory: ${taskDir}`;
+      const model = config.model || role?.model || 'llama3';
+      const prompt = `Role: ${roleDescription}\n\nTask: ${taskTitle}\nWork in: ${taskDir}`;
       return { command: 'ollama', args: ['run', model, prompt] };
     }
     case 'claude-code': {
-      const taskArg = `--task="${taskPath}"`;
-      return { command: 'claude', args: ['code', taskArg] };
+      return { command: 'claude', args: ['code', '--task', taskPath] };
     }
     case 'custom': {
-      const cmd = (config.command || '')
-        .replace(/\{task_path\}/g, taskPath || '')
+      const cmd = (config.command || role?.command || '')
+        .replace(/\{task_path\}/g, taskPath)
         .replace(/\{task_dir\}/g, taskDir)
         .replace(/\{task_file\}/g, taskFile)
-        .replace(/\{description\}/g, taskDescription);
+        .replace(/\{description\}/g, fullPrompt);
       const parts = cmd.split(' ');
       return { command: parts[0], args: parts.slice(1) };
     }
@@ -134,23 +159,21 @@ async function createPullRequest(title: string, body?: string): Promise<string |
   if (!wsRoot) return undefined;
 
   try {
-    const { stdout } = await execCommand(
-      `git push -u origin ${await getCurrentBranch()}`,
-      wsRoot
-    );
-
+    const currentBranch = await getCurrentBranch();
     const { execSync } = require('child_process');
-    const prCmd = `gh pr create --title "${title}" ${body ? `--body "${body}"` : ''} --fill`;
-    const prOutput = execSync(prCmd, { cwd: wsRoot, encoding: 'utf8' }).trim();
     
-    return prOutput || `PR created for branch ${await getCurrentBranch()}`;
-  } catch {
+    execSync(`git push -u origin ${currentBranch}`, { cwd: wsRoot });
+    
+    let prOutput = '';
     try {
-      const branch = await getCurrentBranch();
-      return `Branch pushed: ${branch}. Create PR manually.`;
+      prOutput = execSync(`gh pr create --title "${title}" --body "${body || ''}" --fill`, { cwd: wsRoot, encoding: 'utf8' }).trim();
     } catch {
-      return undefined;
+      // gh not available
     }
+    
+    return prOutput || `Branch ${currentBranch} pushed. Create PR manually.`;
+  } catch {
+    return undefined;
   }
 }
 
@@ -170,11 +193,11 @@ export async function runAgent(agent: TeamMember, task: Task): Promise<AgentRunR
   try {
     vscode.window.showInformationMessage(`Starting agent ${agent.name} on task ${task.code}...`);
 
-    const currentBranch = await getCurrentBranch();
+    taskService.startTask(task.id);
+
     await checkoutBranch(branchName);
 
-    const taskDescription = task.title;
-    const { command, args } = buildAgentCommand(agent.agentConfig, task.path || '', taskDescription);
+    const { command, args } = buildAgentCommand(agent.agentConfig, task.path || '', task.title, task.title, agent.name);
 
     if (!command) {
       return { success: false, branch: branchName, error: 'Invalid agent configuration' };
@@ -187,10 +210,12 @@ export async function runAgent(agent: TeamMember, task: Task): Promise<AgentRunR
     terminal.show();
     terminal.sendText([command, ...args].join(' '));
 
-    vscode.window.showInformationMessage('Agent started in terminal. Check the terminal for progress.');
+    vscode.window.showInformationMessage('Agent started in terminal');
 
     const commitHash = await commitChanges(commitMessage);
     const prUrl = await createPullRequest(commitMessage, `Task: ${task.code}\nAssignee: ${agent.name}`);
+    
+    taskService.markTaskForReview(task.id);
 
     vscode.window.showInformationMessage(`Agent ${agent.name} completed! PR: ${prUrl}`);
 
@@ -199,7 +224,7 @@ export async function runAgent(agent: TeamMember, task: Task): Promise<AgentRunR
       branch: branchName,
       commitHash,
       prUrl,
-      output: 'Agent started in terminal'
+      output: 'Agent started successfully'
     };
   } catch (error: any) {
     return {

@@ -1,10 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
-import { PROJECT_CONSTANTS } from '../../utils/constant';
-import { SprintDeskItem } from '../../utils/SprintDeskItem';
-import { generateTaskId, generateTaskMetadata, generateTaskContent } from '../../utils/taskTemplate';
-import { promptInput } from '../../utils/helpers';
+import * as taskService from '../../services/taskService';
+import { getDataService } from '../../data/DataService';
+import { promptInput, PROJECT_CONSTANTS } from '../../utils';
 
 type Deps = {
   repositoriesTreeView?: any;
@@ -29,11 +27,9 @@ export function registerCreateTaskFromRepoCommand(context: vscode.ExtensionConte
       }
 
       try {
-        // Get task title
         const taskTitle = await promptInput('Enter task title', 'New Task');
         if (!taskTitle) return;
 
-        // Get task type
         const typeOptions = [
           { label: 'Feature', value: 'feature' },
           { label: 'Bug', value: 'bug' },
@@ -46,7 +42,6 @@ export function registerCreateTaskFromRepoCommand(context: vscode.ExtensionConte
         });
         if (!selectedType) return;
 
-        // Get priority
         const priorityOptions = [
           { label: 'High', value: 'high' },
           { label: 'Medium', value: 'medium' },
@@ -57,59 +52,29 @@ export function registerCreateTaskFromRepoCommand(context: vscode.ExtensionConte
         });
         if (!selectedPriority) return;
 
-        // Get category
         const category = await vscode.window.showInputBox({
           prompt: 'Enter category (optional)',
           placeHolder: 'e.g., frontend, backend'
         });
 
-        // Get component
         const component = await vscode.window.showInputBox({
           prompt: 'Enter component (optional)',
           placeHolder: 'e.g., ui, api'
         });
 
-        // Get assignee
         const assignee = await vscode.window.showInputBox({
           prompt: 'Enter assignee (optional)',
           placeHolder: 'e.g., John Doe'
         });
 
-        // Create SprintDesk directory structure
-        const sprintDeskDir = path.join(repoPath, PROJECT_CONSTANTS.SPRINTDESK_DIR);
-        const tasksDir = path.join(sprintDeskDir, PROJECT_CONSTANTS.TASKS_DIR);
-        
-        if (!fs.existsSync(tasksDir)) {
-          fs.mkdirSync(tasksDir, { recursive: true });
-        }
-
-        // Generate task metadata with unique ID
-        const baseTaskId = generateTaskId(taskTitle);
-        const uniqueId = Date.now(); // Use timestamp as unique number ID
-        const taskFileName = `${PROJECT_CONSTANTS.FILE_PREFIX.TASK}${baseTaskId}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
-        const taskPath = path.join(tasksDir, taskFileName);
-
-        const taskData = {
-          _id: Date.now(), // Use timestamp as number ID
+        const dataService = getDataService(repoPath);
+        const task = taskService.createTask(repoPath, {
           title: taskTitle,
-          type: selectedType.value as SprintDesk.TaskType,
-          priority: selectedPriority.value as SprintDesk.Priority,
-          category: category || '',
-          component: component || '',
-          assignee: assignee || '',
-          status: 'waiting' as SprintDesk.TaskStatus,
-          path: taskPath,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
+          type: selectedType.value,
+          priority: selectedPriority.value,
+          status: 'waiting'
+        });
 
-        // Use SprintDeskItem to create task
-        const taskItem = new SprintDeskItem(taskPath);
-        const taskContent = generateTaskMetadata(taskData) + '\n\n' + generateTaskContent(taskData);
-        taskItem.update(taskContent, taskData);
-        taskItem.create();
-
-        // Refresh tasks provider
         deps.tasksProvider?.refresh?.();
 
         vscode.window.showInformationMessage(`Task "${taskTitle}" created successfully!`);

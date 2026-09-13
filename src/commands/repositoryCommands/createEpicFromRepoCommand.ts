@@ -1,11 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
-import { PROJECT_CONSTANTS } from '../../utils/constant';
-import { SprintDeskItem } from '../../utils/SprintDeskItem';
-import { generateEpicId } from '../../utils/taskTemplate';
-import { generateEpicMetadata, generateEpicContent } from '../../utils/epicTemplate';
-import { promptInput } from '../../utils/helpers';
+import { promptInput } from '../../utils';
+import { getDataService } from '../../data/DataService';
+import { Epic } from '../../data/types';
 
 type Deps = {
   repositoriesTreeView?: any;
@@ -30,15 +27,12 @@ export function registerCreateEpicFromRepoCommand(context: vscode.ExtensionConte
       }
 
       try {
-        // Get epic title
         const epicTitle = await promptInput('Enter epic title', 'New Epic');
         if (!epicTitle) return;
 
-        // Get category
         const category = await promptInput('Enter epic category (e.g., SEO, FE, BE)', 'MISC');
         const epicCategory = category || 'MISC';
 
-        // Get priority
         const priorityOptions = [
           { label: 'High', value: 'high' },
           { label: 'Medium', value: 'medium' },
@@ -49,53 +43,38 @@ export function registerCreateEpicFromRepoCommand(context: vscode.ExtensionConte
         });
         if (!selectedPriority) return;
 
-        // Get description
         const description = await vscode.window.showInputBox({
           prompt: 'Enter epic description (optional)',
           placeHolder: 'Epic description...'
         });
 
-        // Create SprintDesk directory structure
-        const sprintDeskDir = path.join(repoPath, PROJECT_CONSTANTS.SPRINTDESK_DIR);
-        const epicsDir = path.join(sprintDeskDir, PROJECT_CONSTANTS.EPICS_DIR);
-        
-        if (!fs.existsSync(epicsDir)) {
-          fs.mkdirSync(epicsDir, { recursive: true });
-        }
-
-        // Get epic number from DataService
-        const { getDataService } = require('../../data/DataService');
         const dataService = getDataService(repoPath);
+        const epicId = require('crypto').randomUUID();
         const epicNumber = dataService.generateNextNumber('epic');
         const epicCode = dataService.generateCode('epic', epicNumber);
         const titleSlug = dataService.slugifyTitle(epicTitle);
 
-        // Generate epic metadata
-        const epicId = generateEpicId(epicTitle);
-        const epicFileName = `[${epicCode}]_${epicCategory}_${titleSlug}${PROJECT_CONSTANTS.MD_FILE_EXTENSION}`;
-        const epicPath = path.join(epicsDir, epicFileName);
-
-        const epicData = {
-          _id: Date.now(), // Use timestamp as number ID
+        const epic: Epic = {
+          id: epicId,
+          number: epicNumber,
+          code: epicCode,
+          name: '',
           title: epicTitle,
           category: epicCategory,
           description: description || '',
-          priority: selectedPriority.value as SprintDesk.Priority,
-          status: 'planned' as SprintDesk.EpicStatus,
-          totalTasks: 0,
-          completedTasks: 0,
-          path: epicPath,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          status: 'planned',
+          priority: selectedPriority.value as Epic['priority'],
+          tasks: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         };
 
-        // Use SprintDeskItem to create epic
-        const epicItem = new SprintDeskItem(epicPath);
-        const epicContent = generateEpicMetadata(epicData) + '\n\n' + generateEpicContent(epicData);
-        epicItem.update(epicContent, epicData);
-        epicItem.create();
+        epic.name = `[${epicCode}]_${epicCategory}_${titleSlug}`;
+        epic.path = path.join(dataService.getEpicsDir(), dataService.getEpicFilename(epic));
 
-        // Refresh epics provider
+        dataService.addEpic(epic);
+        dataService.saveEpicMd(epic);
+
         deps.epicsProvider?.refresh?.();
 
         vscode.window.showInformationMessage(`Epic "${epicTitle}" created successfully!`);

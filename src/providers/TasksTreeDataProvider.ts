@@ -5,7 +5,6 @@ import { PROJECT_CONSTANTS, UI_CONSTANTS } from '../utils/constant';
 import matter from 'gray-matter';
 import * as taskService from '../services/taskService';
 import * as fileService from '../services/fileService';
-import { SprintDeskItem } from '../utils/SprintDeskItem';
 import { getDataService } from '../data/DataService';
 import { Task } from '../data/types';
 interface TaskData {

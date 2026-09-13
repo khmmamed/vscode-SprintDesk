@@ -54,7 +54,7 @@ export class DataService {
       return this.configCache;
     }
 
-    const host = getHost();
+const host = getHost();
     const taskPrefix = host.getConfig<string>('taskPrefix') || 'task_';
     const taskStart = host.getConfig<number>('taskStartNumber') || 100;
     const taskPad = host.getConfig<number>('taskPadding') || 3;
@@ -70,9 +70,11 @@ export class DataService {
     const showIds = host.getConfig<boolean>('showIds') ?? true;
     const showCompleted = host.getConfig<boolean>('showCompleted') ?? false;
     const projectPrefix = host.getConfig<string>('projectPrefix') || 'SPD';
+    const developBranch = host.getConfig<string>('developBranch') || 'develop';
 
     this.configCache = {
       projectPrefix,
+      developBranch,
       ids: {
         task: { prefix: taskPrefix, startNumber: taskStart, padding: taskPad },
         epic: { prefix: epicPrefix, startNumber: epicStart, padding: epicPad },
@@ -676,8 +678,31 @@ getTask(taskId: string): Task | undefined {
     this.fileSystem.writeFile(filePath, md);
   }
 
-  refresh(): void {
+refresh(): void {
     this.configCache = null;
+  }
+
+  getItemMdPath(type: 'task' | 'epic' | 'sprint' | 'backlog', id: string): string {
+    switch (type) {
+      case 'task': {
+        const task = this.getTask(id);
+        return task ? path.join(this.getTasksDir(), this.getTaskFilename(task)) : '';
+      }
+      case 'epic': {
+        const epic = this.getEpic(id);
+        return epic ? path.join(this.getEpicsDir(), this.getEpicFilename(epic)) : '';
+      }
+      case 'backlog': {
+        const backlog = this.getBacklog(id);
+        return backlog ? path.join(this.getBacklogsDir(), this.getBacklogFilename(backlog)) : '';
+      }
+      case 'sprint': {
+        const sprint = this.getSprint(id);
+        return sprint ? path.join(this.getSprintsDir(), this.getSprintFilename(sprint)) : '';
+      }
+      default:
+        return '';
+    }
   }
 }
 
