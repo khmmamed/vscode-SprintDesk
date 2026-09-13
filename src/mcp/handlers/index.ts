@@ -1,6 +1,7 @@
 import { TASK_HANDLERS } from './tasks';
 import { AGENT_HANDLERS } from './agents';
 import { RUN_HANDLERS } from './runs';
+import { QUEUE_HANDLERS } from './queue';
 import { EVENT_HANDLERS } from './events';
 import { HISTORY_HANDLERS } from './history';
 import { AUDIT_HANDLERS } from './audit';
@@ -12,6 +13,7 @@ export const HANDLERS: Record<string, Handler> = {
   ...TASK_HANDLERS,
   ...AGENT_HANDLERS,
   ...RUN_HANDLERS,
+  ...QUEUE_HANDLERS,
   ...EVENT_HANDLERS,
   ...HISTORY_HANDLERS,
   ...AUDIT_HANDLERS,

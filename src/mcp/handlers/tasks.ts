@@ -1,6 +1,6 @@
 import * as taskService from '../../services/taskService';
 import { getStores } from '../../data/stores';
-import { requireEmployeePermission } from '../../services/workforce/capabilityService';
+import { requireEmployeePermission, rankEmployees } from '../../services/workforce/capabilityService';
 import { Handler, HandlerResult, res, getWs, getDs, findTask, resolveAgent, recordAudit } from './helpers';
 
 async function handle_sprintdesk_tasksAssign(args: any): Promise<HandlerResult> {
@@ -54,6 +54,62 @@ async function handle_sprintdesk_tasksUnassign(args: any): Promise<HandlerResult
   });
 
   return res(JSON.stringify(updatedTask, null, 2));
+}
+
+async function handle_sprintdesk_tasksAutoAssign(args: any): Promise<HandlerResult> {
+  const ds = getDs();
+  if (!ds) return res('No workspace found', true);
+
+  const task = findTask(ds, args.taskId);
+  if (!task) return res(`Task not found: ${args.taskId}`, true);
+
+  if (task.status === 'done' || task.status === 'cancelled') {
+    return res(`Task ${task.code} is closed (status: ${task.status})`, true);
+  }
+
+  const ranked = rankEmployees({ type: task.type, requiredSkills: task.requiredSkills }, {
+    includePartial: !!args.includePartial
+  });
+  if (ranked.length === 0) {
+    return res(`No eligible candidates for task ${task.code}. Use includePartial=true to widen the search.`, true);
+  }
+
+  const top = ranked[0];
+
+  ds.updateTask(task.id, { agent: top.employee.id });
+  const updatedTask = ds.getTask(task.id);
+  if (updatedTask) ds.saveTaskMd(updatedTask);
+
+  recordAudit({
+    actor: 'mcp',
+    action: 'auto-assign',
+    targetType: 'task',
+    targetId: task.id,
+    details: {
+      agentId: top.employee.id,
+      agentName: top.employee.name,
+      rank: top.rankKey,
+      coverage: top.evaluation.coverage,
+      taskCode: task.code
+    }
+  });
+
+  return res(
+    JSON.stringify(
+      {
+        task: updatedTask,
+        assignment: {
+          agentId: top.employee.id,
+          name: top.employee.name,
+          coverage: top.evaluation.coverage,
+          matched: top.evaluation.matched,
+          missing: top.evaluation.missing
+        }
+      },
+      null,
+      2
+    )
+  );
 }
 
 async function handle_sprintdesk_createTask(args: any): Promise<HandlerResult> {
@@ -215,4 +271,5 @@ export const TASK_HANDLERS: Record<string, Handler> = {
   sprintdesk_tasksComplete: handle_sprintdesk_tasksComplete,
   sprintdesk_tasksAssign: handle_sprintdesk_tasksAssign,
   sprintdesk_tasksUnassign: handle_sprintdesk_tasksUnassign,
+  sprintdesk_tasksAutoAssign: handle_sprintdesk_tasksAutoAssign,
 };

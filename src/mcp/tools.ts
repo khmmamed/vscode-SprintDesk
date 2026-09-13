@@ -404,6 +404,18 @@ export const TASK_WORK_TOOLS = [
       required: ['taskId'],
     },
   },
+  {
+    name: 'sprintdesk_tasksAutoAssign',
+    description: 'Deterministically rank eligible employees for a task and assign the top candidate (writes only task.agent; adds audit entry). Explicit opt-in only — never called automatically by queueProcess.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task ID or code' },
+        includePartial: { type: 'boolean', description: 'Include partial-coverage candidates (default false)' },
+      },
+      required: ['taskId'],
+    },
+  },
 ];
 
 export const RUN_TOOLS = [
@@ -440,6 +452,56 @@ export const RUN_TOOLS = [
         runId: { type: 'string', description: 'Run ID' },
       },
       required: ['runId'],
+    },
+  },
+  {
+    name: 'sprintdesk_runsCancel',
+    description: 'Cancel a queued or running run (delegates transition to the queue service)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        runId: { type: 'string', description: 'Run ID' },
+        actorId: { type: 'string', description: 'Employee id/name performing the cancellation (requires run:cancel)' },
+      },
+      required: ['runId'],
+    },
+  },
+  {
+    name: 'sprintdesk_runsUpdate',
+    description: 'Report worker completion for a running run (completed|failed; delegates final transition to the queue service)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        runId: { type: 'string', description: 'Run ID' },
+        status: { type: 'string', enum: ['completed', 'failed'] },
+        result: { type: 'string', description: 'Completion result summary' },
+        error: { type: 'string', description: 'Error detail when failed' },
+        actorId: { type: 'string', description: 'Caller/worker employee id or name (defaults to run.agentId)' },
+      },
+      required: ['runId', 'status'],
+    },
+  },
+];
+
+export const QUEUE_TOOLS = [
+  {
+    name: 'sprintdesk_queueGet',
+    description: 'Read-only snapshot of the workforce queue: settings, capacity, queued/running runs, next claims and skip reasons for the next pass',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sprintdesk_queueProcess',
+    description: 'Run one synchronous queue pass: claim + start eligible queued runs, then execute each via the worker boundary (headless/terminal/noop). No implicit auto-assignment.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        limit: { type: 'number', description: 'Optional cap on claims this pass (defaults to maxConcurrentRuns)' },
+        worker: { type: 'string', enum: ['headless', 'terminal', 'noop'], description: 'Override worker mode for execution (defaults to queue settings)' },
+        actorId: { type: 'string', description: 'Employee id/name triggering the pass (requires run:create)' },
+      },
     },
   },
 ];
@@ -559,6 +621,7 @@ export const ALL_TOOLS = [
   ...AGENT_TOOLS,
   ...TASK_WORK_TOOLS,
   ...RUN_TOOLS,
+  ...QUEUE_TOOLS,
   ...EVENT_TOOLS,
   ...AUDIT_TOOLS,
   ...CONTEXT_TOOLS,

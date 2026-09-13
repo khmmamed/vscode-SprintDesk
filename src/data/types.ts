@@ -121,11 +121,11 @@ export interface Policy {
 
 export const DEFAULT_POLICY: Policy = {
   roles: {
-    lead: ['task:assign', 'task:claim', 'run:create', 'run:cancel'],
+    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel'],
     developer: ['task:claim', 'run:create'],
     reviewer: ['task:assign', 'task:claim'],
     observer: [],
-    agent: ['run:create', 'task:claim'],
+    agent: ['run:create', 'run:update', 'task:claim'],
     human: ['task:assign', 'task:claim']
   },
   overrides: []

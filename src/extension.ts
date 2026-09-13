@@ -575,14 +575,15 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
       },
       tools: {
         task: ['sprintdesk_createTask', 'sprintdesk_getTask', 'sprintdesk_updateTask', 'sprintdesk_deleteTask', 'sprintdesk_listTasks', 'sprintdesk_searchTasks'],
-        workflow: ['sprintdesk_tasksClaim', 'sprintdesk_tasksComplete', 'sprintdesk_tasksAssign', 'sprintdesk_tasksUnassign'],
+        workflow: ['sprintdesk_tasksClaim', 'sprintdesk_tasksComplete', 'sprintdesk_tasksAssign', 'sprintdesk_tasksUnassign', 'sprintdesk_tasksAutoAssign'],
         epic: ['sprintdesk_createEpic', 'sprintdesk_getEpic', 'sprintdesk_updateEpic', 'sprintdesk_deleteEpic', 'sprintdesk_listEpics', 'sprintdesk_getTasksByEpic', 'sprintdesk_addTaskToEpic'],
         sprint: ['sprintdesk_createSprint', 'sprintdesk_getSprint', 'sprintdesk_updateSprint', 'sprintdesk_deleteSprint', 'sprintdesk_listSprints', 'sprintdesk_getTasksBySprint', 'sprintdesk_addTaskToSprint'],
         backlog: ['sprintdesk_createBacklog', 'sprintdesk_getBacklog', 'sprintdesk_listBacklogs', 'sprintdesk_addTaskToBacklog'],
         move: ['sprintdesk_moveTaskToEpic', 'sprintdesk_moveTaskToSprint', 'sprintdesk_moveTaskToBacklog'],
         team: ['sprintdesk_listTeam', 'sprintdesk_syncTeamFromGit', 'sprintdesk_addTeamMember', 'sprintdesk_removeTeamMember', 'sprintdesk_runAgent'],
         workforce: ['sprintdesk_agentsList', 'sprintdesk_agentsGet', 'sprintdesk_skillsList', 'sprintdesk_skillsUpsert', 'sprintdesk_policyGet', 'sprintdesk_recommendEmployees'],
-        run: ['sprintdesk_runsCreate', 'sprintdesk_runsList', 'sprintdesk_runsGet'],
+        run: ['sprintdesk_runsCreate', 'sprintdesk_runsList', 'sprintdesk_runsGet', 'sprintdesk_runsCancel', 'sprintdesk_runsUpdate'],
+        queue: ['sprintdesk_queueGet', 'sprintdesk_queueProcess'],
         event: ['sprintdesk_eventsPublish', 'sprintdesk_eventsList'],
         audit: ['sprintdesk_auditList'],
         context: ['sprintdesk_projectContext'],
@@ -624,12 +625,17 @@ Local MCP server for integrating SprintDesk with AI agents like Copilot, Claude,
 
 ### Workflow Tools
 - sprintdesk_tasksClaim, sprintdesk_tasksComplete, sprintdesk_tasksAssign, sprintdesk_tasksUnassign
+- sprintdesk_tasksAutoAssign
 
 ### Workforce Tools
 - sprintdesk_agentsList, sprintdesk_agentsGet, sprintdesk_runAgent
 
 ### Run Tools
 - sprintdesk_runsCreate, sprintdesk_runsList, sprintdesk_runsGet
+- sprintdesk_runsCancel, sprintdesk_runsUpdate
+
+### Queue Tools
+- sprintdesk_queueGet, sprintdesk_queueProcess
 
 ### Event & Audit Tools
 - sprintdesk_eventsPublish, sprintdesk_eventsList, sprintdesk_auditList
