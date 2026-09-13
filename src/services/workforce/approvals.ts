@@ -1,5 +1,5 @@
 import { getStores } from '../../data/stores';
-import { Approval, ApprovalGateMode, ApprovalStatus, ApprovalType } from '../../data/types';
+import { Approval, ApprovalGateMode, ApprovalGates, ApprovalStatus, ApprovalType } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
 import * as queueService from './queueService';
 import * as workforceService from './workforceService';
@@ -80,7 +80,7 @@ export function reject(approvalId: string, actorId?: string): Approval | undefin
   return resolveApproval(approvalId, 'rejected', actorId);
 }
 
-export function getGates(): { auto: number; manual: number; gates: Record<string, ApprovalGateMode> } {
+export function getGates(): { auto: number; manual: number; gates: ApprovalGates } {
   const gates = getApprovalGates();
   return {
     auto: Object.values(gates).filter(m => m === 'auto').length,
@@ -89,7 +89,7 @@ export function getGates(): { auto: number; manual: number; gates: Record<string
   };
 }
 
-export function setGate(type: ApprovalType, mode: ApprovalGateMode, actorId?: string): { gates: Record<string, ApprovalGateMode> } {
+export function setGate(type: ApprovalType, mode: ApprovalGateMode, actorId?: string): { gates: ApprovalGates } {
   requireApprovalPermission('approval:configure', actorId);
   const gates = setApprovalGate(type, mode);
   return { gates };

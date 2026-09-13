@@ -55,8 +55,8 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
   const employee = getStores().employees.getById(run.agentId || '');
   if (!employee) {return undefined;}
   if (!employee.agentConfig) {
-    finishRun(runId, { status: 'failed', error: 'Agent not configured' });
-    return { status: 'failed', error: 'Agent not configured' };
+    finishRun(runId, { status: 'failed', error: 'Agent not configured', classification: 'invalid-config' });
+    return { status: 'failed', error: 'Agent not configured', classification: 'invalid-config' };
   }
 
   const runtime = getWorkerRuntime(mode);
@@ -69,7 +69,7 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
     timeoutMs: getQueueSettings().runTimeoutMs
   });
 
-  if (result.status === 'failed' && requeueRun(runId)) {
+  if (result.status === 'failed' && requeueRun(runId, { classification: result.classification })) {
     return result;
   }
 

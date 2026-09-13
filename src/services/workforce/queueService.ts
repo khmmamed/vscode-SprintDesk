@@ -14,7 +14,8 @@ export type QueueSkipReason =
   | 'employee-offline'
   | 'no-permission'
   | 'concurrency-limit'
-  | 'not-assigned';
+  | 'not-assigned'
+  | 'retry-delay';
 
 export interface QueueSkip {
   runId: string;
@@ -52,6 +53,20 @@ export type RunFailureClassification =
   | 'spawn-error'
   | 'invalid-config'
   | 'none';
+
+const NON_RETRYABLE_CLASSIFICATIONS: ReadonlySet<RunFailureClassification> = new Set([
+  'spawn-error',
+  'invalid-config'
+]);
+
+export function isRetryableClassification(classification?: RunFailureClassification): boolean {
+  if (classification === undefined) {return true;}
+  return !NON_RETRYABLE_CLASSIFICATIONS.has(classification);
+}
+
+export function computeRetryDelayMs(attempts: number, baseBackoffMs: number): number {
+  return baseBackoffMs * attempts;
+}
 
 function dataService() {
   return getDataService(fileService.getWorkspaceRoot());
@@ -110,6 +125,7 @@ export function startRun(runId: string, opts?: { bypassGate?: boolean }): Run | 
   const now = new Date().toISOString();
   getStores().runs.update(runId, {
     status: 'running',
+    availableAt: undefined,
     startedAt: now,
     updatedAt: now
   });
@@ -199,16 +215,21 @@ export function finishRun(runId: string, outcome: RunOutcome): Run | undefined {
   return getStores().runs.getById(runId);
 }
 
-export function requeueRun(runId: string): boolean {
+export function requeueRun(runId: string, opts?: { classification?: RunFailureClassification }): boolean {
   const run = getStores().runs.getById(runId);
   if (!run || run.status !== 'running') {return false;}
+
+  const classification = opts?.classification;
+  if (!isRetryableClassification(classification)) {return false;}
   const settings = getQueueSettings();
   if (run.attempts > settings.maxRunRetries) {return false;}
 
   const now = new Date().toISOString();
+  const delayMs = computeRetryDelayMs(run.attempts, settings.retryBackoffMs);
   getStores().runs.update(runId, {
     status: 'queued',
     attempts: run.attempts + 1,
+    availableAt: delayMs > 0 ? new Date(Date.now() + delayMs).toISOString() : undefined,
     startedAt: undefined,
     finishedAt: undefined,
     result: undefined,
@@ -312,6 +333,11 @@ export function processQueue(options: QueueProcessOptions = {}): QueueProcessRes
         ...(detail ? { detail } : {})
       });
     };
+
+    if (run.availableAt && run.availableAt > new Date().toISOString()) {
+      skip('retry-delay', `available at ${run.availableAt}`);
+      continue;
+    }
 
     const task = ds.getTask(run.taskId);
     if (!task) {

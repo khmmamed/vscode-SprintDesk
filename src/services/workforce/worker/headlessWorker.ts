@@ -15,7 +15,7 @@ export function createHeadlessWorker(): WorkerRuntime {
       );
 
       if (!command) {
-        return { status: 'failed', error: 'Invalid agent configuration' };
+        return { status: 'failed', error: 'Invalid agent configuration', classification: 'invalid-config' };
       }
 
       return new Promise<WorkerResult>((resolve) => {

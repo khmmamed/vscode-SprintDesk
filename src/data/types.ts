@@ -45,6 +45,7 @@ export interface Run {
   agentId?: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   attempts: number;
+  availableAt?: string;
   startedAt?: string;
   finishedAt?: string;
   result?: string;
@@ -205,6 +206,7 @@ export interface QueueSettings {
   pollIntervalMs: number;
   runTimeoutMs: number;
   maxRunRetries: number;
+  retryBackoffMs: number;
   approvalGates: ApprovalGates;
 }
 
@@ -217,6 +219,7 @@ export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
   pollIntervalMs: 30000,
   runTimeoutMs: 600000,
   maxRunRetries: 1,
+  retryBackoffMs: 30000,
   approvalGates: { ...DEFAULT_APPROVAL_GATES }
 };
 

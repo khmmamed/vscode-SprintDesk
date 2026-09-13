@@ -28,7 +28,7 @@ export function createTerminalWorker(): WorkerRuntime {
       );
 
       if (!command) {
-        return { status: 'failed', error: 'Invalid agent configuration' };
+        return { status: 'failed', error: 'Invalid agent configuration', classification: 'invalid-config' };
       }
 
       const terminal = vscode.window.createTerminal({
