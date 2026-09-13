@@ -22,6 +22,18 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   payload/error were read from the wrong nesting level).
 - Architecture: `docs/v0.11-upcomming.md`. Version stays `0.9.0` during development.
 
+### v0.11 Slice 3 — Agent model/configuration UI
+
+- **Configure agents from the Control Center:** Employees tab gains a `Configure` action and inline form to edit
+  `modelProfile` (provider/model/baseUrl), `agentConfig` (tool/command), and `capabilities` — no YAML editing,
+  and the creating-agent flow is now self-contained. Permissions are shown read-only.
+- **Gate-aware apply:** `workforceService.applyConfigChange` routes changes through the sanctioned `config-change`
+  approval path — applies immediately when the gate is `auto` (default), otherwise creates a pending approval
+  (`apply-config`) that resolves via the existing approval resolver.
+- **Control Center round-trip:** `WORKFORCE_UPDATE_AGENT` applies/requests and pushes `AGENT_CONFIGURED` (outcome +
+  refreshed employee) back to the webview; tree + snapshot refreshed.
+- Architecture: `docs/v0.11-upcomming.md`. Version stays `0.9.0` during development.
+
 ## [Unreleased] - v0.10 Workforce Control Center
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution

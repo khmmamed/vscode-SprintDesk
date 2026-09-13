@@ -40,8 +40,9 @@ interface EmployeeDto {
   role: "agent" | "human";
   status?: "idle" | "busy" | "offline";
   capabilities: string[];
-  modelProvider?: string;
-  agentTool?: string;
+  modelProfile?: { provider?: string; model?: string; baseUrl?: string };
+  agentConfig?: { tool?: string; command?: string; model?: string };
+  permissions: string[];
 }
 
 interface OverviewDto {
@@ -262,6 +263,17 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [error, setError] = React.useState<string>("");
   const [expandedRun, setExpandedRun] = React.useState<string | null>(null);
 
+  const [editingAgent, setEditingAgent] = React.useState<EmployeeDto | null>(null);
+  const [configForm, setConfigForm] = React.useState<{
+    provider: string;
+    model: string;
+    baseUrl: string;
+    tool: string;
+    command: string;
+    capabilities: string;
+  }>({ provider: "", model: "", baseUrl: "", tool: "", command: "", capabilities: "" });
+  const [configResult, setConfigResult] = React.useState<string>("");
+
   React.useEffect(() => {
     const handler = (event: MessageEvent) => {
       const { command, payload, error: messageError } = event.data || {};
@@ -275,6 +287,19 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         setRuns(payload || []);
       } else if (command === "SET_WORKFORCE_EMPLOYEES") {
         setEmployees(payload || []);
+      } else if (command === "AGENT_CONFIGURED") {
+        const outcomePayload = payload?.outcome;
+        const emp: EmployeeDto | undefined = payload?.employee;
+        if (emp) {
+          setEmployees(prev => (prev || []).map(e => (e.id === emp.id ? emp : e)));
+        }
+        setConfigResult(
+          outcomePayload?.applied
+            ? "Saved."
+            : outcomePayload?.approvalRequired
+              ? "Approval required — the change stays pending until approved."
+              : ""
+        );
       } else if (command === "SET_WORKFORCE_FINDINGS") {
         setFindings(payload || []);
       } else if (command === "FINDING_UPDATED") {
@@ -299,6 +324,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
       } else if (command === "WORKFORCE_RESPONSE") {
         if (messageError) {
           setError(messageError);
+          setConfigResult(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -344,6 +370,50 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     setTab("create-task");
   };
 
+  const openConfigure = (e: EmployeeDto): void => {
+    setEditingAgent(e);
+    setConfigForm({
+      provider: e.modelProfile?.provider || "",
+      model: e.modelProfile?.model || "",
+      baseUrl: e.modelProfile?.baseUrl || "",
+      tool: e.agentConfig?.tool || "",
+      command: e.agentConfig?.command || "",
+      capabilities: (e.capabilities || []).join(", ")
+    });
+    setConfigResult("");
+  };
+
+  const closeConfigure = (): void => {
+    setEditingAgent(null);
+    setConfigResult("");
+  };
+
+  const setConfigField = (field: keyof typeof configForm, value: string): void => {
+    setConfigForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const saveConfigure = (): void => {
+    if (!editingAgent) {return;}
+    setConfigResult("");
+    const change: {
+      modelProfile?: { provider: string; model: string; baseUrl?: string };
+      agentConfig?: { tool: string; command?: string };
+      capabilities: string[];
+    } = { capabilities: configForm.capabilities.split(",").map(c => c.trim()).filter(Boolean) };
+
+    const provider = configForm.provider;
+    const model = configForm.model.trim();
+    if (provider && model) {
+      change.modelProfile = { provider, model, ...(configForm.baseUrl.trim() ? { baseUrl: configForm.baseUrl.trim() } : {}) };
+    }
+    const tool = configForm.tool.trim();
+    if (tool) {
+      change.agentConfig = { tool, ...(configForm.command.trim() ? { command: configForm.command.trim() } : {}) };
+    }
+
+    postRequest("WORKFORCE_UPDATE_AGENT", { employeeId: editingAgent.id, change });
+  };
+
   const agents = employees.filter(e => e.role === "agent");
   const runningCount = overview.runs.running;
 
@@ -381,15 +451,79 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
       {tab === "employees" && (
         <div>
+          {editingAgent && (
+            <div style={{ ...styles.card, marginBottom: 12 }}>
+              <div style={styles.row}>
+                <span style={styles.name}>Configure {editingAgent.name}</span>
+                <span style={{ flex: 1 }} />
+                <button style={styles.buttonGhost} onClick={closeConfigure}>Close</button>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                <div style={{ ...styles.field, flex: 1 }}>
+                  <label style={styles.label}>Model provider</label>
+                  <select style={styles.select} value={configForm.provider} onChange={ev => setConfigField("provider", ev.target.value)}>
+                    <option value="">— none —</option>
+                    <option value="ollama">Ollama</option>
+                    <option value="openai">OpenAI</option>
+                  </select>
+                </div>
+                <div style={{ ...styles.field, flex: 1 }}>
+                  <label style={styles.label}>Model</label>
+                  <input style={styles.input} value={configForm.model} placeholder="e.g. gemma4:31b-cloud" onChange={ev => setConfigField("model", ev.target.value)} />
+                </div>
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Base URL (optional)</label>
+                <input style={styles.input} value={configForm.baseUrl} placeholder="http://localhost:11434" onChange={ev => setConfigField("baseUrl", ev.target.value)} />
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ ...styles.field, flex: 1 }}>
+                  <label style={styles.label}>Agent tool (agentConfig.tool)</label>
+                  <select style={styles.select} value={configForm.tool} onChange={ev => setConfigField("tool", ev.target.value)}>
+                    <option value="">— none —</option>
+                    {(["opencode", "ollama", "claude-code", "custom"] as const).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ ...styles.field, flex: 1 }}>
+                  <label style={styles.label}>Command (optional)</label>
+                  <input style={styles.input} value={configForm.command} onChange={ev => setConfigField("command", ev.target.value)} />
+                </div>
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Capabilities (comma-separated)</label>
+                <input style={styles.input} value={configForm.capabilities} onChange={ev => setConfigField("capabilities", ev.target.value)} />
+              </div>
+
+              {editingAgent.permissions.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <span style={styles.muted}>Permissions: </span>
+                  {editingAgent.permissions.map(p => <span key={p} style={{ ...styles.chip, marginRight: 4 }}>{p}</span>)}
+                </div>
+              )}
+
+              {configResult && (
+                <div style={configResult.toLowerCase().includes("error") || configResult.toLowerCase().includes("lacks") || configResult.toLowerCase().includes("not found") || configResult.toLowerCase().includes("required") ? styles.error : styles.ok}>
+                  {configResult}
+                </div>
+              )}
+
+              <button style={styles.button} onClick={saveConfigure}>Save</button>
+            </div>
+          )}
           {agents.length === 0 && <div style={styles.empty}>No agents yet. Add an agent employee to get started.</div>}
           {agents.map(e => (
             <div key={e.id} style={styles.card}>
               <div style={styles.row}>
                 <span style={styles.name}>{e.name}</span>
                 <span style={styles.statusChip}>{e.status || "idle"}</span>
-                {e.modelProvider && <span style={styles.chip}>{e.modelProvider}</span>}
-                {e.agentTool && <span style={styles.chip}>tool: {e.agentTool}</span>}
+                {e.modelProfile?.model && <span style={styles.chip}>{e.modelProfile.provider} · {e.modelProfile.model}</span>}
+                {e.agentConfig?.tool && <span style={styles.chip}>tool: {e.agentConfig.tool}</span>}
                 <span style={{ flex: 1 }} />
+                <button style={styles.buttonGhost} onClick={() => openConfigure(e)}>Configure</button>
                 <button style={styles.button} onClick={() => startCreateForAgent(e.id)}>Create Task</button>
               </div>
               {e.capabilities.length > 0 && (

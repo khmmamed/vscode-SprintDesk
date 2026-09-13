@@ -2,9 +2,10 @@ import * as crypto from 'crypto';
 import * as fileService from '../fileService';
 import { getDataService, DataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
-import { AgentConfig, Employee, EmployeeModelProfile, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
+import { AgentConfig, Approval, Employee, EmployeeModelProfile, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
 import * as teamService from '../team/teamService';
 import { emitEvent } from './events';
+import { gateMode, requestApproval } from './gates';
 
 export interface Workforce {
   teams: EmployeeTeam[];
@@ -341,4 +342,33 @@ export function performConfigChange(employeeId: string, changes: EmployeeConfigC
     }
   });
   return updated;
+}
+
+export interface ApplyConfigResult {
+  applied: boolean;
+  approvalRequired?: boolean;
+  employee?: Employee;
+  approval?: Approval;
+}
+
+export function applyConfigChange(
+  employeeId: string,
+  changes: EmployeeConfigChange,
+  requesterId?: string
+): ApplyConfigResult {
+  const employee = getStores().employees.loadAll().find(e => e.id === employeeId || e.name === employeeId);
+  if (!employee) {throw new Error(`Employee not found: ${employeeId}`);}
+
+  if (gateMode('config-change') === 'manual') {
+    const approval = requestApproval({
+      type: 'config-change',
+      reason: 'Agent configuration change requires manual approval',
+      requesterId,
+      target: `employee ${employee.name}`,
+      pending: { op: 'apply-config', employeeId: employee.id, changes }
+    });
+    return { applied: false, approvalRequired: true, approval };
+  }
+
+  return { applied: true, employee: performConfigChange(employee.id, changes, requesterId) };
 }

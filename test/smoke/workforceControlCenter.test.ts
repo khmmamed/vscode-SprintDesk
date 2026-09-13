@@ -3,6 +3,8 @@ import { makeEmployee, makeTask, makeRun, makeWorkspace, makeAgentConfig, TestWo
 import { getStores } from '../../src/data/stores';
 import * as queueService from '../../src/services/workforce/queueService';
 import * as findingsService from '../../src/services/workforce/findingsService';
+import * as workforceService from '../../src/services/workforce/workforceService';
+import * as approvals from '../../src/services/workforce/approvals';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
 import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/services/workforce/worker/worker';
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
@@ -450,6 +452,81 @@ describe('findings (first-class workforce objects, v0.11)', () => {
     const rejected = findingsService.updateStatus(finding.id, 'rejected', reviewer.id);
     assert.strictEqual(rejected?.status, 'rejected');
     assert.strictEqual(rejected?.decisionBy, reviewer.id);
+  });
+});
+
+describe('applyConfigChange (agent model/configuration, v0.11)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  it('applies model, tool and capabilities when the config-change gate is auto', () => {
+    const employee = seedAgent();
+    const result = workforceService.applyConfigChange(employee.id, {
+      modelProfile: { name: 'Agent Alpha', provider: 'ollama', model: 'gemma4:31b-cloud', baseUrl: 'http://localhost:11434' },
+      agentConfig: { tool: 'ollama' },
+      capabilities: ['web-search', 'news']
+    });
+
+    assert.strictEqual(result.applied, true);
+    assert.strictEqual(result.approvalRequired, undefined);
+
+    const stored = getStores().employees.getById(employee.id);
+    assert.strictEqual(stored?.modelProfile?.provider, 'ollama');
+    assert.strictEqual(stored?.modelProfile?.model, 'gemma4:31b-cloud');
+    assert.strictEqual(stored?.modelProfile?.baseUrl, 'http://localhost:11434');
+    assert.strictEqual(stored?.agentConfig?.tool, 'ollama');
+    assert.deepStrictEqual(stored?.capabilities, ['web-search', 'news']);
+    assert.strictEqual(getStores().approvals.loadAll().length, 0);
+  });
+
+  it('requests an approval instead of applying when the config-change gate is manual', () => {
+    setApprovalGate('config-change', 'manual');
+    const employee = seedAgent();
+    const result = workforceService.applyConfigChange(employee.id, {
+      modelProfile: { name: employee.name, provider: 'ollama', model: 'qwen2.5' }
+    });
+
+    assert.strictEqual(result.applied, false);
+    assert.strictEqual(result.approvalRequired, true);
+    assert.strictEqual(getStores().employees.getById(employee.id)?.modelProfile, undefined);
+
+    const pending = getStores().approvals.loadAll().filter(a => a.status === 'pending' && a.type === 'config-change');
+    assert.strictEqual(pending.length, 1);
+    assert.deepStrictEqual(pending[0].pending, {
+      op: 'apply-config',
+      employeeId: employee.id,
+      changes: { modelProfile: { name: employee.name, provider: 'ollama', model: 'qwen2.5' } }
+    });
+  });
+
+  it('applies a pending config change when the approval is resolved approved', () => {
+    setApprovalGate('config-change', 'manual');
+    const employee = seedAgent();
+    workforceService.applyConfigChange(employee.id, { agentConfig: { tool: 'opencode' } });
+
+    const pending = getStores().approvals.loadAll().filter(a => a.type === 'config-change' && a.status === 'pending');
+    assert.strictEqual(pending.length, 1);
+
+    const approved = approvals.resolveApproval(pending[0].id, 'approved');
+    assert.strictEqual(approved?.status, 'approved');
+    assert.strictEqual(getStores().employees.getById(employee.id)?.agentConfig?.tool, 'opencode');
+  });
+
+  it('throws for a missing employee', () => {
+    assert.throws(() => workforceService.applyConfigChange('emp_nope', { capabilities: ['x'] }), /not found/);
   });
 });
 

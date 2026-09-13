@@ -7,8 +7,9 @@ import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
 import { getActivitySummary } from '../../services/workforce/observability';
 import * as findingsService from '../../services/workforce/findingsService';
+import * as workforceService from '../../services/workforce/workforceService';
 import { getDataService } from '../../data/DataService';
-import { Employee, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
+import { Employee, EmployeeModelProfile, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
@@ -45,8 +46,9 @@ export interface EmployeeDto {
   role: Employee['role'];
   status?: Employee['status'];
   capabilities: string[];
-  modelProvider?: string;
-  agentTool?: string;
+  modelProfile?: { provider?: string; model?: string; baseUrl?: string };
+  agentConfig?: { tool?: string; command?: string; model?: string };
+  permissions: string[];
 }
 
 export interface TaskDto {
@@ -120,8 +122,13 @@ function employeeDtos(): EmployeeDto[] {
     role: e.role,
     status: e.status,
     capabilities: e.capabilities || [],
-    modelProvider: e.modelProfile?.provider,
-    agentTool: e.agentConfig?.tool
+    modelProfile: e.modelProfile
+      ? { provider: e.modelProfile.provider, model: e.modelProfile.model, baseUrl: e.modelProfile.baseUrl }
+      : undefined,
+    agentConfig: e.agentConfig
+      ? { tool: e.agentConfig.tool, command: e.agentConfig.command, model: e.agentConfig.model }
+      : undefined,
+    permissions: getStores().policy.getEmployeePermissions(e)
   }));
 }
 
@@ -351,8 +358,46 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
           }
         }
-        workforceTreeDataProvider.refresh();
-        pushSnapshot(newPanel);
+        } else if (command === 'WORKFORCE_UPDATE_AGENT') {
+        const employeeId: string | undefined = message?.payload?.employeeId;
+        const change = message?.payload?.change || {};
+        const changes: workforceService.EmployeeConfigChange = {};
+
+        if (change?.modelProfile && typeof change.modelProfile.model === 'string' && change.modelProfile.model.trim()) {
+          const mp: EmployeeModelProfile = {
+            name: getStores().employees.getById(employeeId || '')?.name || employeeId || '',
+            provider: change.modelProfile.provider === 'openai' ? 'openai' : 'ollama',
+            model: String(change.modelProfile.model).trim()
+          };
+          const baseUrl = change.modelProfile.baseUrl ? String(change.modelProfile.baseUrl).trim() : '';
+          if (baseUrl) {mp.baseUrl = baseUrl;}
+          changes.modelProfile = mp;
+        }
+        if (change?.agentConfig && typeof change.agentConfig.tool === 'string' && change.agentConfig.tool.trim()) {
+          const ac: { tool: 'opencode' | 'ollama' | 'claude-code' | 'custom'; command?: string } = {
+            tool: change.agentConfig.tool as 'opencode' | 'ollama' | 'claude-code' | 'custom'
+          };
+          const command = change.agentConfig.command ? String(change.agentConfig.command).trim() : '';
+          if (command) {ac.command = command;}
+          changes.agentConfig = ac;
+        }
+        if (Array.isArray(change?.capabilities)) {
+          changes.capabilities = change.capabilities.map((c: string) => String(c).trim()).filter(Boolean);
+        }
+
+        if (employeeId && Object.keys(changes).length > 0) {
+          try {
+            const result = workforceService.applyConfigChange(employeeId, changes);
+            newPanel.webview.postMessage({
+              command: 'AGENT_CONFIGURED',
+              payload: { outcome: result, employee: employeeDtos().find(e => e.id === employeeId) }
+            });
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+          workforceTreeDataProvider.refresh();
+          pushSnapshot(newPanel);
+        }
       }
     },
     undefined,
