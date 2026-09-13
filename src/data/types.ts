@@ -131,6 +131,24 @@ export const DEFAULT_POLICY: Policy = {
   overrides: []
 };
 
+export interface QueueSettings {
+  id: string;
+  enabled: boolean;
+  maxConcurrentRuns: number;
+  autoAssignUnassigned: boolean;
+  workerMode: 'headless' | 'terminal' | 'noop';
+  pollIntervalMs: number;
+}
+
+export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
+  id: 'default',
+  enabled: false,
+  maxConcurrentRuns: 1,
+  autoAssignUnassigned: false,
+  workerMode: 'headless',
+  pollIntervalMs: 30000
+};
+
 export interface EmployeeTeam {
   id: string;
   name: string;
@@ -331,6 +349,10 @@ export interface EventsData {
 
 export interface AuditData {
   entries: AuditEntry[];
+}
+
+export interface QueueSettingsData {
+  queue: QueueSettings[];
 }
 
 export interface EmployeesData {

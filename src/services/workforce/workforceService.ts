@@ -67,7 +67,7 @@ export function addEmployee(input: {
   const stores = getStores();
   const now = new Date().toISOString();
   const employee: Employee = {
-    id: `emp_${Date.now()}`,
+    id: `emp_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     name: input.name.trim(),
     role: input.role,
     capabilities: input.capabilities || [],
