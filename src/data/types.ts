@@ -24,6 +24,9 @@ export interface Task {
   childTaskIds?: string[];
   runId?: string;
   attempts?: number;
+
+  // v0.5 workforce semantics (all optional, additive, non-breaking)
+  requiredSkills?: string[];
 }
 
 export type TaskWorkStatus =
@@ -78,7 +81,55 @@ export interface Employee {
   gitAuthor?: string;
   createdAt: string;
   updatedAt: string;
+
+  // v0.5 workforce semantics (all optional, additive, non-breaking)
+  skills?: EmployeeSkill[];
+  agentConfig?: AgentConfig;
+  teamRole?: EmployeeTeamRole;
 }
+
+export type EmployeeSkillLevel = 1 | 2 | 3;
+
+export interface EmployeeSkill {
+  name: string;
+  level?: EmployeeSkillLevel;
+}
+
+export type EmployeeTeamRole = 'lead' | 'developer' | 'reviewer' | 'observer' | 'agent' | 'human';
+
+export interface Skill {
+  id: string;
+  name: string;
+  category?: string;
+  description?: string;
+  aliases?: string[];
+}
+
+export type PermissionId = string;
+
+export interface EmployeePolicyOverride {
+  employeeId: string;
+  allow?: PermissionId[];
+  deny?: PermissionId[];
+}
+
+export interface Policy {
+  roles: Record<string, PermissionId[]>;
+  overrides?: EmployeePolicyOverride[];
+  updatedAt?: string;
+}
+
+export const DEFAULT_POLICY: Policy = {
+  roles: {
+    lead: ['task:assign', 'task:claim', 'run:create', 'run:cancel'],
+    developer: ['task:claim', 'run:create'],
+    reviewer: ['task:assign', 'task:claim'],
+    observer: [],
+    agent: ['run:create', 'task:claim'],
+    human: ['task:assign', 'task:claim']
+  },
+  overrides: []
+};
 
 export interface EmployeeTeam {
   id: string;
@@ -276,4 +327,8 @@ export interface EmployeesData {
 
 export interface EmployeeTeamsData {
   teams: EmployeeTeam[];
+}
+
+export interface SkillsData {
+  skills: Skill[];
 }

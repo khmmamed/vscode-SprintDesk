@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 import { getStores } from '../../data/stores';
-import { Employee, EmployeeTeam } from '../../data/types';
+import { AgentConfig, Employee, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
 import * as teamService from '../team/teamService';
 
 export interface Workforce {
@@ -60,6 +60,9 @@ export function addEmployee(input: {
   gitAuthor?: string;
   description?: string;
   teamId?: string;
+  skills?: EmployeeSkill[];
+  teamRole?: EmployeeTeamRole;
+  agentConfig?: AgentConfig;
 }): Employee {
   const stores = getStores();
   const now = new Date().toISOString();
@@ -71,6 +74,9 @@ export function addEmployee(input: {
     status: input.status || 'idle',
     gitAuthor: input.gitAuthor,
     description: input.description,
+    skills: input.skills || [],
+    teamRole: input.teamRole,
+    agentConfig: input.agentConfig,
     createdAt: now,
     updatedAt: now
   };
@@ -85,7 +91,7 @@ export function addEmployee(input: {
 
 export function updateEmployee(
   employeeId: string,
-  updates: Partial<Pick<Employee, 'name' | 'role' | 'capabilities' | 'status' | 'gitAuthor' | 'description'>>
+  updates: Partial<Pick<Employee, 'name' | 'role' | 'capabilities' | 'status' | 'gitAuthor' | 'description' | 'skills' | 'teamRole' | 'agentConfig'>>
 ): Employee | undefined {
   const stores = getStores();
   const existing = stores.employees.getById(employeeId);
@@ -210,6 +216,8 @@ export function syncWorkforceFromTeam(): number {
       role: member.role === 'agent' ? 'agent' : 'human',
       status: 'idle',
       gitAuthor: member.gitAuthor || member.name,
+      agentConfig: member.agentConfig,
+      teamRole: member.role === 'lead' ? 'lead' : member.role === 'agent' ? 'agent' : undefined,
       description: member.role === 'agent'
         ? `Agent (${member.agentConfig?.tool || 'tool not configured'})`
         : 'Team member',

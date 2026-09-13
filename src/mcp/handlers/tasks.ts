@@ -1,5 +1,6 @@
 import * as taskService from '../../services/taskService';
 import { getStores } from '../../data/stores';
+import { requireEmployeePermission } from '../../services/workforce/capabilityService';
 import { Handler, HandlerResult, res, getWs, getDs, findTask, resolveAgent, recordAudit } from './helpers';
 
 async function handle_sprintdesk_tasksAssign(args: any): Promise<HandlerResult> {
@@ -11,6 +12,9 @@ async function handle_sprintdesk_tasksAssign(args: any): Promise<HandlerResult> 
 
   const agent = resolveAgent(args.agentId);
   if (!agent) return res(`Agent not found: ${args.agentId}`, true);
+
+  const gate = requireEmployeePermission('task:claim', agent.id);
+  if (!gate.ok) return res(gate.error, true);
 
   ds.updateTask(task.id, { agent: agent.id });
   const updatedTask = ds.getTask(task.id);
@@ -153,6 +157,10 @@ async function handle_sprintdesk_tasksClaim(args: any): Promise<HandlerResult> {
 
   const task = findTask(ds, args.taskId);
   if (!task) return res(`Task not found: ${args.taskId}`, true);
+
+  const claimer = args.agentId || task.agent;
+  const gate = requireEmployeePermission('task:claim', claimer);
+  if (!gate.ok) return res(gate.error, true);
 
   const updates: any = { workStatus: 'claimed' };
   if (args.agentId) updates.agent = args.agentId;

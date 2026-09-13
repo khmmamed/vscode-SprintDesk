@@ -3,7 +3,7 @@
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
   "description": "A Visual Studio Code extension for managing sprints and tasks in an agile development workflow",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"
@@ -232,6 +232,11 @@
         "command": "sprintdesk.syncWorkforceFromTeam",
         "title": "SprintDesk: Sync Workforce from Team",
         "icon": "$(sync)"
+      },
+      {
+        "command": "sprintdesk.recommendAssignee",
+        "title": "SprintDesk: Recommend Assignee",
+        "icon": "$(sparkle)"
       }
     ],
     "viewsContainers": {
@@ -396,6 +401,11 @@
           "command": "sprintdesk.editTaskRaw",
           "when": "view == sprintdesk-tasks && viewItem == task",
           "group": "inline@1"
+        },
+        {
+          "command": "sprintdesk.recommendAssignee",
+          "when": "view == sprintdesk-tasks && viewItem == task",
+          "group": "inline@2"
         },
         {
           "command": "sprintdesk.createTaskFromRepo",

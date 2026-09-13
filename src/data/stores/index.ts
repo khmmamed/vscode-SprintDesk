@@ -5,6 +5,8 @@ import { EventStore } from './EventStore';
 import { AuditStore } from './AuditStore';
 import { EmployeeStore } from './EmployeeStore';
 import { EmployeeTeamStore } from './EmployeeTeamStore';
+import { SkillStore } from './SkillStore';
+import { PolicyStore } from './PolicyStore';
 import {
   ProjectMcpManifest,
   defaultProjectMcpManifest,
@@ -19,6 +21,8 @@ export interface Stores {
   audit: AuditStore;
   employees: EmployeeStore;
   teams: EmployeeTeamStore;
+  skills: SkillStore;
+  policy: PolicyStore;
 }
 
 export interface ProjectMcpFacade {
@@ -45,7 +49,9 @@ export function getStores(workspaceRoot?: string): Stores {
       events: new EventStore(root),
       audit: new AuditStore(root),
       employees: new EmployeeStore(root),
-      teams: new EmployeeTeamStore(root)
+      teams: new EmployeeTeamStore(root),
+      skills: new SkillStore(root),
+      policy: new PolicyStore(root)
     };
     activeStoresRoot = root;
   }

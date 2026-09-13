@@ -1,7 +1,7 @@
 {
   "name": "sprintdesk-mcp",
-  "version": "1.0.0",
-  "description": "MCP server for SprintDesk task management - exposes CRUD and query operations for AI agents",
+  "version": "1.1.0",
+  "description": "MCP server for SprintDesk task management - exposes CRUD, query, workflow, run, and workforce operations for AI agents",
   "author": "SprintDesk",
   "repository": "https://github.com/khmmamed/vscode-SprintDesk",
   "homepage": "https://github.com/khmmamed/vscode-SprintDesk",
@@ -30,6 +30,12 @@
       "sprintdesk_listTasks",
       "sprintdesk_searchTasks"
     ],
+    "workflow": [
+      "sprintdesk_tasksClaim",
+      "sprintdesk_tasksComplete",
+      "sprintdesk_tasksAssign",
+      "sprintdesk_tasksUnassign"
+    ],
     "epic": [
       "sprintdesk_createEpic",
       "sprintdesk_getEpic",
@@ -54,20 +60,44 @@
       "sprintdesk_listBacklogs",
       "sprintdesk_addTaskToBacklog"
     ],
-    "team": [
-      "sprintdesk_listTeam",
-      "sprintdesk_syncTeamFromGit",
-      "sprintdesk_addTeamMember",
-      "sprintdesk_removeTeamMember"
-    ],
-    "history": [
-      "sprintdesk_getHistory",
-      "sprintdesk_trackChange"
-    ],
     "move": [
       "sprintdesk_moveTaskToEpic",
       "sprintdesk_moveTaskToSprint",
       "sprintdesk_moveTaskToBacklog"
+    ],
+    "team": [
+      "sprintdesk_listTeam",
+      "sprintdesk_syncTeamFromGit",
+      "sprintdesk_addTeamMember",
+      "sprintdesk_removeTeamMember",
+      "sprintdesk_runAgent"
+    ],
+    "workforce": [
+      "sprintdesk_agentsList",
+      "sprintdesk_agentsGet",
+      "sprintdesk_skillsList",
+      "sprintdesk_skillsUpsert",
+      "sprintdesk_policyGet",
+      "sprintdesk_recommendEmployees"
+    ],
+    "run": [
+      "sprintdesk_runsCreate",
+      "sprintdesk_runsList",
+      "sprintdesk_runsGet"
+    ],
+    "event": [
+      "sprintdesk_eventsPublish",
+      "sprintdesk_eventsList"
+    ],
+    "audit": [
+      "sprintdesk_auditList"
+    ],
+    "context": [
+      "sprintdesk_projectContext"
+    ],
+    "history": [
+      "sprintdesk_getHistory",
+      "sprintdesk_trackChange"
     ]
   },
   "usage": {

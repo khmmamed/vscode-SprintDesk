@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { getDataService } from '../data/DataService';
 import { getStores } from '../data/stores';
 import * as workforceService from '../services/workforce/workforceService';
+import * as capability from '../services/workforce/capabilityService';
 
 function resolveWorkspace(argv: string[]): string {
   const explicit = argv[2];
@@ -43,6 +44,31 @@ export function buildStandup(ws: string): string {
     acc[k] = (acc[k] || 0) + 1;
     return acc;
   }, {});
+
+  stores.skills.seedDefaultSkills();
+  const skillCatalogCount = stores.skills.loadAll().length;
+  const openTasks = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
+  const coveragePerTask = openTasks.map(t => {
+    const ranked = capability.rankEmployees(
+      { type: t.type, requiredSkills: t.requiredSkills },
+      { includePartial: true, maxResults: 3 }
+    );
+    return { task: t, ranked };
+  });
+  const fullyMatched = coveragePerTask.filter(c => c.ranked.length > 0 && c.ranked[0].evaluation.coverage >= 1);
+  const partiallyMatched = coveragePerTask.filter(
+    c => c.ranked.length > 0 && c.ranked[0].evaluation.coverage < 1
+  );
+  const unmatched = coveragePerTask.filter(c => c.ranked.length === 0);
+  const skillGaps = new Set<string>();
+  for (const c of coveragePerTask) {
+    for (const r of c.ranked) {
+      for (const missing of r.evaluation.missing) skillGaps.add(missing);
+    }
+  }
+  const employeesWithCertifiedSkills = stores.employees
+    .loadAll()
+    .filter(e => (e.skills || []).length > 0).length;
 
   const lines: string[] = [];
   lines.push(`# SprintDesk Standup — ${path.basename(ws)}`);
@@ -86,6 +112,16 @@ export function buildStandup(ws: string): string {
   lines.push(`- Teams: ${availability.teams} · Unassigned: ${availability.unassigned}`);
   const statusLabels = Object.entries(byAvailability).map(([k, v]) => `${k}: ${v}`).join(' · ');
   lines.push(`- Availability: ${statusLabels}`);
+  lines.push('');
+  lines.push(`## Matching Readiness`);
+  lines.push(`- Skill catalog: ${skillCatalogCount} skills · ${employeesWithCertifiedSkills} employees with certified skills`);
+  lines.push(`- Open tasks: ${openTasks.length} · fully matchable: ${fullyMatched.length} · partial: ${partiallyMatched.length} · uncovered: ${unmatched.length}`);
+  if (skillGaps.size > 0) {
+    lines.push(`- Skill gaps: ${[...skillGaps].join(', ')}`);
+  }
+  for (const u of unmatched.slice(0, 5)) {
+    lines.push(`  - ⚠️ uncovered: \`${u.task.code}\` ${u.task.title} (${capability.skillsForTask(u.task).join(', ')})`);
+  }
   lines.push('');
   lines.push(`## Attention`);
   if (unassigned.length > 0) {

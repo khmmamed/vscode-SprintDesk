@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Employee, EmployeeTeam } from '../../data/types';
 import * as workforceService from '../../services/workforce/workforceService';
+import { getStores } from '../../data/stores';
 
 export class WorkforceItem extends vscode.TreeItem {
   constructor(
@@ -38,13 +39,18 @@ export class WorkforceItem extends vscode.TreeItem {
 
   private employeeTooltip(employee: Employee): string {
     const lines = [
-      `${employee.name} (${employee.role})`,
+      `${employee.name} (${employee.role}${employee.teamRole ? ', ' + employee.teamRole : ''})`,
       `Status: ${employee.status || 'idle'}`
     ];
     if (employee.gitAuthor) lines.push(`Git author: ${employee.gitAuthor}`);
-    if (employee.capabilities && employee.capabilities.length > 0) {
-      lines.push(`Skills: ${employee.capabilities.join(', ')}`);
-    }
+
+    const certified = employee.skills?.map(s => (s.level ? `${s.name} (L${s.level})` : s.name));
+    const all = [...(certified || []), ...(employee.capabilities || [])];
+    if (all.length > 0) lines.push(`Skills: ${all.join(', ')}`);
+
+    const permissions = getStores().policy.getEmployeePermissions(employee);
+    lines.push(`Permissions: ${permissions.length > 0 ? permissions.join(', ') : 'none'}`);
+
     if (employee.description) lines.push(employee.description);
     return lines.join('\n');
   }

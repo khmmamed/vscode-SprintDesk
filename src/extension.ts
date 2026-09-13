@@ -52,6 +52,7 @@ import { createEpicInteractive } from './commands/interactive/epicInteractive';
 import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './commands/interactive/backlogInteractive';
 import * as teamService from './services/team/teamService';
 import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
+import * as capabilityService from './services/workforce/capabilityService';
 // Tasks - import and create wrapper for API compatibility
 import { createTask as createTaskService } from "./services/taskService";
 // Host boundary
@@ -302,6 +303,47 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
         }
       }
     }),
+    vscode.commands.registerCommand('sprintdesk.recommendAssignee', async (item: any) => {
+      const task = item?.taskObj;
+      if (!task) {
+        vscode.window.showWarningMessage('Select a task first');
+        return;
+      }
+      const results = capabilityService.recommendEmployees(
+        { type: task.type, requiredSkills: task.requiredSkills },
+        { includePartial: true, maxResults: 8 }
+      );
+      if (results.length === 0) {
+        vscode.window.showInformationMessage('No capable employees found in workforce');
+        return;
+      }
+      const choice = await vscode.window.showQuickPick(
+        results.map(r => ({
+          label: r.employee.name,
+          description:
+            `${Math.round(r.evaluation.coverage * 100)}% matched · ${r.employee.role} · ${r.employee.status || 'idle'} · load ${r.load}`,
+          detail:
+            r.evaluation.missing.length > 0
+              ? r.rankKey + ' · missing: ' + r.evaluation.missing.join(', ')
+              : r.rankKey + ' · full match',
+          value: r.employee
+        })),
+        { placeHolder: 'Recommended assignee (skill coverage -> load -> idle -> name)' }
+      );
+      if (!choice) return;
+
+      const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const { getDataService } = require('./data/DataService');
+      const ds = ws ? getDataService(ws) : undefined;
+      if (ds) {
+        ds.updateTask(task.id, { agent: choice.value.id });
+        const updatedTask = ds.getTask(task.id);
+        if (updatedTask) ds.saveTaskMd(updatedTask);
+      }
+      tasksProvider.refresh();
+      vscode.window.showInformationMessage(`Recommended ${choice.value.name} for ${task.code || task.title}`);
+    }),
+
     vscode.commands.registerCommand('sprintdesk.addAgent', async () => {
       const { addTeamMember } = require('./services/team/teamService');
       
@@ -497,7 +539,7 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
         backlog: ['sprintdesk_createBacklog', 'sprintdesk_getBacklog', 'sprintdesk_listBacklogs', 'sprintdesk_addTaskToBacklog'],
         move: ['sprintdesk_moveTaskToEpic', 'sprintdesk_moveTaskToSprint', 'sprintdesk_moveTaskToBacklog'],
         team: ['sprintdesk_listTeam', 'sprintdesk_syncTeamFromGit', 'sprintdesk_addTeamMember', 'sprintdesk_removeTeamMember', 'sprintdesk_runAgent'],
-        workforce: ['sprintdesk_agentsList', 'sprintdesk_agentsGet'],
+        workforce: ['sprintdesk_agentsList', 'sprintdesk_agentsGet', 'sprintdesk_skillsList', 'sprintdesk_skillsUpsert', 'sprintdesk_policyGet', 'sprintdesk_recommendEmployees'],
         run: ['sprintdesk_runsCreate', 'sprintdesk_runsList', 'sprintdesk_runsGet'],
         event: ['sprintdesk_eventsPublish', 'sprintdesk_eventsList'],
         audit: ['sprintdesk_auditList'],

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkforceTreeDataProvider, WorkforceItem } from '../../providers/workforce/WorkforceTreeDataProvider';
 import * as workforceService from '../../services/workforce/workforceService';
+import { getStores } from '../../data/stores';
 
 export function registerWorkforceCommands(context: vscode.ExtensionContext, provider: WorkforceTreeDataProvider): void {
   context.subscriptions.push(
@@ -29,9 +30,18 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
       );
       if (!rolePick) return;
 
-      const skills = await vscode.window.showInputBox({
-        prompt: 'Skills / capabilities (comma separated, optional)'
-      });
+      const skills = await vscode.window.showQuickPick(
+        (() => {
+          getStores().skills.seedDefaultSkills();
+          return getStores().skills.loadAll().map(s => ({
+            label: s.name,
+            description: s.category || undefined,
+            detail: s.description,
+            value: s.name
+          }));
+        })(),
+        { canPickMany: true, placeHolder: 'Select skills from catalog (optional)' }
+      );
 
       const workforce = workforceService.getWorkforce();
       const teamPick = await vscode.window.showQuickPick(
@@ -45,7 +55,7 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
       const employee = workforceService.addEmployee({
         name,
         role: rolePick.value,
-        capabilities: skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : [],
+        skills: skills ? skills.map(s => ({ name: s.value, level: 1 as const })) : [],
         teamId: teamPick?.value
       });
 

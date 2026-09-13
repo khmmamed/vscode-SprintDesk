@@ -499,6 +499,57 @@ export const CONTEXT_TOOLS = [
   },
 ];
 
+export const WORKFORCE_TOOLS = [
+  {
+    name: 'sprintdesk_skillsList',
+    description: 'List the skill catalog (workforce/skills.yml), including aliases used for matching',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sprintdesk_skillsUpsert',
+    description: 'Add or update a skill in the catalog (matched by id; falls back to name)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'Skill id (e.g., skill_debugging)' },
+        name: { type: 'string', description: 'Canonical skill name (e.g., debugging)' },
+        category: { type: 'string', description: 'Optional category (e.g., engineering)' },
+        description: { type: 'string', description: 'Optional one-line description' },
+        aliases: { type: 'array', items: { type: 'string' }, description: 'Optional alias names' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'sprintdesk_policyGet',
+    description: 'Get effective permissions for a role or an employee (RBAC matrix + allow/deny overrides)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        role: { type: 'string', description: 'Role to inspect (lead|developer|reviewer|observer|agent|human)' },
+        employeeId: { type: 'string', description: 'Employee id or name; shows role + overrides applied' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_recommendEmployees',
+    description: 'Deterministically rank employees for a task by skill coverage -> lower load -> idle -> name -> id',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        taskId: { type: 'string', description: 'Task id or code; its type/requiredSkills drive the match' },
+        type: { type: 'string', enum: ['feature', 'bug', 'chore', 'doc', 'test'], description: 'Task type when taskId is not provided' },
+        requiredSkills: { type: 'array', items: { type: 'string' }, description: 'Override required skills' },
+        includePartial: { type: 'boolean', description: 'Include partial-coverage candidates (default false)' },
+        maxResults: { type: 'number', description: 'Max ranked results (default all)' },
+      },
+    },
+  },
+];
+
 export const ALL_TOOLS = [
   ...TASK_TOOLS,
   ...EPIC_TOOLS,
@@ -511,6 +562,7 @@ export const ALL_TOOLS = [
   ...EVENT_TOOLS,
   ...AUDIT_TOOLS,
   ...CONTEXT_TOOLS,
+  ...WORKFORCE_TOOLS,
 ];
 
 export function getToolByName(name: string) {

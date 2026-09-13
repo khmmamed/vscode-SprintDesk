@@ -1,5 +1,6 @@
 import { getStores } from '../../data/stores';
 import { Run } from '../../data/types';
+import { requireEmployeePermission } from '../../services/workforce/capabilityService';
 import { Handler, HandlerResult, res, getDs, findTask, resolveAgent, recordAudit } from './helpers';
 
 async function handle_sprintdesk_runsCreate(args: any): Promise<HandlerResult> {
@@ -16,6 +17,9 @@ async function handle_sprintdesk_runsCreate(args: any): Promise<HandlerResult> {
       true
     );
   }
+
+  const gate = requireEmployeePermission('run:create', agent.id);
+  if (!gate.ok) return res(gate.error, true);
 
   if (agent.status === 'offline') {
     return res(`Agent ${agent.name} is offline and cannot take work`, true);

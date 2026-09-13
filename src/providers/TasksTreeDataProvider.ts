@@ -37,6 +37,7 @@ export class TaskTreeItem extends vscode.TreeItem {
     // Create base TreeItem with initial label
     super(taskData.title, collapsibleState);
     this.taskData = taskData;
+    this.taskObj = taskObj;
 
     // Set task context and make draggable
     this.contextValue = 'task';
