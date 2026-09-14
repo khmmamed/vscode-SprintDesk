@@ -93,6 +93,19 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   title/type/priority/workflow form with Save + Cancel; `edited N×` chips appear on proposals that have been
   edited; the extension exposes `editedAt`/`editCount` in the DTO.
 
+### v0.12 Slice H — Requeue rejected proposals
+
+- **Requeue rejected proposals:** a reviewer can explicitly revive a `rejected` proposal back to `pending` via
+  **Requeue** so it can be applied as-is, edited, or rejected again — without re-running the classification
+  pipeline. Rejection remains terminal by default; nothing auto-revives a rejected proposal.
+- **Scoped and audited:** requeue is a pure status transition (`rejected → pending`, `reason` cleared) that
+  never touches the source finding, classification evidence, approval queue, or scheduler. Every requeue emits
+  `task.proposal.requeued` and audits `classification.requeue` (`targetType: proposal`) with `proposalId` and
+  `actorId`.
+- **Surface:** rejected proposal cards in the Proposals tab carry a **Requeue** button that immediately posts
+  `WORKFORCE_REQUEUE_PROPOSAL`; the extension exposes `requeuedAt` in the DTO. No automatic pass is triggered —
+  fresh classification requires an explicit manual classify run.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution
