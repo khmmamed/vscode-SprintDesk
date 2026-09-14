@@ -17,6 +17,16 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **MCP parity:** a missing or already-resolved approval surfaces the same "No pending approval found" error
   as `sprintdesk_approvalsApprove` / `sprintdesk_approvalsReject`; failures never clobber the panel state.
 
+### v0.12 Slice B — Tasks edit & delete
+
+- **Inline task editing from the Tasks tab:** Edit opens a title / status / priority / agent form backed by
+  `taskService.updateTask`, restricted to the field set the existing DTO exposes so no unsupported `Task` fields
+  can be written from the UI; invalid status/priority values are rejected before the command boundary.
+- **Two-click delete with confirmation:** Delete becomes Confirm delete in a single click; the second click
+  posts `WORKFORCE_DELETE_TASK` and the task disappears from the panel on the next snapshot.
+- **Live card update:** successful edit/delete push a targeted `TASK_UPDATED` / `WORKFORCE_RESPONSE` payload
+  that patches the card in place without a full list reload.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution

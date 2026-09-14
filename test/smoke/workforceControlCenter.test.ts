@@ -4,6 +4,7 @@ import { getStores } from '../../src/data/stores';
 import * as queueService from '../../src/services/workforce/queueService';
 import * as findingsService from '../../src/services/workforce/findingsService';
 import * as workforceService from '../../src/services/workforce/workforceService';
+import * as taskService from '../../src/services/taskService';
 import * as approvals from '../../src/services/workforce/approvals';
 import * as eventRulesService from '../../src/services/workforce/eventRulesService';
 import { emitEvent } from '../../src/services/workforce/events';
@@ -1534,6 +1535,51 @@ describe('v0.12 Proposal 1 — approvals resolve (Slice A)', () => {
     assert.strictEqual(approvals.approve(pending.id)?.status, 'approved');
     assert.strictEqual(approvals.approve(pending.id), undefined, 'already resolved approval cannot be resolved again');
     assert.strictEqual(approvals.reject(pending.id), undefined);
+  });
+});
+
+describe('v0.12 Proposal 1 — tasks CRUD (Slice B)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    taskService.getTaskService(ws.root);
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  it('updates title, priority, status and agent on a task', () => {
+    const employee = makeEmployee({ name: 'Agent Alpha' });
+    getStores().employees.add(employee);
+    const task = makeTask({ type: 'feature', priority: 'medium', status: 'waiting' });
+
+    taskService.updateTask(task.id, {
+      title: 'Updated Title',
+      priority: 'high',
+      status: 'in-progress',
+      agent: employee.id
+    });
+
+    const updated = getDataService().getTask(task.id);
+    assert.strictEqual(updated?.title, 'Updated Title');
+    assert.strictEqual(updated?.priority, 'high');
+    assert.strictEqual(updated?.status, 'in-progress');
+    assert.strictEqual(updated?.agent, employee.id);
+  });
+
+  it('returns undefined for a missing task', () => {
+    assert.strictEqual(getDataService().getTask('task_nope'), undefined);
+  });
+
+  it('deletes a task so it no longer appears in the store', () => {
+    const task = makeTask({ type: 'feature' });
+    assert.ok(getDataService().getTask(task.id), 'task exists before delete');
+
+    taskService.deleteTask(task.id);
+    assert.strictEqual(getDataService().getTask(task.id), undefined);
+    assert.strictEqual(getDataService().loadTasks().find(t => t.id === task.id), undefined);
   });
 });
 

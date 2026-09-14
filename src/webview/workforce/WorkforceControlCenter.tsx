@@ -542,6 +542,16 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [findingActionError, setFindingActionError] = React.useState<string>("");
   const [approvalAction, setApprovalAction] = React.useState<string>("");
   const [approvalActionError, setApprovalActionError] = React.useState<string>("");
+  const [taskAction, setTaskAction] = React.useState<string>("");
+  const [taskActionError, setTaskActionError] = React.useState<string>("");
+  const [editingTask, setEditingTask] = React.useState<TaskDto | null>(null);
+  const [confirmDeleteTask, setConfirmDeleteTask] = React.useState<string | null>(null);
+  const [taskEditForm, setTaskEditForm] = React.useState<{
+    title: string;
+    status: string;
+    priority: string;
+    agent: string;
+  }>({ title: "", status: "waiting", priority: "medium", agent: "" });
 
   const [runFocus, setRunFocus] = React.useState<string | null>(null);
   const [findingFocus, setFindingFocus] = React.useState<string | null>(null);
@@ -623,6 +633,13 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         setRuns(payload || []);
       } else if (command === "SET_WORKFORCE_TASKS") {
         setTasks(payload || []);
+      } else if (command === "TASK_UPDATED") {
+        const task: TaskDto | undefined = payload?.task;
+        if (task) {
+          setTasks(prev => [task, ...(prev || []).filter(t => t.id !== task.id)]);
+          setEditingTask(null);
+          setConfirmDeleteTask(null);
+        }
       } else if (command === "SET_WORKFORCE_EMPLOYEES") {
         setEmployees(payload || []);
       } else if (command === "AGENT_CONFIGURED") {
@@ -690,6 +707,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setRunActionError(messageError);
           setFindingActionError(messageError);
           setApprovalActionError(messageError);
+          setTaskActionError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -711,6 +729,16 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (payload?.decided) setFindingAction(`Finding ${payload.decision === "approved" ? "approved" : "rejected"}.`);
           if (payload?.validated) setFindingAction("Agent validation recorded.");
           if (payload?.resolved) setApprovalAction(`Approval ${payload.decision === "approved" ? "approved" : "rejected"}.`);
+          if (payload?.updated) {
+            setTaskAction("Task updated.");
+            setEditingTask(null);
+            setConfirmDeleteTask(null);
+          }
+          if (payload?.deleted) {
+            setTaskAction("Task deleted.");
+            setEditingTask(null);
+            setConfirmDeleteTask(null);
+          }
         }
       }
     };
@@ -805,6 +833,43 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     setApprovalAction("");
     setApprovalActionError("");
     postRequest("WORKFORCE_RESOLVE_APPROVAL", { approvalId, decision });
+  };
+
+  const startEditTask = (t: TaskDto): void => {
+    setTaskAction("");
+    setTaskActionError("");
+    setEditingTask(t);
+    setTaskEditForm({
+      title: t.title,
+      status: t.status,
+      priority: t.priority || "medium",
+      agent: t.agent || ""
+    });
+  };
+
+  const saveTaskEdit = (taskId: string): void => {
+    setTaskAction("");
+    setTaskActionError("");
+    if (!taskEditForm.title.trim()) { setTaskActionError("Task title is required"); return; }
+    postRequest("WORKFORCE_UPDATE_TASK", {
+      taskId,
+      updates: {
+        title: taskEditForm.title.trim(),
+        status: taskEditForm.status,
+        priority: taskEditForm.priority,
+        agent: taskEditForm.agent || undefined
+      }
+    });
+  };
+
+  const requestDeleteTask = (taskId: string): void => {
+    setConfirmDeleteTask(prev => prev === taskId ? null : taskId);
+  };
+
+  const confirmDeleteTaskAction = (taskId: string): void => {
+    setTaskAction("");
+    setTaskActionError("");
+    postRequest("WORKFORCE_DELETE_TASK", { taskId });
   };
 
   const openValidate = (f: FindingDto): void => {
@@ -1817,6 +1882,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           {tasks.length === 0 && (
             <div style={styles.empty}>No tasks yet. Tasks are created by hand (Create Task tab), by workflows, schedules, or event rules — then become runs in the queue.</div>
           )}
+          {taskActionError && <div style={styles.error}>{taskActionError}</div>}
+          {taskAction && <div style={styles.ok}>{taskAction}</div>}
           {tasks.map(t => (
             <div key={t.id} style={taskFocus === t.id ? styles.cardFocused : styles.card}>
               <div style={styles.row}>
@@ -1827,7 +1894,55 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 {t.priority && <span style={styles.chip}>{t.priority}</span>}
                 <span style={{ flex: 1 }} />
                 {t.agent && <span style={styles.muted}>assigned: <button style={styles.link} onClick={() => openEmployee(t.agent!)}>{t.agent}</button></span>}
+                <button
+                  style={editingTask?.id === t.id ? { ...styles.buttonGhost, backgroundColor: "var(--vscode-button-secondaryBackground, #2a2d2e)" } : styles.buttonGhost}
+                  onClick={() => { if (editingTask?.id === t.id) setEditingTask(null); else startEditTask(t); }}
+                >{editingTask?.id === t.id ? "Close" : "Edit"}</button>
+                {confirmDeleteTask === t.id ? (
+                  <button style={styles.buttonGhost} onClick={() => confirmDeleteTaskAction(t.id)}>Confirm delete</button>
+                ) : (
+                  <button style={styles.buttonGhost} onClick={() => requestDeleteTask(t.id)}>Delete</button>
+                )}
               </div>
+              {editingTask?.id === t.id && (
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <label style={styles.label}>Title</label>
+                    <input style={styles.input} value={taskEditForm.title}
+                      onChange={e => setTaskEditForm(prev => ({ ...prev, title: e.target.value }))} />
+                  </div>
+                  <div style={{ minWidth: 110 }}>
+                    <label style={styles.label}>Status</label>
+                    <select style={styles.select} value={taskEditForm.status}
+                      onChange={e => setTaskEditForm(prev => ({ ...prev, status: e.target.value }))}>
+                      <option value="waiting">waiting</option>
+                      <option value="in-progress">in-progress</option>
+                      <option value="review">review</option>
+                      <option value="done">done</option>
+                      <option value="blocked">blocked</option>
+                      <option value="cancelled">cancelled</option>
+                    </select>
+                  </div>
+                  <div style={{ minWidth: 100 }}>
+                    <label style={styles.label}>Priority</label>
+                    <select style={styles.select} value={taskEditForm.priority}
+                      onChange={e => setTaskEditForm(prev => ({ ...prev, priority: e.target.value }))}>
+                      <option value="low">low</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                    </select>
+                  </div>
+                  <div style={{ minWidth: 150 }}>
+                    <label style={styles.label}>Assigned to</label>
+                    <select style={styles.select} value={taskEditForm.agent}
+                      onChange={e => setTaskEditForm(prev => ({ ...prev, agent: e.target.value }))}>
+                      <option value="">— unassigned —</option>
+                      {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                    </select>
+                  </div>
+                  <button style={styles.button} onClick={() => saveTaskEdit(t.id)}>Save</button>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -275,10 +275,8 @@ function employeeDtos(): EmployeeDto[] {
   }));
 }
 
-function taskDtos(): TaskDto[] {
-  const ds = dataService();
-  if (!ds) {return [];}
-  return ds.loadTasks().map(t => ({
+function toTaskDto(t: Task): TaskDto {
+  return {
     id: t.id,
     title: t.title,
     code: t.code,
@@ -286,7 +284,19 @@ function taskDtos(): TaskDto[] {
     workStatus: t.workStatus,
     priority: t.priority,
     agent: t.agent
-  }));
+  };
+}
+
+function taskDtos(): TaskDto[] {
+  const ds = dataService();
+  if (!ds) {return [];}
+  return ds.loadTasks().map(toTaskDto);
+}
+
+function taskDtoById(id: string): TaskDto | undefined {
+  const ds = dataService();
+  const t = ds?.getTask(id);
+  return t ? toTaskDto(t) : undefined;
 }
 
 function findingDtos(): FindingDto[] {
@@ -662,6 +672,62 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         }
       } else if (command === 'WORKFORCE_CREATE_TASK') {
         await handleCreateTask(message, newPanel);
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_UPDATE_TASK') {
+        const taskId: string | undefined = message?.payload?.taskId;
+        const updateInput: Record<string, unknown> = message?.payload?.updates || {};
+        const updates: Partial<Task> = {};
+        const title = typeof updateInput.title === 'string' ? updateInput.title.trim() : undefined;
+        const status = typeof updateInput.status === 'string' ? updateInput.status : undefined;
+        const priority = typeof updateInput.priority === 'string' ? updateInput.priority : undefined;
+        const agent = typeof updateInput.agent === 'string' ? updateInput.agent : undefined;
+        if (title) { updates.title = title; }
+        if (status && ['waiting', 'in-progress', 'review', 'done', 'blocked', 'cancelled'].includes(status)) {
+          updates.status = status as Task['status'];
+        }
+        if (priority && ['high', 'medium', 'low'].includes(priority)) {
+          updates.priority = priority as Task['priority'];
+        }
+        if (agent) { updates.agent = agent; }
+        if (!taskId) {
+          postResponse(newPanel, message?.requestId, undefined, 'Task id is required');
+        } else if (Object.keys(updates).length === 0) {
+          postResponse(newPanel, message?.requestId, undefined, 'No supported task fields to update');
+        } else {
+          try {
+            const existing = dataService()?.getTask(taskId);
+            if (!existing) {
+              postResponse(newPanel, message?.requestId, undefined, `Task not found: ${taskId}`);
+            } else {
+              taskService.updateTask(taskId, updates);
+              const dto = taskDtoById(taskId);
+              newPanel.webview.postMessage({ command: 'TASK_UPDATED', payload: { task: dto } });
+              postResponse(newPanel, message?.requestId, { updated: true, taskId, task: dto });
+            }
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_DELETE_TASK') {
+        const taskId: string | undefined = message?.payload?.taskId;
+        if (!taskId) {
+          postResponse(newPanel, message?.requestId, undefined, 'Task id is required');
+        } else {
+          try {
+            const existing = dataService()?.getTask(taskId);
+            if (!existing) {
+              postResponse(newPanel, message?.requestId, undefined, `Task not found: ${taskId}`);
+            } else {
+              taskService.deleteTask(taskId);
+              postResponse(newPanel, message?.requestId, { deleted: true, taskId });
+            }
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
         pushSnapshot(newPanel);
       } else if (command === 'WORKFORCE_CANCEL_RUN') {
         const runId: string | undefined = message?.payload?.runId;
