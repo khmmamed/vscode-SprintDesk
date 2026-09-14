@@ -4,6 +4,19 @@ All notable changes to the "vscode-SprintDesk" extension will be documented in t
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### v0.12 Slice A — Approvals resolve (Approve / Reject)
+
+- **Inline approval decisions in the Control Center:** pending approval cards now carry Approve / Reject
+  actions that call the same `approvals.approve` / `approvals.reject` path the MCP tools use, so every
+  deferred operation (task assignment, run start, config change) applies identically from the UI.
+- **Live status without a full reload:** a resolve round-trip (`WORKFORCE_RESOLVE_APPROVAL` + `APPROVAL_UPDATED`)
+  flips the card to its decided state, records the decider when an actor is provided, and refreshes the pending
+  approval count via the snapshot push.
+- **MCP parity:** a missing or already-resolved approval surfaces the same "No pending approval found" error
+  as `sprintdesk_approvalsApprove` / `sprintdesk_approvalsReject`; failures never clobber the panel state.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution

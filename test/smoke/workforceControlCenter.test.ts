@@ -14,7 +14,7 @@ import { EventRecord, WorkflowDefinition, ScheduleRecord } from '../../src/data/
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
 import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/services/workforce/worker/worker';
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
-import { setApprovalGate } from '../../src/services/workforce/gates';
+import { setApprovalGate, requestApproval } from '../../src/services/workforce/gates';
 import { runSchedulerPass } from '../../src/services/workforce/scheduler/scheduler';
 import { LLMProvider } from '../../src/services/workforce/llm/types';
 
@@ -1463,6 +1463,77 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
 
     const after = runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 120_000) });
     assert.strictEqual(after.fired.length, 1, 'interval elapsed → fires again');
+  });
+});
+
+describe('v0.12 Proposal 1 — approvals resolve (Slice A)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  it('approves a pending config-change approval and applies its deferred operation', () => {
+    setApprovalGate('config-change', 'manual');
+    const employee = seedAgent();
+    workforceService.applyConfigChange(employee.id, { agentConfig: { tool: 'opencode' } });
+
+    const pending = getStores().approvals.loadAll().filter(a => a.type === 'config-change' && a.status === 'pending');
+    assert.strictEqual(pending.length, 1);
+
+    const approved = approvals.approve(pending[0].id);
+    assert.strictEqual(approved?.status, 'approved');
+    assert.ok(approved?.resolvedAt, 'approve records resolvedAt');
+    assert.strictEqual(getStores().employees.getById(employee.id)?.agentConfig?.tool, 'opencode');
+
+    assert.ok(
+      getActivitySummary().recentEvents.some(e => e.type === 'approval.resolved' && e.payload['approvalId'] === pending[0].id),
+      'approve lands in the activity stream'
+    );
+  });
+
+  it('rejects a pending task-assignment approval without applying the assignment', () => {
+    setApprovalGate('task-assignment', 'manual');
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead' });
+    const agent = seedAgent({ name: 'Agent Beta' });
+    const task = makeTask({ type: 'feature' });
+
+    const approval = requestApproval({
+      type: 'task-assignment',
+      reason: 'Task assignment requires manual approval',
+      requesterId: agent.id,
+      target: `${task.code} → ${agent.name}`,
+      pending: { op: 'assign-task', taskId: task.id, employeeId: agent.id }
+    });
+
+    const rejected = approvals.reject(approval.id, lead.id);
+    assert.strictEqual(rejected?.status, 'rejected');
+    assert.strictEqual(rejected?.decisionBy, lead.id);
+    assert.strictEqual(getDataService().getTask(task.id)?.agent, undefined, 'assignment not applied on reject');
+  });
+
+  it('no-ops for a missing id and for a double resolve', () => {
+    setApprovalGate('config-change', 'manual');
+    const employee = seedAgent();
+    workforceService.applyConfigChange(employee.id, { agentConfig: { tool: 'opencode' } });
+
+    const pending = getStores().approvals.loadAll().filter(a => a.type === 'config-change' && a.status === 'pending')[0];
+
+    assert.strictEqual(approvals.approve('approval_missing'), undefined);
+
+    assert.strictEqual(approvals.approve(pending.id)?.status, 'approved');
+    assert.strictEqual(approvals.approve(pending.id), undefined, 'already resolved approval cannot be resolved again');
+    assert.strictEqual(approvals.reject(pending.id), undefined);
   });
 });
 

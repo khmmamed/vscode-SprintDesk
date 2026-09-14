@@ -540,6 +540,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [runActionError, setRunActionError] = React.useState<string>("");
   const [findingAction, setFindingAction] = React.useState<string>("");
   const [findingActionError, setFindingActionError] = React.useState<string>("");
+  const [approvalAction, setApprovalAction] = React.useState<string>("");
+  const [approvalActionError, setApprovalActionError] = React.useState<string>("");
 
   const [runFocus, setRunFocus] = React.useState<string | null>(null);
   const [findingFocus, setFindingFocus] = React.useState<string | null>(null);
@@ -653,6 +655,11 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         if (payload) setQueue(payload);
       } else if (command === "SET_WORKFORCE_APPROVALS") {
         setApprovals(payload || []);
+      } else if (command === "APPROVAL_UPDATED") {
+        const approval: ApprovalDto | undefined = payload?.approval;
+        if (approval) {
+          setApprovals(prev => [approval, ...(prev || []).filter(a => a.id !== approval.id)]);
+        }
       } else if (command === "SET_WORKFORCE_SCHEDULES") {
         setSchedules(payload || []);
       } else if (command === "SET_WORKFORCE_ACTIVITY") {
@@ -682,6 +689,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setWindowError(messageError);
           setRunActionError(messageError);
           setFindingActionError(messageError);
+          setApprovalActionError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -702,6 +710,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           }
           if (payload?.decided) setFindingAction(`Finding ${payload.decision === "approved" ? "approved" : "rejected"}.`);
           if (payload?.validated) setFindingAction("Agent validation recorded.");
+          if (payload?.resolved) setApprovalAction(`Approval ${payload.decision === "approved" ? "approved" : "rejected"}.`);
         }
       }
     };
@@ -790,6 +799,12 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
 
   const decideFinding = (findingId: string, decision: "approved" | "rejected"): void => {
     postRequest("WORKFORCE_DECIDE_FINDING", { findingId, decision });
+  };
+
+  const resolveApproval = (approvalId: string, decision: "approved" | "rejected"): void => {
+    setApprovalAction("");
+    setApprovalActionError("");
+    postRequest("WORKFORCE_RESOLVE_APPROVAL", { approvalId, decision });
   };
 
   const openValidate = (f: FindingDto): void => {
@@ -1460,6 +1475,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           {approvals.filter(a => a.status === "pending").length === 0 && (
             <div style={styles.empty}>No pending approvals. Approval gates only come into play when a gate is set to manual — everything else applies automatically.</div>
           )}
+          {approvalActionError && <div style={styles.error}>{approvalActionError}</div>}
+          {approvalAction && <div style={styles.ok}>{approvalAction}</div>}
           {approvals.map(a => (
             <div key={a.id} style={styles.card}>
               <div style={styles.row}>
@@ -1473,6 +1490,12 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 <span style={styles.muted}>{a.reason}</span>
                 {a.status !== "pending" && a.decisionBy && <span style={styles.muted}> · decided by {a.decisionBy} {formatTime(a.resolvedAt)}</span>}
               </div>
+              {a.status === "pending" && (
+                <div style={{ marginTop: 8 }}>
+                  <button style={styles.button} onClick={() => resolveApproval(a.id, "approved")}>Approve</button>
+                  <button style={styles.buttonGhost} onClick={() => resolveApproval(a.id, "rejected")}>Reject</button>
+                </div>
+              )}
             </div>
           ))}
         </div>

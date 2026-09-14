@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { getWebviewContent } from '../../webview/getWebviewContent';
 import * as fileService from '../../services/fileService';
 import * as taskService from '../../services/taskService';
+import * as approvals from '../../services/workforce/approvals';
 import * as queueService from '../../services/workforce/queueService';
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
@@ -446,22 +447,31 @@ function activityEventDtos(): ActivityEventDto[] {
   }));
 }
 
+function toApprovalDto(a: Approval): ApprovalDto {
+  return {
+    id: a.id,
+    type: a.type,
+    status: a.status,
+    reason: a.reason,
+    target: a.target,
+    requesterId: a.requesterId,
+    createdAt: a.createdAt,
+    resolvedAt: a.resolvedAt,
+    decisionBy: a.decisionBy
+  };
+}
+
 function approvalDtos(): ApprovalDto[] {
   return getStores()
     .approvals.loadAll()
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     .slice(0, 25)
-    .map(a => ({
-      id: a.id,
-      type: a.type,
-      status: a.status,
-      reason: a.reason,
-      target: a.target,
-      requesterId: a.requesterId,
-      createdAt: a.createdAt,
-      resolvedAt: a.resolvedAt,
-      decisionBy: a.decisionBy
-    }));
+    .map(toApprovalDto);
+}
+
+function approvalDtoById(id: string): ApprovalDto | undefined {
+  const approval = getStores().approvals.loadAll().find(a => a.id === id);
+  return approval ? toApprovalDto(approval) : undefined;
 }
 
 function scheduleDtos(): ScheduleDto[] {
@@ -685,6 +695,33 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
               postResponse(newPanel, message?.requestId, { decided: true, findingId, decision, finding: dto });
             } else {
               postResponse(newPanel, message?.requestId, undefined, 'Finding not found or already resolved');
+            }
+          } catch (error) {
+            postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+          }
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_RESOLVE_APPROVAL') {
+        const approvalId: string | undefined = message?.payload?.approvalId;
+        const decision: string | undefined = message?.payload?.decision;
+        const actorId: string | undefined =
+          typeof message?.payload?.actorId === 'string' ? message.payload.actorId : undefined;
+        if (approvalId && (decision === 'approved' || decision === 'rejected')) {
+          try {
+            const resolved =
+              decision === 'approved'
+                ? approvals.approve(approvalId, actorId)
+                : approvals.reject(approvalId, actorId);
+            if (resolved) {
+              const dto = approvalDtoById(approvalId);
+              newPanel.webview.postMessage({
+                command: 'APPROVAL_UPDATED',
+                payload: { approval: dto }
+              });
+              postResponse(newPanel, message?.requestId, { resolved: true, approvalId, decision, approval: dto });
+            } else {
+              postResponse(newPanel, message?.requestId, undefined, `No pending approval found for ${approvalId}`);
             }
           } catch (error) {
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
