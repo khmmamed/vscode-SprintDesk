@@ -2098,6 +2098,143 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
   });
 });
 
+describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal editing)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    taskService.getTaskService(ws.root);
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function seedFinding(overrides: Partial<Parameters<typeof findingsService.createFinding>[0]> = {}) {
+    return findingsService.createFinding({
+      title: 'Investigate login timeout',
+      runId: 'run_edit_seed',
+      agent: 'emp_none',
+      severity: 'medium',
+      suggestedTaskType: 'bug',
+      suggestedPriority: 'high',
+      suggestedWorkflow: 'w_fix',
+      ...overrides
+    });
+  }
+
+  function seedPendingProposal(proposedBy?: string) {
+    const finding = seedFinding();
+    return classificationService.createProposal(finding, { title: 'Handle login timeout', type: 'bug', priority: 'high', workflow: 'w_fix' }, proposedBy);
+  }
+
+  it('updates a pending proposal payload, preserving classification evidence', () => {
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Editor' });
+    const proposal = seedPendingProposal();
+    assert.strictEqual(proposal?.status, 'pending');
+    const findingId = proposal!.findingId;
+
+    const edited = classificationService.editProposal(proposal!.id, { title: 'Improved login timeout', priority: 'low' }, lead.id);
+    assert.strictEqual(edited?.status, 'pending');
+    assert.strictEqual(edited?.title, 'Improved login timeout');
+    assert.strictEqual(edited?.priority, 'low');
+    assert.strictEqual(edited?.type, 'bug');
+    assert.strictEqual(edited?.workflow, 'w_fix');
+    assert.ok(edited?.editedAt, 'editedAt is set');
+    assert.strictEqual(edited?.editedBy, lead.id);
+    assert.strictEqual(edited?.edits?.length, 1);
+    assert.strictEqual(edited?.edits?.[0]?.before.title, 'Handle login timeout');
+    assert.strictEqual(edited?.edits?.[0]?.before.priority, 'high');
+    assert.strictEqual(edited?.edits?.[0]?.after.title, 'Improved login timeout');
+    assert.strictEqual(edited?.edits?.[0]?.after.priority, 'low');
+
+    // finding is untouched
+    const finding = getStores().findings.getById(findingId);
+    assert.strictEqual(finding?.title, 'Investigate login timeout');
+
+    // audit + event
+    const audits = getStores().audit.loadAll().filter(a => a.action === 'classification.edit');
+    assert.strictEqual(audits.length, 1);
+    assert.strictEqual(audits[0].targetId, proposal!.id);
+    assert.strictEqual(getStores().events.findByType('task.proposal.edited').length, 1);
+  });
+
+  it('throws on invalid edits and persists nothing', () => {
+    const proposal = seedPendingProposal();
+    assert.throws(() => classificationService.editProposal(proposal!.id, { type: 'suggestion' }), /invalid proposal type/);
+    assert.throws(() => classificationService.editProposal(proposal!.id, { priority: 'critical' }), /invalid proposal priority/);
+    assert.throws(() => classificationService.editProposal(proposal!.id, { title: '   ' }), /invalid proposal title/);
+
+    const original = getStores().proposals.getById(proposal!.id);
+    assert.strictEqual(original?.title, 'Handle login timeout');
+    assert.strictEqual(original?.type, 'bug');
+    assert.ok(!original?.edits || original.edits.length === 0, 'no edits persisted');
+    assert.strictEqual(getStores().audit.loadAll().filter(a => a.action === 'classification.edit').length, 0);
+  });
+
+  it('is a no-op for a non-pending proposal and returns undefined for a missing id', () => {
+    const finding = seedFinding({ title: 'Edit applied no-op', runId: 'run_applied_edit' });
+    const proposal = classificationService.createProposal(finding, { title: 'Applied task', type: 'chore', priority: 'low' });
+    classificationService.applyProposal(proposal!.id);
+
+    const applied = classificationService.editProposal(proposal!.id, { title: 'No good' });
+    assert.strictEqual(applied?.status, 'applied');
+    assert.strictEqual(applied?.title, 'Applied task');
+
+    const missing = classificationService.editProposal('missing_id');
+    assert.strictEqual(missing, undefined);
+  });
+
+  it('enforces classification:review — plain agents throw, lead/reviewer/human/system pass', () => {
+    const proposal = seedPendingProposal();
+    const agent = seedAgent();
+    assert.throws(() => classificationService.editProposal(proposal!.id, { priority: 'low' }, agent.id), /classification:review/);
+
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead E' });
+    assert.strictEqual(classificationService.editProposal(proposal!.id, { priority: 'low' }, lead.id)?.priority, 'low');
+
+    const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Reviewer E' });
+    assert.strictEqual(classificationService.editProposal(proposal!.id, { type: 'chore' }, reviewer.id)?.type, 'chore');
+
+    const human = seedAgent({ role: 'human', teamRole: 'human', name: 'Human E' });
+    assert.strictEqual(classificationService.editProposal(proposal!.id, { title: 'Human edited' }, human.id)?.title, 'Human edited');
+
+    // system (no actorId) succeeds on a fresh proposal
+    const fresh = seedPendingProposal();
+    assert.strictEqual(classificationService.editProposal(fresh!.id, { title: 'System edited' })?.title, 'System edited');
+  });
+
+  it('Apply creates a task from the edited payload values', () => {
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Apply' });
+    const finding = seedFinding({ title: 'Edit then apply', runId: 'run_edit_apply' });
+    const proposal = classificationService.createProposal(finding, { title: 'Original task', type: 'bug', priority: 'high', workflow: 'w_fix' });
+
+    const edited = classificationService.editProposal(proposal!.id, { title: 'Revised task', type: 'chore', priority: 'low', workflow: 'w_ops' }, lead.id);
+    assert.strictEqual(edited?.status, 'pending');
+
+    const applied = classificationService.applyProposal(edited!.id, lead.id);
+    assert.strictEqual(applied?.status, 'applied');
+
+    const tasks = getDataService().loadTasks();
+    assert.strictEqual(tasks.length, 1);
+    assert.strictEqual(tasks[0].title, 'Revised task');
+    assert.strictEqual(tasks[0].type, 'chore');
+    assert.strictEqual(tasks[0].priority, 'low');
+    assert.strictEqual(tasks[0].workflow, 'w_ops');
+
+    const updatedFinding = getStores().findings.getById(finding.id);
+    assert.strictEqual(updatedFinding?.title, 'Edit then apply');
+    assert.strictEqual(updatedFinding?.status, 'approved');
+    assert.strictEqual(updatedFinding?.taskId, tasks[0].id);
+  });
+});
+
 describe('ollama end-to-end against a local model', () => {
   const enabled = process.env.SPRINTDESK_OLLAMA_E2E === '1';
   const model = process.env.SPRINTDESK_OLLAMA_MODEL || 'gemma4:31b-cloud';

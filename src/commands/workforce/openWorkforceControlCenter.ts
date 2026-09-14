@@ -194,6 +194,8 @@ export interface ProposalDto {
   createdAt: string;
   appliedTaskId?: string;
   reason?: string;
+  editedAt?: string;
+  editCount?: number;
 }
 
 export interface ScheduleDto {
@@ -512,7 +514,9 @@ function toProposalDto(p: TaskProposal): ProposalDto {
     status: p.status,
     createdAt: p.createdAt,
     ...(p.appliedTaskId ? { appliedTaskId: p.appliedTaskId } : {}),
-    ...(p.reason ? { reason: p.reason } : {})
+    ...(p.reason ? { reason: p.reason } : {}),
+    ...(p.editedAt ? { editedAt: p.editedAt } : {}),
+    ...(p.edits && p.edits.length > 0 ? { editCount: p.edits.length } : {})
   };
 }
 
@@ -979,15 +983,17 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         }
         workforceTreeDataProvider.refresh();
         pushSnapshot(newPanel);
-      } else if (command === 'WORKFORCE_APPLY_PROPOSAL' || command === 'WORKFORCE_REJECT_PROPOSAL') {
+      } else if (command === 'WORKFORCE_APPLY_PROPOSAL' || command === 'WORKFORCE_REJECT_PROPOSAL' || command === 'WORKFORCE_EDIT_PROPOSAL') {
         const proposalId: string | undefined = message?.payload?.proposalId;
         try {
           if (!proposalId) {throw new Error('proposalId is required');}
           const proposal = command === 'WORKFORCE_APPLY_PROPOSAL'
             ? classificationService.applyProposal(proposalId)
-            : classificationService.rejectProposal(proposalId);
+            : command === 'WORKFORCE_REJECT_PROPOSAL'
+              ? classificationService.rejectProposal(proposalId)
+              : classificationService.editProposal(proposalId, message?.payload?.changes || {});
           if (!proposal) {throw new Error('proposal not found');}
-          const done = command === 'WORKFORCE_APPLY_PROPOSAL' ? 'applied' : 'rejected';
+          const done = command === 'WORKFORCE_APPLY_PROPOSAL' ? 'applied' : command === 'WORKFORCE_REJECT_PROPOSAL' ? 'rejected' : 'edited';
           postResponse(newPanel, message?.requestId, { [done]: true, proposal: toProposalDto(proposal) });
           pushProposalPatch(newPanel, proposal);
         } catch (error) {

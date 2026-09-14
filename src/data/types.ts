@@ -89,6 +89,20 @@ export type FindingAgentReviewState = 'requested' | 'validated';
 // v0.12 autonomous classification: task proposals (additive, non-breaking)
 export type TaskProposalStatus = 'pending' | 'applied' | 'duplicate' | 'skipped' | 'failed' | 'rejected';
 
+export interface TaskProposalTaskPayload {
+  title: string;
+  type: Task['type'];
+  priority: Task['priority'];
+  workflow?: string;
+}
+
+export interface TaskProposalEdit {
+  at: string;
+  by?: string;
+  before: Partial<TaskProposalTaskPayload>;
+  after: Partial<TaskProposalTaskPayload>;
+}
+
 export interface TaskProposal {
   id: string;
   findingId: string;
@@ -106,6 +120,9 @@ export interface TaskProposal {
   appliedAt?: string;
   reason?: string;
   createdAt: string;
+  editedAt?: string;
+  editedBy?: string;
+  edits?: TaskProposalEdit[];
 }
 
 export interface Finding {

@@ -1,7 +1,7 @@
 import { getDataService } from '../../../data/DataService';
 import { getHost } from '../../../host';
 import { getStores } from '../../../data/stores';
-import { Finding, Task, TaskProposal } from '../../../data/types';
+import { Finding, Task, TaskProposal, TaskProposalEdit, TaskProposalTaskPayload } from '../../../data/types';
 import { getTaskService } from '../../taskService';
 import { requireEmployeePermission } from '../capabilityService';
 import { emitEvent } from '../events';
@@ -263,6 +263,95 @@ export function rejectProposal(proposalIdInput: string, actorId?: string): TaskP
     targetType: 'proposal',
     targetId: proposal.id,
     details: { findingId: proposal.findingId },
+    timestamp: now
+  });
+
+  return getStores().proposals.getById(proposal.id);
+}
+
+export interface ProposalEditChanges {
+  title?: string;
+  type?: string;
+  priority?: string;
+  workflow?: string;
+}
+
+function mergeProposalPayload(before: TaskProposalTaskPayload, changes: ProposalEditChanges): TaskProposalTaskPayload {
+  let title = before.title;
+  if (changes.title !== undefined) {
+    title = changes.title.trim();
+    if (title.length === 0) {throw new Error('invalid proposal title: must be non-empty');}
+  }
+
+  let type: Task['type'] = before.type;
+  if (changes.type !== undefined) {
+    if (!TASK_TYPES.includes(changes.type as Task['type'])) {throw new Error(`invalid proposal type '${changes.type}'`);}
+    type = changes.type as Task['type'];
+  }
+
+  let priority: Task['priority'] = before.priority;
+  if (changes.priority !== undefined) {
+    if (!TASK_PRIORITIES.includes(changes.priority as Task['priority'])) {throw new Error(`invalid proposal priority '${changes.priority}'`);}
+    priority = changes.priority as Task['priority'];
+  }
+
+  let workflow: string | undefined = before.workflow;
+  if (changes.workflow !== undefined) {
+    const trimmed = changes.workflow.trim();
+    workflow = trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  return {
+    title,
+    type,
+    priority,
+    ...(workflow !== undefined ? { workflow } : {})
+  };
+}
+
+export function editProposal(proposalIdInput: string, changes: ProposalEditChanges = {}, actorId?: string): TaskProposal | undefined {
+  const gate = requireEmployeePermission('classification:review', actorId);
+  if (!gate.ok) {throw new Error(gate.error);}
+
+  const proposal = getStores().proposals.getById(proposalIdInput);
+  if (!proposal) {return undefined;}
+  if (proposal.status !== 'pending') {return proposal;}
+
+  const before: TaskProposalTaskPayload = {
+    title: proposal.title,
+    type: proposal.type,
+    priority: proposal.priority,
+    ...(proposal.workflow ? { workflow: proposal.workflow } : {})
+  };
+  const after = mergeProposalPayload(before, changes);
+
+  const now = new Date().toISOString();
+  const edit: TaskProposalEdit = { at: now, ...(actorId ? { by: actorId } : {}), before, after };
+  const edits = [...(proposal.edits || []), edit];
+
+  getStores().proposals.update(proposal.id, {
+    title: after.title,
+    type: after.type,
+    priority: after.priority,
+    workflow: after.workflow,
+    editedAt: now,
+    ...(actorId ? { editedBy: actorId } : {}),
+    edits
+  });
+
+  emitEvent('task.proposal.edited', 'classification', {
+    proposalId: proposal.id,
+    findingId: proposal.findingId,
+    actorId
+  });
+
+  getStores().audit.add({
+    id: `audit_${Date.now()}`,
+    actor: actorId || 'system',
+    action: 'classification.edit',
+    targetType: 'proposal',
+    targetId: proposal.id,
+    details: { findingId: proposal.findingId, before, after },
     timestamp: now
   });
 

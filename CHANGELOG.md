@@ -79,6 +79,20 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Surface:** the Schedules tab shows the schedule action (`task` / `classify`) so classify schedules are
   distinguishable at a glance.
 
+### v0.12 Slice G — Proposal editing before Apply
+
+- **Edit proposed task payloads:** a reviewer can adjust a `pending` proposal's title, type, priority, or
+  workflow before Apply; the proposal stays `pending` while editing and Apply creates the task from the latest
+  values. Original classification evidence (confidence, original title/type/priority/workflow) is preserved in
+  an append-only `edits[]` history on the proposal so every edit is traceable.
+- **Scoped and audited:** editing only touches the proposed task payload — the source finding, classification
+  confidence, proposal status, and approval state are never changed. Every successful edit emits
+  `task.proposal.edited` and audits `classification.edit` with before/after details. Invalid edits (empty title,
+  unknown type or priority) throw a specific error and persist nothing.
+- **Surface:** pending proposal cards in the Proposals tab carry an **Edit** button that opens an inline
+  title/type/priority/workflow form with Save + Cancel; `edited N×` chips appear on proposals that have been
+  edited; the extension exposes `editedAt`/`editCount` in the DTO.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution

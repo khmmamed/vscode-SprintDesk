@@ -202,6 +202,8 @@ interface ProposalDto {
   createdAt: string;
   appliedTaskId?: string;
   reason?: string;
+  editedAt?: string;
+  editCount?: number;
 }
 
 interface ScheduleDto {
@@ -575,6 +577,14 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     agent: string;
   }>({ title: "", status: "waiting", priority: "medium", agent: "" });
 
+  const [editingProposal, setEditingProposal] = React.useState<ProposalDto | null>(null);
+  const [proposalEditForm, setProposalEditForm] = React.useState<{
+    title: string;
+    type: string;
+    priority: string;
+    workflow: string;
+  }>({ title: "", type: "feature", priority: "medium", workflow: "" });
+
   const [runFocus, setRunFocus] = React.useState<string | null>(null);
   const [findingFocus, setFindingFocus] = React.useState<string | null>(null);
   const [windowFocus, setWindowFocus] = React.useState<string | null>(null);
@@ -776,6 +786,10 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (payload?.rejected) {
             setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" rejected.` : "Proposal rejected.");
           }
+          if (payload?.edited) {
+            setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" updated.` : "Proposal updated.");
+            setEditingProposal(null);
+          }
           if (payload?.deleted) {
             setTaskAction("Task deleted.");
             setEditingTask(null);
@@ -835,6 +849,35 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const rejectProposal = (proposalId: string): void => {
     setProposalAction("");
     postRequest("WORKFORCE_REJECT_PROPOSAL", { proposalId });
+  };
+
+  const startEditProposal = (p: ProposalDto): void => {
+    setProposalAction("");
+    setProposalActionError("");
+    setEditingProposal(p);
+    setProposalEditForm({ title: p.title, type: p.type, priority: p.priority, workflow: p.workflow || "" });
+  };
+
+  const cancelEditProposal = (): void => {
+    setProposalActionError("");
+    setEditingProposal(null);
+  };
+
+  const saveEditProposal = (p: ProposalDto): void => {
+    if (!proposalEditForm.title.trim()) {
+      setProposalActionError("Title must be non-empty.");
+      return;
+    }
+    setProposalActionError("");
+    postRequest("WORKFORCE_EDIT_PROPOSAL", {
+      proposalId: p.id,
+      changes: {
+        title: proposalEditForm.title,
+        type: proposalEditForm.type,
+        priority: proposalEditForm.priority,
+        workflow: proposalEditForm.workflow
+      }
+    });
   };
 
   const gotoRuns = (filter: RunFilter): void => {
@@ -1618,6 +1661,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 <span style={styles.chip}>{p.priority}</span>
                 {p.workflow && <span style={styles.chip}>{p.workflow}</span>}
                 {p.confidence !== undefined && <span style={styles.chip}>{Math.round(p.confidence * 100)}% conf</span>}
+                {!!p.editCount && <span style={styles.chip}>edited {p.editCount}x</span>}
                 <span style={{ flex: 1 }} />
                 <span style={styles.muted}>{formatTime(p.createdAt)}</span>
               </div>
@@ -1630,6 +1674,49 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 <div style={{ marginTop: 8 }}>
                   <button style={styles.button} onClick={() => applyProposal(p.id)}>Apply as Task</button>
                   <button style={styles.buttonGhost} onClick={() => rejectProposal(p.id)}>Reject</button>
+                  {editingProposal?.id !== p.id && (
+                    <button style={styles.buttonGhost} onClick={() => startEditProposal(p)}>Edit</button>
+                  )}
+                </div>
+              )}
+              {editingProposal?.id === p.id && (
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, maxWidth: 420 }}>
+                  <input
+                    style={styles.input}
+                    value={proposalEditForm.title}
+                    onChange={e => setProposalEditForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="Title"
+                  />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <select
+                      style={styles.input}
+                      value={proposalEditForm.type}
+                      onChange={e => setProposalEditForm(f => ({ ...f, type: e.target.value }))}
+                    >
+                      {["feature", "bug", "chore", "doc", "test"].map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <select
+                      style={styles.input}
+                      value={proposalEditForm.priority}
+                      onChange={e => setProposalEditForm(f => ({ ...f, priority: e.target.value }))}
+                    >
+                      {["high", "medium", "low"].map(pr => (
+                        <option key={pr} value={pr}>{pr}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    style={styles.input}
+                    value={proposalEditForm.workflow}
+                    onChange={e => setProposalEditForm(f => ({ ...f, workflow: e.target.value }))}
+                    placeholder="Workflow"
+                  />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button style={styles.button} onClick={() => saveEditProposal(p)}>Save Edit</button>
+                    <button style={styles.buttonGhost} onClick={() => cancelEditProposal()}>Cancel</button>
+                  </div>
                 </div>
               )}
             </div>
