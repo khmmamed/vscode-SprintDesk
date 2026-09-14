@@ -6,6 +6,7 @@ import * as findingsService from '../../src/services/workforce/findingsService';
 import * as workforceService from '../../src/services/workforce/workforceService';
 import * as taskService from '../../src/services/taskService';
 import * as approvals from '../../src/services/workforce/approvals';
+import * as classificationService from '../../src/services/workforce/classification/classificationService';
 import * as eventRulesService from '../../src/services/workforce/eventRulesService';
 import { emitEvent } from '../../src/services/workforce/events';
 import { getRunsByFilter, runDetail, getQueueSnapshot, getActivitySummary, getExecutionWindowReport } from '../../src/services/workforce/observability';
@@ -1580,6 +1581,143 @@ describe('v0.12 Proposal 1 — tasks CRUD (Slice B)', () => {
     taskService.deleteTask(task.id);
     assert.strictEqual(getDataService().getTask(task.id), undefined);
     assert.strictEqual(getDataService().loadTasks().find(t => t.id === task.id), undefined);
+  });
+});
+
+describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    taskService.getTaskService(ws.root);
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function seedFinding(overrides: Partial<Parameters<typeof findingsService.createFinding>[0]> = {}) {
+    return findingsService.createFinding({
+      title: 'Investigate flaky login test',
+      runId: 'run_seed',
+      agent: 'emp_none',
+      severity: 'medium',
+      suggestedTaskType: 'bug',
+      suggestedPriority: 'high',
+      suggestedWorkflow: 'w_fix',
+      ...overrides
+    });
+  }
+
+  it('creates exactly one proposal per finding and is idempotent', () => {
+    const finding = seedFinding();
+    const first = classificationService.createProposal(finding);
+    assert.strictEqual(first?.status, 'pending');
+    assert.strictEqual(first?.type, 'bug');
+    assert.strictEqual(first?.priority, 'high');
+    assert.strictEqual(first?.workflow, 'w_fix');
+
+    const second = classificationService.createProposal(finding);
+    assert.strictEqual(second?.id, first?.id, 'repeat classify returns the same proposal');
+    assert.strictEqual(getStores().proposals.loadAll().length, 1);
+  });
+
+  it('suppresses duplicates against an open matching task but not a finished one', () => {
+    makeTask({ title: 'Investigate flaky login test', status: 'waiting' });
+
+    const blocked = seedFinding({ title: 'Investigate flaky login test' });
+    const proposal = classificationService.createProposal(blocked);
+    assert.strictEqual(proposal?.status, 'duplicate');
+    assert.strictEqual(getDataService().loadTasks().length, 1, 'no task is created for a duplicate');
+
+    makeTask({ title: 'Archive old reports', status: 'done' });
+    const free = seedFinding({ title: 'Archive old reports' });
+    const freeProposal = classificationService.createProposal(free);
+    assert.strictEqual(freeProposal?.status, 'pending', 'a finished task does not block classification');
+  });
+
+  it('honors the per-pass cap and classifies the highest severity first', () => {
+    setApprovalGate('task-proposal', 'auto');
+    const agent = seedAgent();
+    for (let i = 0; i < 5; i += 1) {
+      seedFinding({ title: `Low severity item ${i}`, severity: 'low', runId: `run_low_${i}`, agent: agent.id });
+    }
+    for (let i = 0; i < 2; i += 1) {
+      seedFinding({ title: `High severity item ${i}`, severity: 'high', runId: `run_high_${i}`, agent: agent.id });
+    }
+    getStores().queue.saveSettings({ maxProposalsPerPass: 3 });
+
+    const result = classificationService.runClassificationPass();
+    assert.strictEqual(result.scanned, 7);
+    assert.strictEqual(result.proposed, 3);
+    assert.strictEqual(result.applied, 3);
+    assert.strictEqual(result.duplicates, 0);
+
+    const titles = getDataService().loadTasks().map(t => t.title);
+    assert.ok(titles.includes('High severity item 0'), 'high severity classified first');
+    assert.ok(titles.includes('High severity item 1'));
+    assert.ok(titles.some(t => t.startsWith('Low severity item')), 'one low severity item fits the cap');
+  });
+
+  it('requests approval under a manual gate and applies only on approve', () => {
+    setApprovalGate('task-proposal', 'manual');
+    const approved = seedFinding({ title: 'Fragile checkout flow', runId: 'run_checkout' });
+    const result = classificationService.runClassificationPass();
+
+    assert.strictEqual(result.requestedApproval, 1);
+    const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
+    assert.strictEqual(approvalsList.length, 1);
+    assert.strictEqual(getDataService().loadTasks().length, 0, 'nothing is created before approval');
+
+    const resolved = approvals.approve(approvalsList[0].id);
+    assert.strictEqual(resolved?.status, 'approved');
+    assert.strictEqual(getDataService().loadTasks().length, 1);
+    const applied = getStores().proposals.byFindingId(approved.id);
+    assert.strictEqual(applied?.status, 'applied');
+    assert.strictEqual(getStores().findings.getById(approved.id)?.taskId, getDataService().loadTasks()[0].id);
+    assert.strictEqual(getStores().findings.getById(approved.id)?.status, 'approved');
+  });
+
+  it('keeps a manual-gate proposal unapplied on a reject', () => {
+    setApprovalGate('task-proposal', 'manual');
+    const finding = seedFinding({ title: 'Slow build pipeline', runId: 'run_build' });
+    classificationService.runClassificationPass();
+    const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
+    assert.strictEqual(approvalsList.length, 1);
+
+    const rejected = approvals.reject(approvalsList[0].id);
+    assert.strictEqual(rejected?.status, 'rejected');
+    const proposal = getStores().proposals.byFindingId(finding.id);
+    assert.strictEqual(proposal?.status, 'pending', 'reject does not apply the proposal');
+    assert.strictEqual(getDataService().loadTasks().length, 0, 'no task is created on a reject');
+  });
+
+  it('does not create a task when the actor lacks classification:apply', () => {
+    setApprovalGate('task-proposal', 'auto');
+    const plainAgent = seedAgent();
+    const finding = seedFinding({ title: 'Secret scan backlog', runId: 'run_secret' });
+
+    const result = classificationService.runClassificationPass({ actorId: plainAgent.id });
+    assert.strictEqual(result.applied, 0);
+    assert.strictEqual(result.failed, 1);
+    assert.strictEqual(getStores().proposals.byFindingId(finding.id)?.status, 'failed');
+    assert.strictEqual(getDataService().loadTasks().length, 0);
+  });
+
+  it('marks an invalid suggestion as failed without creating a task', () => {
+    const finding = seedFinding({ suggestedTaskType: 'suggestion' as any });
+    const proposal = classificationService.createProposal(finding);
+
+    assert.strictEqual(proposal?.status, 'failed');
+    assert.ok(proposal?.reason, 'failure carries a reason');
+    assert.strictEqual(getStores().proposals.loadAll().length, 1);
+    assert.strictEqual(getDataService().loadTasks().length, 0, 'no task is created from a failed suggestion');
   });
 });
 

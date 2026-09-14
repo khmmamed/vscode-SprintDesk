@@ -187,6 +187,13 @@ export function updateStatus(findingId: string, decision: FindingDecision, actor
   return getStores().findings.getById(findingId);
 }
 
+export function linkFindingToTask(findingId: string, taskId: string): Finding | undefined {
+  const finding = getStores().findings.getById(findingId);
+  if (!finding) {return undefined;}
+  getStores().findings.update(findingId, { taskId });
+  return getStores().findings.getById(findingId);
+}
+
 export function requestAgentValidation(findingId: string): Finding | undefined {
   const finding = getStores().findings.getById(findingId);
   if (!finding || finding.status !== 'pending') {return undefined;}

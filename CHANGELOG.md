@@ -27,6 +27,19 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Live card update:** successful edit/delete push a targeted `TASK_UPDATED` / `WORKFORCE_RESPONSE` payload
   that patches the card in place without a full list reload.
 
+### v0.12 Slice C — Autonomous classification (deterministic)
+
+- **Findings → task proposals:** pending findings that carry `suggestedTaskType` / `suggestedWorkflow` /
+  `suggestedPriority` now produce one `TaskProposal` each (persisted to `.SprintDesk/workforce/classification.yml`),
+  validated against the real `Task` enums — output is data, never authority.
+- **Idempotent and bounded:** a finding is classified at most once; proposals are deduped against open tasks by
+  normalized title; each pass respects `maxProposalsPerPass` (default 5) with the highest-severity findings first.
+- **Gated apply:** auto-apply happens under `classification:apply` when the new `task-proposal` approval gate is
+  `auto`; a `manual` gate routes through the existing approvals queue as a `task-proposal` approval that applies
+  on Approve and leaves everything untouched on Reject.
+- **Observable failures:** invalid suggestions and permission denials become `failed` proposals with a reason —
+  never an implicit task and never a silence drop.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution

@@ -11,6 +11,7 @@ import { QueueSettingsStore } from './QueueSettingsStore';
 import { McpServerStore } from './McpServerStore';
 import { ApprovalStore } from './ApprovalStore';
 import { FindingStore } from './FindingStore';
+import { ProposalStore } from './ProposalStore';
 import { ScheduleStore } from './ScheduleStore';
 import { WorkflowStore } from './WorkflowStore';
 import { EventRuleStore } from './EventRuleStore';
@@ -35,6 +36,7 @@ export interface Stores {
   mcpServers: McpServerStore;
   approvals: ApprovalStore;
   findings: FindingStore;
+  proposals: ProposalStore;
   schedules: ScheduleStore;
   workflows: WorkflowStore;
   eventRules: EventRuleStore;
@@ -72,6 +74,7 @@ export function getStores(workspaceRoot?: string): Stores {
       mcpServers: new McpServerStore(root),
       approvals: new ApprovalStore(root),
       findings: new FindingStore(root),
+      proposals: new ProposalStore(root),
       schedules: new ScheduleStore(root),
       workflows: new WorkflowStore(root),
       eventRules: new EventRuleStore(root),

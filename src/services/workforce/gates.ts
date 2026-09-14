@@ -15,6 +15,7 @@ export function gateMode(type: ApprovalType): ApprovalGateMode {
     case 'task-assignment': return gates.taskAssignment || 'auto';
     case 'run-execution': return gates.runExecution || 'auto';
     case 'config-change': return gates.configChange || 'auto';
+    case 'task-proposal': return gates.taskProposal || 'auto';
   }
 }
 
@@ -26,7 +27,7 @@ export function setApprovalGate(type: ApprovalType, mode: ApprovalGateMode): App
   const store = getStores().queue;
   const current = store.getSettings();
   const gates = { ...DEFAULT_APPROVAL_GATES, ...(current.approvalGates || {}) };
-  const key = type === 'task-assignment' ? 'taskAssignment' : type === 'run-execution' ? 'runExecution' : 'configChange';
+  const key = type === 'task-assignment' ? 'taskAssignment' : type === 'run-execution' ? 'runExecution' : type === 'config-change' ? 'configChange' : 'taskProposal';
   const next: ApprovalGates = { ...gates, [key]: mode };
   store.saveSettings({ approvalGates: next });
   return next;

@@ -86,6 +86,28 @@ export interface FindingAgentReview {
 
 export type FindingAgentReviewState = 'requested' | 'validated';
 
+// v0.12 autonomous classification: task proposals (additive, non-breaking)
+export type TaskProposalStatus = 'pending' | 'applied' | 'duplicate' | 'skipped' | 'failed' | 'rejected';
+
+export interface TaskProposal {
+  id: string;
+  findingId: string;
+  runId: string;
+  agent: string;
+  agentName?: string;
+  title: string;
+  type: Task['type'];
+  priority: Task['priority'];
+  workflow?: string;
+  confidence?: number;
+  status: TaskProposalStatus;
+  proposedBy?: string;
+  appliedTaskId?: string;
+  appliedAt?: string;
+  reason?: string;
+  createdAt: string;
+}
+
 export interface Finding {
   id: string;
   title: string;
@@ -183,12 +205,12 @@ export interface Policy {
 
 export const DEFAULT_POLICY: Policy = {
   roles: {
-    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage'],
+    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:propose', 'classification:review', 'classification:apply'],
     developer: ['task:claim', 'run:create'],
-    reviewer: ['task:assign', 'task:claim', 'finding:validate'],
+    reviewer: ['task:assign', 'task:claim', 'finding:validate', 'classification:review'],
     observer: [],
-    agent: ['run:create', 'run:update', 'run:cancel', 'task:claim', 'mcp:list', 'mcp:call'],
-    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure', 'event-rule:manage']
+    agent: ['run:create', 'run:update', 'run:cancel', 'task:claim', 'mcp:list', 'mcp:call', 'classification:propose'],
+    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:review', 'classification:apply']
   },
   overrides: []
 };
@@ -199,15 +221,17 @@ export interface ApprovalGates {
   taskAssignment: ApprovalGateMode;
   runExecution: ApprovalGateMode;
   configChange: ApprovalGateMode;
+  taskProposal: ApprovalGateMode;
 }
 
 export const DEFAULT_APPROVAL_GATES: ApprovalGates = {
   taskAssignment: 'auto',
   runExecution: 'auto',
-  configChange: 'auto'
+  configChange: 'auto',
+  taskProposal: 'auto'
 };
 
-export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change';
+export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change' | 'task-proposal';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ApprovalPendingAssignTask {
@@ -235,10 +259,17 @@ export interface ApprovalPendingConfigChange {
   requesterId?: string;
 }
 
+export interface ApprovalPendingApplyProposal {
+  op: 'apply-proposal';
+  proposalId: string;
+  requesterId?: string;
+}
+
 export type ApprovalPending =
   | ApprovalPendingAssignTask
   | ApprovalPendingStartRun
-  | ApprovalPendingConfigChange;
+  | ApprovalPendingConfigChange
+  | ApprovalPendingApplyProposal;
 
 export interface Approval {
   id: string;
@@ -265,6 +296,7 @@ export interface QueueSettings {
   runTimeoutMs: number;
   maxRunRetries: number;
   retryBackoffMs: number;
+  maxProposalsPerPass?: number;
   approvalGates: ApprovalGates;
 }
 
@@ -278,6 +310,7 @@ export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
   runTimeoutMs: 600000,
   maxRunRetries: 1,
   retryBackoffMs: 30000,
+  maxProposalsPerPass: 5,
   approvalGates: { ...DEFAULT_APPROVAL_GATES }
 };
 
@@ -575,6 +608,11 @@ export interface SchedulesData {
 
 export interface FindingsData {
   findings: Finding[];
+}
+
+// v0.12 autonomous classification: persisted task proposals (additive, non-breaking)
+export interface ProposalsData {
+  proposals: TaskProposal[];
 }
 
 // v0.11 event rules: event-based asynchronous automation (additive, non-breaking)

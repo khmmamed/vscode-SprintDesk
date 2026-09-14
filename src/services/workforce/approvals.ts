@@ -1,6 +1,7 @@
 import { getStores } from '../../data/stores';
 import { Approval, ApprovalGateMode, ApprovalGates, ApprovalStatus, ApprovalType } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
+import { applyProposal } from './classification/classificationService';
 import * as queueService from './queueService';
 import * as workforceService from './workforceService';
 import { emitEvent } from './events';
@@ -44,6 +45,9 @@ export function resolveApproval(approvalId: string, decision: ApprovalDecision, 
         break;
       case 'apply-config':
         workforceService.performConfigChange(pending.employeeId, pending.changes, pending.requesterId || actorId);
+        break;
+      case 'apply-proposal':
+        applyProposal(pending.proposalId, pending.requesterId || actorId);
         break;
     }
   }
