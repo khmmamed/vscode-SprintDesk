@@ -40,6 +40,19 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Observable failures:** invalid suggestions and permission denials become `failed` proposals with a reason —
   never an implicit task and never a silence drop.
 
+### v0.12 Slice D — Autonomous classification (LLM + review)
+
+- **LLM classifier for findings without suggestions:** `worker/classifier.ts` turns a pending finding into a
+  `TaskProposal` via the configured model profile (`classifyFinding`), normalizing the model's JSON against the
+  real enums; failures (unparseable output or a throwing provider) become `failed` proposals with a reason — the
+  whole pass never throws.
+- **Ollama-first pass:** `runClassificationPass` now drives the LLM for findings that lack deterministic
+  suggestions whenever the queue worker mode is `ollama` (or `classifyWithLlm` is requested); deterministic
+  suggestions still short-circuit the model entirely.
+- **Control Center trigger:** a **Classify Findings** button runs a pass from the Runs tab and reports
+  scanned / proposed / applied / approval-requested / failed / duplicates; the newest classification proposals
+  appear as a summary line so review stays gate-driven.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution

@@ -7,6 +7,7 @@ import * as workforceService from '../../src/services/workforce/workforceService
 import * as taskService from '../../src/services/taskService';
 import * as approvals from '../../src/services/workforce/approvals';
 import * as classificationService from '../../src/services/workforce/classification/classificationService';
+import { classifyFinding } from '../../src/services/workforce/worker/classifier';
 import * as eventRulesService from '../../src/services/workforce/eventRulesService';
 import { emitEvent } from '../../src/services/workforce/events';
 import { getRunsByFilter, runDetail, getQueueSnapshot, getActivitySummary, getExecutionWindowReport } from '../../src/services/workforce/observability';
@@ -18,7 +19,7 @@ import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/se
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
 import { setApprovalGate, requestApproval } from '../../src/services/workforce/gates';
 import { runSchedulerPass } from '../../src/services/workforce/scheduler/scheduler';
-import { LLMProvider } from '../../src/services/workforce/llm/types';
+import { ChatMessage, LLMProvider } from '../../src/services/workforce/llm/types';
 
 describe('queueService.createRun', () => {
   let ws: TestWorkspace;
@@ -1642,7 +1643,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(freeProposal?.status, 'pending', 'a finished task does not block classification');
   });
 
-  it('honors the per-pass cap and classifies the highest severity first', () => {
+  it('honors the per-pass cap and classifies the highest severity first', async () => {
     setApprovalGate('task-proposal', 'auto');
     const agent = seedAgent();
     for (let i = 0; i < 5; i += 1) {
@@ -1653,7 +1654,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     }
     getStores().queue.saveSettings({ maxProposalsPerPass: 3 });
 
-    const result = classificationService.runClassificationPass();
+    const result = await classificationService.runClassificationPass();
     assert.strictEqual(result.scanned, 7);
     assert.strictEqual(result.proposed, 3);
     assert.strictEqual(result.applied, 3);
@@ -1665,10 +1666,10 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.ok(titles.some(t => t.startsWith('Low severity item')), 'one low severity item fits the cap');
   });
 
-  it('requests approval under a manual gate and applies only on approve', () => {
+  it('requests approval under a manual gate and applies only on approve', async () => {
     setApprovalGate('task-proposal', 'manual');
     const approved = seedFinding({ title: 'Fragile checkout flow', runId: 'run_checkout' });
-    const result = classificationService.runClassificationPass();
+    const result = await classificationService.runClassificationPass();
 
     assert.strictEqual(result.requestedApproval, 1);
     const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
@@ -1684,10 +1685,10 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(getStores().findings.getById(approved.id)?.status, 'approved');
   });
 
-  it('keeps a manual-gate proposal unapplied on a reject', () => {
+  it('keeps a manual-gate proposal unapplied on a reject', async () => {
     setApprovalGate('task-proposal', 'manual');
     const finding = seedFinding({ title: 'Slow build pipeline', runId: 'run_build' });
-    classificationService.runClassificationPass();
+    await classificationService.runClassificationPass();
     const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
     assert.strictEqual(approvalsList.length, 1);
 
@@ -1698,12 +1699,12 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(getDataService().loadTasks().length, 0, 'no task is created on a reject');
   });
 
-  it('does not create a task when the actor lacks classification:apply', () => {
+  it('does not create a task when the actor lacks classification:apply', async () => {
     setApprovalGate('task-proposal', 'auto');
     const plainAgent = seedAgent();
     const finding = seedFinding({ title: 'Secret scan backlog', runId: 'run_secret' });
 
-    const result = classificationService.runClassificationPass({ actorId: plainAgent.id });
+    const result = await classificationService.runClassificationPass({ actorId: plainAgent.id });
     assert.strictEqual(result.applied, 0);
     assert.strictEqual(result.failed, 1);
     assert.strictEqual(getStores().proposals.byFindingId(finding.id)?.status, 'failed');
@@ -1718,6 +1719,139 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.ok(proposal?.reason, 'failure carries a reason');
     assert.strictEqual(getStores().proposals.loadAll().length, 1);
     assert.strictEqual(getDataService().loadTasks().length, 0, 'no task is created from a failed suggestion');
+  });
+});
+
+describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    taskService.getTaskService(ws.root);
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function seedFinding(overrides: Partial<Parameters<typeof findingsService.createFinding>[0]> = {}) {
+    return findingsService.createFinding({
+      title: 'Ambiguous network timeout',
+      runId: 'run_llm_1',
+      agent: 'emp_none',
+      severity: 'medium',
+      ...overrides
+    });
+  }
+
+  function fakeProvider(json: Record<string, unknown>): LLMProvider {
+    return {
+      kind: 'ollama' as any,
+      async chat() { return { text: JSON.stringify(json) }; }
+    };
+  }
+
+  function failingProvider(message: string): LLMProvider {
+    return {
+      kind: 'ollama' as any,
+      async chat() { throw new Error(message); }
+    };
+  }
+
+  function textualProvider(text: string): LLMProvider {
+    return {
+      kind: 'ollama' as any,
+      async chat() { return { text }; }
+    };
+  }
+
+  function uniqueTitledProvider(): LLMProvider {
+    return {
+      kind: 'ollama' as any,
+      async chat({ messages }: any) {
+        const user = messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content).join('\n');
+        const titleMatch = user.match(/Title:\s*(.+)\n/);
+        const title = titleMatch ? titleMatch[1].trim() : 'Classified finding';
+        return { text: JSON.stringify({ title: `Classified: ${title}`, type: 'feature', priority: 'medium' }) };
+      }
+    };
+  }
+
+  it('classifies a finding from a fake provider into a valid proposal', async () => {
+    const agent = seedAgent({ name: 'Morocco Agent', modelProfile: { name: 'Morocco Agent', provider: 'ollama', model: 'gemma4', baseUrl: 'http://localhost:11434' } });
+    const finding = seedFinding({ agent: agent.id });
+
+    const outcome = await classifyFinding(finding, { providerOverride: fakeProvider({ title: 'Add timeout handling', type: 'bug', priority: 'high', workflow: 'w_timeouts', confidence: 0.95 }) });
+    assert.strictEqual(outcome.ok, true);
+    if (!outcome.ok) {return;}
+    assert.strictEqual(outcome.value.title, 'Add timeout handling');
+    assert.strictEqual(outcome.value.type, 'bug');
+    assert.strictEqual(outcome.value.priority, 'high');
+    assert.strictEqual(outcome.value.workflow, 'w_timeouts');
+    assert.strictEqual(outcome.value.confidence, 0.95);
+
+    const proposal = classificationService.createProposal(finding, outcome.value, agent.id);
+    assert.strictEqual(proposal?.status, 'pending');
+    assert.strictEqual(proposal?.title, 'Add timeout handling');
+  });
+
+  it('marks provider failures and unclassifiable output as failed without throwing', async () => {
+    setApprovalGate('task-proposal', 'auto');
+    const agent = seedAgent({ name: 'Fail Agent', modelProfile: { name: 'Fail Agent', provider: 'ollama', model: 'gemma4', baseUrl: 'http://localhost:11434' } });
+    const findingJunk = seedFinding({ title: 'Junk output finding', runId: 'run_junk', agent: agent.id });
+    const findingThrow = seedFinding({ title: 'Throwing provider finding', runId: 'run_throw', agent: agent.id });
+
+    const result = await classificationService.runClassificationPass({
+      classifyWithLlm: true,
+      providerOverride: textualProvider('This is not JSON at all')
+    });
+    assert.strictEqual(result.failed, 2);
+    assert.strictEqual(result.applied, 0);
+    assert.strictEqual(getStores().proposals.byFindingId(findingJunk.id)?.status, 'failed');
+    assert.ok(getStores().proposals.byFindingId(findingJunk.id)?.reason);
+    assert.strictEqual(getStores().proposals.byFindingId(findingThrow.id)?.status, 'failed');
+    assert.strictEqual(getDataService().loadTasks().length, 0);
+  });
+
+  it('falls back to a severity-based priority when the provider omits priority', async () => {
+    const agent = seedAgent({ name: 'Low Agent', modelProfile: { name: 'Low Agent', provider: 'ollama', model: 'gemma4', baseUrl: 'http://localhost:11434' } });
+    const finding = seedFinding({ severity: 'low', agent: agent.id });
+
+    const outcome = await classifyFinding(finding, { providerOverride: fakeProvider({ title: 'Archive expired cache', type: 'chore' }) });
+    assert.strictEqual(outcome.ok, true);
+    if (!outcome.ok) {return;}
+    assert.strictEqual(outcome.value.priority, undefined, 'provider omitted priority');
+
+    const proposal = classificationService.createProposal(finding, outcome.value, agent.id);
+    assert.strictEqual(proposal?.priority, 'low', 'severity-to-priority fallback applied');
+  });
+
+  it('runs a full LLM pass with a fake provider, applies under a gate, and respects the cap', async () => {
+    setApprovalGate('task-proposal', 'auto');
+    getStores().queue.saveSettings({ maxProposalsPerPass: 2 });
+    const agent = seedAgent({ name: 'Batch Agent', modelProfile: { name: 'Batch Agent', provider: 'ollama', model: 'gemma4', baseUrl: 'http://localhost:11434' } });
+
+    for (let i = 0; i < 3; i += 1) {
+      seedFinding({ title: `Needs classification ${i}`, runId: `run_cap_${i}`, agent: agent.id, severity: i === 0 ? 'high' : 'low' });
+    }
+
+    const result = await classificationService.runClassificationPass({
+      classifyWithLlm: true,
+      providerOverride: uniqueTitledProvider()
+    });
+
+    assert.strictEqual(result.scanned, 3);
+    assert.strictEqual(result.proposed, 2);
+    assert.strictEqual(result.applied, 2);
+    assert.strictEqual(result.duplicates, 0);
+    assert.strictEqual(getDataService().loadTasks().length, 2);
+    assert.strictEqual(getStores().proposals.loadAll().length, 2, 'the capped-out finding is not proposed');
   });
 });
 

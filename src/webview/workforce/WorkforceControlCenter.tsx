@@ -188,6 +188,20 @@ interface ApprovalDto {
   decisionBy?: string;
 }
 
+interface ProposalDto {
+  id: string;
+  findingId: string;
+  title: string;
+  type: string;
+  priority: string;
+  workflow?: string;
+  confidence?: number;
+  status: string;
+  createdAt: string;
+  appliedTaskId?: string;
+  reason?: string;
+}
+
 interface ScheduleDto {
   id: string;
   name: string;
@@ -536,6 +550,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [runFilter, setRunFilter] = React.useState<RunFilter>("all");
   const [findingFilter, setFindingFilter] = React.useState<FindingFilter>("all");
   const [queueResult, setQueueResult] = React.useState<string>("");
+  const [proposals, setProposals] = React.useState<ProposalDto[]>([]);
+  const [classifyResult, setClassifyResult] = React.useState<string>("");
   const [runAction, setRunAction] = React.useState<string>("");
   const [runActionError, setRunActionError] = React.useState<string>("");
   const [findingAction, setFindingAction] = React.useState<string>("");
@@ -672,6 +688,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         if (payload) setQueue(payload);
       } else if (command === "SET_WORKFORCE_APPROVALS") {
         setApprovals(payload || []);
+      } else if (command === "SET_WORKFORCE_PROPOSALS") {
+        setProposals(payload || []);
       } else if (command === "APPROVAL_UPDATED") {
         const approval: ApprovalDto | undefined = payload?.approval;
         if (approval) {
@@ -716,6 +734,12 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (payload?.rule) setRuleResult("Rule created.");
           if (payload?.deleted !== undefined) setRuleResult(payload?.deleted ? "Rule deleted." : "");
           if (payload?.queueProcessed) setQueueResult(`Queue pass: ${payload.claimed} claimed, ${payload.started} started, ${payload.skipped} skipped.`);
+          if (payload?.scanned !== undefined) {
+            setClassifyResult(
+              `Classification pass: ${payload.proposed} proposed, ${payload.applied} applied, ` +
+              `${payload.requestedApproval} approval-requested, ${payload.failed} failed, ${payload.duplicates} duplicates (${payload.scanned} scanned).`
+            );
+          }
           if (payload?.retried) setQueueResult(`Run ${payload.run?.id} queued for retry.`);
           if (payload?.cancelled) {
             const name = payload?.run?.taskTitle || payload?.runId;
@@ -778,6 +802,11 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const processQueueNow = (): void => {
     setQueueResult("");
     postRequest("WORKFORCE_PROCESS_QUEUE");
+  };
+
+  const classifyNow = (): void => {
+    setClassifyResult("");
+    postRequest("WORKFORCE_RUN_CLASSIFICATION", {});
   };
 
   const gotoRuns = (filter: RunFilter): void => {
@@ -1311,8 +1340,17 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
               ))}
             </div>
             <button style={styles.button} onClick={processQueueNow}>Process Queue</button>
+            <button style={styles.button} onClick={classifyNow}>Classify Findings</button>
           </div>
           {queueResult && <div style={styles.ok}>{queueResult}</div>}
+          {classifyResult && <div style={styles.ok}>{classifyResult}</div>}
+          {proposals.length > 0 && (
+            <div style={{ fontSize: 12, marginBottom: 8 }}>
+              <span style={styles.muted}>
+                {proposals.length} classification proposals (newest first)
+              </span>
+            </div>
+          )}
           {runActionError && <div style={styles.error}>{runActionError}</div>}
           {runAction && <div style={styles.ok}>{runAction}</div>}
           <div style={{ fontSize: 12, marginBottom: 8 }}>

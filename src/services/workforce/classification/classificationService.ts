@@ -7,6 +7,8 @@ import { requireEmployeePermission } from '../capabilityService';
 import { emitEvent } from '../events';
 import { gateMode, requestApproval } from '../gates';
 import * as findingsService from '../findingsService';
+import { classifyFinding as llmClassifyFinding, ClassificationOutcome } from '../worker/classifier';
+import { LLMProvider } from '../llm/types';
 
 export const TASK_TYPES: Task['type'][] = ['feature', 'bug', 'chore', 'doc', 'test'];
 export const TASK_PRIORITIES: Task['priority'][] = ['high', 'medium', 'low'];
@@ -107,7 +109,7 @@ export function validateSuggestion(
   };
 }
 
-export function createProposal(finding: Finding, classification?: ProposalClassification, proposedBy?: string): TaskProposal | undefined {
+export function createProposal(finding: Finding, classification?: ProposalClassification, proposedBy?: string, failedReason?: string): TaskProposal | undefined {
   const existing = getStores().proposals.byFindingId(finding.id);
   if (existing) {return existing;}
 
@@ -130,8 +132,9 @@ export function createProposal(finding: Finding, classification?: ProposalClassi
     ...(resolved.reason ? { reason: resolved.reason } : {})
   };
 
-  if (resolved.reason) {
+  if (resolved.reason || failedReason) {
     proposal.status = 'failed';
+    proposal.reason = failedReason || resolved.reason;
   } else if (hasOpenTaskWithTitle(proposal.title)) {
     proposal.status = 'duplicate';
     proposal.reason = 'open task with a matching title already exists';
@@ -236,11 +239,19 @@ export function applyProposal(proposalIdInput: string, actorId?: string): TaskPr
   return getStores().proposals.getById(proposal.id);
 }
 
-export function runClassificationPass(options: { limit?: number; actorId?: string } = {}): ClassificationPassResult {
+export interface ClassificationPassOptions {
+  limit?: number;
+  actorId?: string;
+  classifyWithLlm?: boolean;
+  providerOverride?: LLMProvider;
+}
+
+export async function runClassificationPass(options: ClassificationPassOptions = {}): Promise<ClassificationPassResult> {
   const cap = options.limit ?? getStores().queue.getSettings().maxProposalsPerPass ?? 5;
+  const useLlm = options.classifyWithLlm ?? (getStores().queue.getSettings().workerMode === 'ollama');
   const findings = findingsService
     .pendingFindings()
-    .filter(f => hasDeterministicSuggestion(f))
+    .filter(f => hasDeterministicSuggestion(f) || useLlm)
     .sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || (a.timestamp < b.timestamp ? -1 : 1));
 
   const result: ClassificationPassResult = { scanned: findings.length, proposed: 0, duplicates: 0, applied: 0, requestedApproval: 0, failed: 0 };
@@ -250,7 +261,22 @@ export function runClassificationPass(options: { limit?: number; actorId?: strin
     if (result.proposed >= limit) {break;}
     if (hasProposal(finding.id)) {continue;}
 
-    const proposal = createProposal(finding, undefined, options.actorId);
+    let classification: ProposalClassification | undefined;
+    let failedReason: string | undefined;
+
+    if (!hasDeterministicSuggestion(finding)) {
+      const outcome: ClassificationOutcome = await llmClassifyFinding(
+        finding,
+        options.providerOverride ? { providerOverride: options.providerOverride } : {}
+      );
+      if (!outcome.ok) {
+        failedReason = outcome.reason;
+      } else {
+        classification = outcome.value;
+      }
+    }
+
+    const proposal = createProposal(finding, classification, options.actorId, failedReason);
     if (!proposal) {continue;}
 
     if (proposal.status === 'duplicate') {

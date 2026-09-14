@@ -4,6 +4,7 @@ import * as fileService from '../../services/fileService';
 import * as taskService from '../../services/taskService';
 import * as approvals from '../../services/workforce/approvals';
 import * as queueService from '../../services/workforce/queueService';
+import * as classificationService from '../../services/workforce/classification/classificationService';
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
 import { getActivitySummary, runDetail, getQueueSnapshot, getExecutionWindowReport } from '../../services/workforce/observability';
@@ -13,7 +14,7 @@ import * as eventRulesService from '../../services/workforce/eventRulesService';
 import * as executionWindowService from '../../services/workforce/executionWindowService';
 import { subscribeEvents } from '../../services/workforce/events';
 import { getDataService } from '../../data/DataService';
-import { Approval, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, Run, ScheduleRecord, Task, WorkerMode } from '../../data/types';
+import { Approval, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, Run, ScheduleRecord, Task, TaskProposal, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
@@ -179,6 +180,20 @@ export interface ApprovalDto {
   createdAt: string;
   resolvedAt?: string;
   decisionBy?: string;
+}
+
+export interface ProposalDto {
+  id: string;
+  findingId: string;
+  title: string;
+  type: string;
+  priority: string;
+  workflow?: string;
+  confidence?: number;
+  status: string;
+  createdAt: string;
+  appliedTaskId?: string;
+  reason?: string;
 }
 
 export interface ScheduleDto {
@@ -484,6 +499,30 @@ function approvalDtoById(id: string): ApprovalDto | undefined {
   return approval ? toApprovalDto(approval) : undefined;
 }
 
+function toProposalDto(p: TaskProposal): ProposalDto {
+  return {
+    id: p.id,
+    findingId: p.findingId,
+    title: p.title,
+    type: p.type,
+    priority: p.priority,
+    ...(p.workflow ? { workflow: p.workflow } : {}),
+    ...(p.confidence !== undefined ? { confidence: p.confidence } : {}),
+    status: p.status,
+    createdAt: p.createdAt,
+    ...(p.appliedTaskId ? { appliedTaskId: p.appliedTaskId } : {}),
+    ...(p.reason ? { reason: p.reason } : {})
+  };
+}
+
+function proposalDtos(): ProposalDto[] {
+  return getStores()
+    .proposals.loadAll()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 25)
+    .map(toProposalDto);
+}
+
 function scheduleDtos(): ScheduleDto[] {
   return getStores().schedules.loadAll().map((s: ScheduleRecord) => ({
     id: s.id,
@@ -532,6 +571,7 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_ACTIVITY', payload: activityEventDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_APPROVALS', payload: approvalDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_SCHEDULES', payload: scheduleDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_PROPOSALS', payload: proposalDtos() });
   } catch {
     // panel may be disposed mid-flight
   }
@@ -912,6 +952,17 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
             started: result.started.length,
             skipped: result.skipped.length
           });
+        } catch (error) {
+          postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_RUN_CLASSIFICATION') {
+        try {
+          const result = await classificationService.runClassificationPass({
+            classifyWithLlm: message?.payload?.classifyWithLlm
+          });
+          postResponse(newPanel, message?.requestId, result);
         } catch (error) {
           postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
         }
