@@ -210,6 +210,7 @@ interface ScheduleDto {
   enabled: boolean;
   kind: string;
   autonomyLevel: number;
+  action: string;
   cron?: string;
   intervalMs?: number;
   lastRunAt?: string;
@@ -1676,6 +1677,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 <span style={styles.name}>{s.name}</span>
                 <span style={{ ...styles.statusChip, color: s.enabled ? "#4caf50" : "#9e9e9e" }}>{s.enabled ? "active" : "paused"}</span>
                 <span style={styles.chip}>{s.kind}{s.cron ? ` · ${s.cron}` : s.intervalMs ? ` · every ${Math.round(s.intervalMs / 1000)}s` : ""}</span>
+                <span style={styles.chip}>{s.action === "classify" ? "classify" : "task"}</span>
                 <span style={styles.chip}>autonomy {s.autonomyLevel}</span>
                 {s.runCount > 0 && <span style={styles.chip}>{s.runCount} run{s.runCount === 1 ? "" : "s"}</span>}
                 <span style={{ flex: 1 }} />

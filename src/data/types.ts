@@ -571,6 +571,9 @@ export type AutonomyLevel = 0 | 1 | 2 | 3;
 // v0.8 scheduler semantics (additive, non-breaking)
 export type ScheduleKind = 'cron' | 'interval';
 
+// v0.12 scheduled classification: a schedule can fire a classification pass instead of a task+run (additive)
+export type ScheduleAction = 'task' | 'classify';
+
 export interface ScheduleTaskTemplate {
   name: string;
   title?: string;
@@ -586,7 +589,10 @@ export interface ScheduleRecord {
   enabled: boolean;
   kind: ScheduleKind;
   autonomyLevel: AutonomyLevel;
-  taskTemplate: ScheduleTaskTemplate;
+  // task schedules (default) materialize taskTemplate into a task + queued run;
+  // classify schedules replay the deterministic → LLM classification pass instead.
+  action?: ScheduleAction;
+  taskTemplate?: ScheduleTaskTemplate;
 
   // cron schedules (kind === 'cron') - 5-field deterministic expression
   cron?: string;

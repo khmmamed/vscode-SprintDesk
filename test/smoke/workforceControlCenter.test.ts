@@ -1432,7 +1432,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
     assert.strictEqual(fired?.payload['ruleId'], rule.id);
   });
 
-  it('routes a time-based schedule into a queued run (autonomy 2 = execute)', () => {
+  it('routes a time-based schedule into a queued run (autonomy 2 = execute)', async () => {
     seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
     const now = new Date(2026, 0, 15, 9, 0, 0);
     const schedule: ScheduleRecord = {
@@ -1449,7 +1449,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
     };
     getStores().schedules.add(schedule);
 
-    const result = runSchedulerPass({ stores: getStores(), dataService: getDataService(), now });
+    const result = await runSchedulerPass({ stores: getStores(), dataService: getDataService(), now });
     assert.strictEqual(result.fired.length, 1);
     assert.strictEqual(result.fired[0].mode, 'execute');
     assert.strictEqual(result.fired[0].scheduleId, 'sched-slice8');
@@ -1461,10 +1461,10 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
     assert.strictEqual(getStores().schedules.getById('sched-slice8')?.runCount, 1);
     assert.strictEqual(getStores().events.findByType('schedule.fired').length, 1);
 
-    const early = runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 30_000) });
+    const early = await runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 30_000) });
     assert.strictEqual(early.fired.length, 0, 'interval not elapsed → no duplicate');
 
-    const after = runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 120_000) });
+    const after = await runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 120_000) });
     assert.strictEqual(after.fired.length, 1, 'interval elapsed → fires again');
   });
 });
@@ -1968,6 +1968,133 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice E — proposals 
     const second = classificationService.applyProposal(proposal!.id, lead.id);
     assert.strictEqual(second?.status, 'applied', 're-applying an applied proposal is a no-op');
     assert.strictEqual(getDataService().loadTasks().length, 1, 'no second task is created');
+  });
+});
+
+describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled passes)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    taskService.getTaskService(ws.root);
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedSchedule(action: 'task' | 'classify', overrides: Partial<ScheduleRecord> = {}) {
+    const schedule: ScheduleRecord = {
+      id: 'sched-classify-f',
+      name: 'Daily Classification',
+      enabled: true,
+      kind: 'interval',
+      action,
+      autonomyLevel: 2,
+      intervalMs: 60_000,
+      runCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...overrides
+    };
+    getStores().schedules.add(schedule);
+    return schedule;
+  }
+
+  function seedFinding(overrides: Partial<Parameters<typeof findingsService.createFinding>[0]> = {}) {
+    return findingsService.createFinding({
+      title: 'Investigate scheduled flake',
+      runId: 'run_sched_seed',
+      agent: 'emp_none',
+      severity: 'medium',
+      suggestedTaskType: 'bug',
+      suggestedPriority: 'high',
+      suggestedWorkflow: 'w_fix',
+      ...overrides
+    });
+  }
+
+  it('an auto-gated scheduled pass turns findings into proposals and applied tasks', async () => {
+    setApprovalGate('task-proposal', 'auto');
+    seedSchedule('classify');
+    for (let i = 0; i < 2; i += 1) {
+      seedFinding({ title: `Scheduled item ${i}`, runId: `run_sched_${i}`, severity: 'high' });
+    }
+
+    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    assert.strictEqual(result.fired.length, 1);
+    const fired = result.fired[0];
+    assert.strictEqual(fired.mode, 'execute');
+    assert.strictEqual(fired.scheduleId, 'sched-classify-f');
+    assert.ok(fired.classification, 'a classify fire carries the classification summary');
+    assert.strictEqual(fired.classification!.proposed, 2);
+    assert.strictEqual(fired.classification!.applied, 2);
+
+    assert.strictEqual(getDataService().loadTasks().length, 2);
+    assert.strictEqual(getStores().proposals.loadAll().filter(p => p.status === 'applied').length, 2);
+    assert.strictEqual(getStores().events.findByType('classification.pass').length, 1);
+    assert.strictEqual(getStores().schedules.getById('sched-classify-f')?.runCount, 1);
+  });
+
+  it('a manual task-proposal gate holds scheduled classifications for approval', async () => {
+    setApprovalGate('task-proposal', 'manual');
+    seedSchedule('classify');
+    seedFinding({ title: 'Scheduled risky fix', runId: 'run_manual' });
+
+    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    assert.strictEqual(result.fired.length, 1);
+    assert.strictEqual(result.fired[0].classification!.requestedApproval, 1);
+    assert.strictEqual(getDataService().loadTasks().length, 0, 'nothing is applied before approval');
+
+    const pendingApprovals = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
+    assert.strictEqual(pendingApprovals.length, 1);
+    assert.strictEqual(getStores().proposals.loadAll().length, 1);
+  });
+
+  it('a disabled classify schedule is skipped without running a pass', async () => {
+    seedSchedule('classify', { enabled: false });
+    seedFinding({ title: 'Must not classify', runId: 'run_disabled' });
+
+    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    assert.strictEqual(result.fired.length, 0);
+    assert.deepStrictEqual(result.skipped, [{ scheduleId: 'sched-classify-f', reason: 'disabled' }]);
+    assert.strictEqual(getStores().proposals.loadAll().length, 0);
+    assert.strictEqual(getStores().events.findByType('classification.pass').length, 0);
+  });
+
+  it('scheduled classification honors maxProposalsPerPass', async () => {
+    setApprovalGate('task-proposal', 'auto');
+    seedSchedule('classify');
+    for (let i = 0; i < 5; i += 1) {
+      seedFinding({ title: `Capped item ${i}`, runId: `run_cap_${i}`, severity: 'low' });
+    }
+    getStores().queue.saveSettings({ maxProposalsPerPass: 2 });
+
+    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    const fired = result.fired[0];
+    assert.strictEqual(fired.classification!.scanned, 5);
+    assert.strictEqual(fired.classification!.proposed, 2);
+    assert.strictEqual(fired.classification!.applied, 2);
+    assert.strictEqual(getDataService().loadTasks().length, 2);
+  });
+
+  it('overlapping or back-to-back passes never duplicate proposals or tasks', async () => {
+    setApprovalGate('task-proposal', 'auto');
+    const now = new Date(2026, 0, 16, 8, 0, 0);
+    seedSchedule('classify');
+    seedFinding({ title: 'Only once', runId: 'run_once' });
+
+    await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now });
+    assert.strictEqual(getDataService().loadTasks().length, 1);
+
+    const early = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(now.getTime() + 30_000) });
+    assert.strictEqual(early.fired.length, 0, 'interval not elapsed → no overlapping pass');
+
+    const after = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(now.getTime() + 120_000) });
+    assert.strictEqual(after.fired.length, 1, 'the next occurrence fires again');
+    assert.strictEqual(after.fired[0].classification!.proposed, 0, 'no pending findings → no new proposals');
+    assert.strictEqual(getStores().proposals.loadAll().length, 1, 'no duplicate proposal');
+    assert.strictEqual(getDataService().loadTasks().length, 1, 'no duplicate task');
   });
 });
 

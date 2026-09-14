@@ -4,6 +4,7 @@ import { getTaskService } from '../../taskService';
 import { emitEvent } from '../events';
 import { AutonomyLevel, Run, ScheduleRecord, Task } from '../../../data/types';
 import { CronExpression, CronParseError, matchesCron, parseCron } from './cronParser';
+import { runClassificationPass, ClassificationPassResult } from '../classification/classificationService';
 
 export const MAX_CRON_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const MAX_CRON_LOOKBACK_STEPS = 24 * 60;
@@ -30,6 +31,7 @@ export interface ScheduleFiredResult {
   taskId?: string;
   taskCode?: string;
   runId?: string;
+  classification?: ClassificationPassResult;
 }
 
 export interface ScheduleSkippedResult {
@@ -173,8 +175,9 @@ function createQueuedRun(stores: Stores, taskId: string, now: Date): Run {
   return run;
 }
 
-function buildAndAddTask(dataService: DataService, schedule: ScheduleRecord, now: Date): Task {
+function buildAndAddTask(dataService: DataService, schedule: ScheduleRecord, now: Date): Task | undefined {
   const template = schedule.taskTemplate;
+  if (!template) {return undefined;}
   const task = getTaskService(dataService.getWorkspaceRoot()).createTask({
     title: template.title || template.name,
     type: template.type,
@@ -209,7 +212,7 @@ function updateScheduleState(
   stores.schedules.update(schedule.id, updates);
 }
 
-export function runSchedulerPass(options: SchedulerPassOptions = {}): SchedulerPassResult {
+export async function runSchedulerPass(options: SchedulerPassOptions = {}): Promise<SchedulerPassResult> {
   const now = options.now || new Date();
   const dataService = options.dataService || getDataService();
   const stores = options.stores || getStores(dataService.getWorkspaceRoot());
@@ -227,7 +230,7 @@ export function runSchedulerPass(options: SchedulerPassOptions = {}): SchedulerP
 
     if (schedule.autonomyLevel === 1) {
       // Dry-run observe mode (conservative default): record occurrences
-      // without creating tasks or runs.
+      // without creating tasks, runs, or classification passes.
       if (!schedule.enabled) {
         skipped.push({ scheduleId: schedule.id, reason: 'disabled' });
         continue;
@@ -260,7 +263,32 @@ export function runSchedulerPass(options: SchedulerPassOptions = {}): SchedulerP
       continue;
     }
 
+    if ((schedule.action ?? 'task') === 'classify') {
+      // Fires the existing classification pipeline (deterministic → LLM), which
+      // itself honors maxProposalsPerPass, the task-proposal gate, dedup, and cap.
+      const classification = await runClassificationPass();
+      updateScheduleState(stores, schedule, occurrenceKey, now, true);
+      fired.push({
+        scheduleId: schedule.id,
+        name: schedule.name,
+        occurrenceKey,
+        mode: 'execute',
+        autonomyLevel: schedule.autonomyLevel,
+        classification
+      });
+      emitEvent('classification.pass', 'scheduler', {
+        scheduleId: schedule.id,
+        occurrenceKey,
+        ...classification
+      });
+      continue;
+    }
+
     const task = buildAndAddTask(dataService, schedule, now);
+    if (!task) {
+      skipped.push({ scheduleId: schedule.id, reason: 'invalid-interval' });
+      continue;
+    }
     const run = createQueuedRun(stores, task.id, now);
     updateScheduleState(stores, schedule, occurrenceKey, now, true);
 

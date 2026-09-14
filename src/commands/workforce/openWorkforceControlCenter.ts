@@ -202,6 +202,7 @@ export interface ScheduleDto {
   enabled: boolean;
   kind: string;
   autonomyLevel: number;
+  action: string;
   cron?: string;
   intervalMs?: number;
   lastRunAt?: string;
@@ -530,6 +531,7 @@ function scheduleDtos(): ScheduleDto[] {
     enabled: s.enabled,
     kind: s.kind,
     autonomyLevel: s.autonomyLevel,
+    action: s.action ?? 'task',
     cron: s.cron,
     intervalMs: s.intervalMs,
     lastRunAt: s.lastRunAt,

@@ -65,6 +65,20 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Live feedback:** apply/reject post a targeted `PROPOSAL_UPDATED` patch that updates the card in place plus
   a `WORKFORCE_RESPONSE` summary; denials surface a specific permission error instead of silently failing.
 
+### v0.12 Slice F — Scheduler-driven classification passes
+
+- **Scheduled classification:** a schedule can now declare `action: classify` (additive, `task` remains the
+  default) so a time-based occurrence fires the existing deterministic → LLM classification pipeline instead
+  of materializing a task. The scheduler triggers `runClassificationPass` — it never duplicates classification
+  logic — and surfaces the pass summary in the fired result plus a `classification.pass` event.
+- **The same guardrails apply:** scheduled passes respect `maxProposalsPerPass`, honor the `task-proposal`
+  approval gate (`auto` applies straight through, `manual` routes every proposal to the approvals queue), and
+  reuse `createProposal`/`applyProposal` dedup so a finding can never produce two proposals or tasks.
+- **Overlap-safe:** a fire records the occurrence via the same `lastOccurrenceKey` bookkeeping as task
+  schedules, so back-to-back passes at the same `now` are skipped and re-runs over the same findings are no-ops.
+- **Surface:** the Schedules tab shows the schedule action (`task` / `classify`) so classify schedules are
+  distinguishable at a glance.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution
