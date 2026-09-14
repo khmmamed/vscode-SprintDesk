@@ -67,11 +67,22 @@
 - Project status monitoring
 - Project organization tools
 
-## Workforce & Autonomous Work (experimental, v0.7–v0.9)
+## Workforce & Autonomous Work (v0.7–v0.11)
 
-> ⚠️ **Experimental.** Headless-first and covered by the smoke suite. The VS Code UI (webview planning,
-> dashboards) is not yet wired to the workforce runtime. See
-> [`v0.9-workforce-guide.md`](v0.9-workforce-guide.md) and the milestone contracts for details.
+> Operated end-to-end from the **Workforce Control Center** (`sprintdesk.openWorkforce`), which now covers
+> the full lifecycle — Employee lookups, Agent configuration, Findings, Runs + Queue, Execution Windows,
+> Event Rules, Workflows, Schedules, Approvals, and a live Activity stream — with no YAML/CLI/MCP required for
+> daily operation. See [`v0.9-workforce-guide.md`](v0.9-workforce-guide.md) and
+> [`v0.11-upcomming.md`](v0.11-upcomming.md).
+
+### 🎛 Control Center (v0.10–v0.11)
+- Webview panel with Employees / Runs / Create Task & Run / Findings / Event Rules / Execution Windows /
+  Workflows / Schedules / Approvals / Tasks / Activity tabs
+- Live dashboard strip + event ticker; clickable counters and cross-entity navigation (no dead ends)
+- Run actions (Cancel / Retry / Run Again / Process Queue), finding actions (Validate / Approve / Reject),
+  window actions (Execute / Cancel), inline success & error feedback
+- States handled deliberately: loading (banner until first snapshot), empty (per-tab guidance),
+  error/in-progress/completed
 
 ### 👥 Employees & Workforce
 - Human/agent employees with certified skills (`.SprintDesk/workforce/skills.yml`, seeded catalog of 8)
@@ -82,13 +93,13 @@
 ### 🔐 RBAC & Policy
 - Role → permission matrix (`lead` / `developer` / `reviewer` / `observer` / `agent` / `human`)
 - Per-employee allow/deny overrides (`.SprintDesk/workforce/policy.yml`)
-- Lifecycle gates on assignment, claim, and run start
+- Lifecycle gates on assignment, claim, run start, run execution, and config change
 
 ### 🔄 Queue, Runs & Worker
 - Task → Run → Queue → Worker pipeline (`.SprintDesk/data/runs.yml`)
-- Deterministic scheduler pass: `createdAt asc → attempts asc → id asc`, explicit skip reasons
+- Deterministic queue pass: `createdAt asc → attempts asc → id asc`, explicit skip reasons
 - Single transition path `startRun` / `finishRun` / `cancelRun` with audit events
-- Headless (spawn), terminal, and noop worker runtimes
+- Headless (spawn), terminal, noop, and ollama worker runtimes
 
 ### 🔁 Retry Policy
 - `maxRunRetries`, `retryBackoffMs` backoff gating, `runTimeoutMs` per-run timeout
@@ -100,15 +111,28 @@
 
 ### 🧠 LLM Providers
 - ollama / openai clients behind a credential facade
-- Per-employee `modelProfile` selection (model output today is data, never authorization)
+- Per-employee `modelProfile` selection; agents configured with provider/model/capabilities from the UI
+- Model output today is data, never authorization
 
 ### 🔌 MCP Servers & Toolset
-- Built-in `sprintdesk_*` toolset (70 tools) over HTTP/stdio
+- Built-in `sprintdesk_*` toolset over HTTP/stdio
 - External MCP server registry (`.SprintDesk/mcp/servers.yml`) with capability-gated `mcpCall`
 
-### 📡 Events & Findings
+### 📦 Execution Windows (v0.11)
+- Deliberate synchronous batches: `Human → Window → Workflow → Task/Run → Queue → Worker → Finding →
+  Validation → Human Decision` (`.SprintDesk/workforce/executionWindows.yml`)
+- Auto-advance to completion via run events; cancellation; persisted completion summary
+
+### 📡 Events & Event Rules (v0.11)
 - Lifecycle event emission (`.SprintDesk/data/events.yml`) on run / queue / employee transitions
+- Event Rules: idempotent, re-entrancy-safe `Event → Rule → Workflow → Task/Run` async automation
 - Activity summary, audit trail, and history tracking
+
+### 📝 Findings & Validation (v0.11)
+- Findings materialized from completed-run output as first-class persisted objects with
+  severity/confidence/category/suggested workflow
+- Agent validation (recommendation, confidence, reason; `finding:validate` authorized) then human decision
+  (`approval:review`) — agents recommend, humans decide
 
 ### ✅ Reviews & Approval Gates
 - `auto` / `manual` gates for task-assignment, run-execution, config-change

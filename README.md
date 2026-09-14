@@ -24,32 +24,38 @@ A productivity extension for managing sprints, tasks, epics, backlogs, and teams
 - Add AI agents to help with tasks
 - Track all changes with history view
 
-### Workforce & Autonomous Work (experimental)
-SprintDesk v0.9 ships an experimental **workforce runtime**: a deterministic, policy-gated pipeline that maps
-employees → skills → tools → permissions → tasks, without an LLM in the scheduling path. See
-[`docs/v0.9-workforce-guide.md`](docs/v0.9-workforce-guide.md) for the full architecture.
+### Workforce & Autonomous Work
+SprintDesk ships a **workforce runtime**: a deterministic, policy-gated pipeline that maps
+employees → skills → tools → permissions → tasks, with an LLM executing run work (ollama/openai). The whole
+pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWorkforce`). See
+[`docs/v0.9-workforce-guide.md`](docs/v0.9-workforce-guide.md) for the runtime architecture and
+[`docs/v0.11-upcomming.md`](docs/v0.11-upcomming.md) for the product model.
 
+- **Control Center (v0.11)** — a single webview that operates the entire lifecycle with no YAML/CLI/MCP:
+  `Human / Schedule / Event Rule → Workflow → Execution Window / Run → Queue → Worker → Finding → Agent
+  Validation → Human Approval → Activity`. Default **Runs** tab with live event ticker, clickable cross
+  navigation (Run ↔ Finding ↔ Window ↔ Workflow ↔ Rule ↔ Task ↔ Agent), and empty/loading/error states
+  throughout.
 - **Employees & workforce** — human/agent members with certified skills, RBAC roles, and lifecycle gates
-  (`.SprintDesk/workforce/*.yml`)
-- **Tasks → Runs → Queue → Worker** — a task drives a `run`; queued runs are claimed by a deterministic
-  scheduler pass and executed by a headless/terminal/noop worker; every state change flows through
-  `startRun` / `finishRun` / `cancelRun`
+  (`.SprintDesk/workforce/*.yml`); agents are configured (provider/model/capabilities) from the UI
+- **Tasks → Runs → Queue → Worker** — a task drives a `run`; queued runs are claimed by the queue
+  (manual pass or event-driven) and executed by headless/terminal/noop/ollama workers; every state change
+  flows through `startRun` / `finishRun` / `cancelRun`
 - **LLM providers** — ollama/openai model profiles per employee (model output is *data today*, never authority)
 - **MCP servers** — built-in `sprintdesk_*` toolset plus a capability-gated MCP client registry
-- **Events & findings** — lifecycle events (`run.start`, `run.finish`, `run.queued`, ...) persisted with a
-  full audit trail
-- **Reviews & approval gates** — `auto`/`manual` gates for task-assignment, run-execution, and config-change
-  with pending-approval tools
+- **Findings** — the agent's primary output: materialized from the `Findings:` section of completed runs into
+  first-class persisted objects with severity/confidence and a review journey
+- **Validation & approvals** — agents validate findings (`recommend-approve/reject/request-revision`, confidence,
+  reason); humans decide; `auto`/`manual` approval gates for task-assignment, run-execution, and config-change
 - **Retry policy** — `maxRunRetries`, `retryBackoffMs`, `runTimeoutMs`, failure classification and
   `availableAt` backoff gating
 - **Scheduler & autonomy** — deterministic cron/interval scheduler with autonomy levels `0–3` (default `1`)
+- **Execution Windows** — deliberate synchronous batches: `Human → Window → Workflow → Task/Run → Queue →
+  Worker → Finding → Validation → Decision`, persisted and reviewable after the fact
+- **Event Rules** — `Event → Rule → Workflow → Task/Run` async automation from the existing event stream,
+  idempotent and re-entrancy-safe
 - **Workflow DSL** — declarative `task` / `loop` / `tool` / `condition` workflows that create queued runs
   (`.SprintDesk/settings/workflows.yml`)
-
-> **⚠️ Experimental.** The workforce runtime is built for headless/extensibility scenarios and covered by the
-> smoke suite, but the VS Code UI (webview planning, dashboards) is not yet wired to it. Current limitations:
-> no end-to-end employee execution flow (task discovery → assignment → dispatch → review) from the UI;
-> condition evaluation reads step status only; tool/LLM output never overrides policy.
 
 ### Quick Access
 - Keyboard shortcut: `Ctrl+Shift+T` to add a new task
@@ -73,6 +79,7 @@ employees → skills → tools → permissions → tasks, without an LLM in the 
 
 | Do This | Use This Command |
 |---------|------------------|
+| Open the Workforce Control Center | `sprintdesk.openWorkforce` |
 | Add a new task | `sprintdesk.addTask` |
 | Add multiple tasks | `sprintdesk.addMultipleTasks` |
 | Add quickly | `sprintdesk.addQuickly` |

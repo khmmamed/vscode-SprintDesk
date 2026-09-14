@@ -4,7 +4,17 @@ All notable changes to the "vscode-SprintDesk" extension will be documented in t
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased] - v0.11 Findings & Human Validation
+## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
+
+### v0.11 Slice 1 — Control Center shell & end-to-end execution
+
+- **The v0.11 line began with the Control Center shell:** `sprintdesk.openWorkforce` opened the dedicated
+  workforce panel (Employees / Runs / Create Task & Run tabs), added the 7-section Workforce tree with live
+  counts, made `queueService.createRun` the single source of truth for run creation, introduced the Ollama
+  worker runtime (modelProfile-only agents) and structured run summaries, and hardened run lifecycle + error
+  surfacing — full detail is recorded as **v0.10 Slice 1** below (commit `1f19072`).
+- Every later slice (findings, configuration, event rules, validation, runs/queue, windows, lifecycle polish)
+  is built on top of this foundation.
 
 ### v0.11 Slice 2 — Findings as first-class objects
 
@@ -179,10 +189,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   validation → human approve` and asserts the activity stream at each milestone; two companion tests prove the
   async alternatives `Event Rule → Workflow → Task → queued Run` and `Schedule → Task → queued Run` (autonomy 2,
   interval idempotency), all fully re-runnable in CI.
-- UI-1 / v0.11 is now functionally complete end to end; suggest a release/readiness review before `0.12.0`.
-  Version stays `0.9.0` during development.
+- UI-1 / v0.11 is now functionally complete end to end. Released as `0.11.0`.
 
-## [Unreleased] - v0.10 Workforce Control Center
+## v0.10 — pre-release milestone (superseded by 0.11.0)
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution
 
