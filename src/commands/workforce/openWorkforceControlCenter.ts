@@ -12,7 +12,7 @@ import * as eventRulesService from '../../services/workforce/eventRulesService';
 import * as executionWindowService from '../../services/workforce/executionWindowService';
 import { subscribeEvents } from '../../services/workforce/events';
 import { getDataService } from '../../data/DataService';
-import { Employee, EmployeeModelProfile, ExecutionWindow, Finding, FindingStatus, Run, Task, WorkerMode } from '../../data/types';
+import { Approval, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, Run, ScheduleRecord, Task, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
@@ -50,6 +50,8 @@ export interface RunDto {
   summary?: { findings: number; errors: number };
   mode?: WorkerMode;
   model?: string;
+  windowId?: string;
+  windowName?: string;
 }
 
 export interface EmployeeDto {
@@ -148,6 +150,48 @@ export interface ExecutionWindowDto {
   completionSummary?: ExecutionWindow['completionSummary'];
 }
 
+export interface ActivityEventDto {
+  id: string;
+  type: string;
+  source: string;
+  timestamp: string;
+  label: string;
+  links: {
+    runId?: string;
+    taskId?: string;
+    workflowId?: string;
+    ruleId?: string;
+    findingId?: string;
+    windowId?: string;
+    scheduleId?: string;
+    employeeId?: string;
+  };
+}
+
+export interface ApprovalDto {
+  id: string;
+  type: string;
+  status: Approval['status'];
+  reason: string;
+  target: string;
+  requesterId?: string;
+  createdAt: string;
+  resolvedAt?: string;
+  decisionBy?: string;
+}
+
+export interface ScheduleDto {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: string;
+  autonomyLevel: number;
+  cron?: string;
+  intervalMs?: number;
+  lastRunAt?: string;
+  runCount: number;
+}
+
 let panel: vscode.WebviewPanel | undefined;
 let panelContext: vscode.ExtensionContext | undefined;
 let pendingInit: { section?: WorkforceSection; focusAgentId?: string } | undefined;
@@ -178,6 +222,7 @@ function getRunDto(run: Run): RunDto {
   const detail = runDetail(run);
   const task = detail.task;
   const employee = detail.employee;
+  const windowForRun = getStores().executionWindows.loadAll().find(w => w.runIds.includes(run.id));
   return {
     id: run.id,
     taskId: run.taskId,
@@ -199,7 +244,9 @@ function getRunDto(run: Run): RunDto {
     error: run.error,
     summary: run.summary,
     mode: queueService.getQueueSettings().workerMode,
-    model: employee?.modelProfile?.model || employee?.agentConfig?.model
+    model: employee?.modelProfile?.model || employee?.agentConfig?.model,
+    windowId: windowForRun?.id,
+    windowName: windowForRun?.name
   };
 }
 
@@ -339,6 +386,98 @@ function executionWindowDtos(): ExecutionWindowDto[] {
   });
 }
 
+const EVENT_LABELS: Record<string, string> = {};
+EVENT_LABELS['run.queued'] = 'Run queued';
+EVENT_LABELS['run.started'] = 'Run started';
+EVENT_LABELS['run.retried'] = 'Retry scheduled';
+EVENT_LABELS['run.finished'] = 'Run finished';
+EVENT_LABELS['run.cancelled'] = 'Run cancelled';
+EVENT_LABELS['workflow.started'] = 'Workflow started';
+EVENT_LABELS['workflow.completed'] = 'Workflow completed';
+EVENT_LABELS['workflow.failed'] = 'Workflow failed';
+EVENT_LABELS['task.assigned'] = 'Task assigned';
+EVENT_LABELS['finding.created'] = 'Finding created';
+EVENT_LABELS['finding.validation.requested'] = 'Agent validation requested';
+EVENT_LABELS['finding.validated'] = 'Agent validated finding';
+EVENT_LABELS['finding.resolved'] = 'Finding resolved';
+EVENT_LABELS['execwindow.created'] = 'Execution window created';
+EVENT_LABELS['execwindow.started'] = 'Execution window started';
+EVENT_LABELS['execwindow.completed'] = 'Execution window completed';
+EVENT_LABELS['execwindow.cancelled'] = 'Execution window cancelled';
+EVENT_LABELS['eventrule.created'] = 'Event rule created';
+EVENT_LABELS['eventrule.fired'] = 'Event rule fired a workflow';
+EVENT_LABELS['eventrule.enabled'] = 'Event rule activated';
+EVENT_LABELS['eventrule.disabled'] = 'Event rule paused';
+EVENT_LABELS['eventrule.deleted'] = 'Event rule deleted';
+EVENT_LABELS['schedule.fired'] = 'Schedule fired';
+EVENT_LABELS['schedule.observed'] = 'Schedule occurrence observed';
+EVENT_LABELS['approval.requested'] = 'Approval requested';
+EVENT_LABELS['approval.resolved'] = 'Approval resolved';
+EVENT_LABELS['employee.status'] = 'Employee status';
+EVENT_LABELS['queue.skip'] = 'Queue skipped run';
+
+function pickStr(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+function eventLink(event: EventRecord): ActivityEventDto['links'] {
+  const p = event.payload || {};
+  const firstTask = Array.isArray(p.createdTaskIds) && typeof p.createdTaskIds[0] === 'string' ? p.createdTaskIds[0] : undefined;
+  return {
+    runId: pickStr(p.runId),
+    taskId: pickStr(p.taskId) || firstTask,
+    workflowId: pickStr(p.workflowId),
+    ruleId: pickStr(p.ruleId),
+    findingId: pickStr(p.findingId),
+    windowId: pickStr(p.windowId),
+    scheduleId: pickStr(p.scheduleId),
+    employeeId: pickStr(p.employeeId) || pickStr(p.agentId)
+  };
+}
+
+function activityEventDtos(): ActivityEventDto[] {
+  return getActivitySummary().recentEvents.map(event => ({
+    id: event.id,
+    type: event.type,
+    source: event.source,
+    timestamp: event.timestamp,
+    label: EVENT_LABELS[event.type] || event.type,
+    links: eventLink(event)
+  }));
+}
+
+function approvalDtos(): ApprovalDto[] {
+  return getStores()
+    .approvals.loadAll()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 25)
+    .map(a => ({
+      id: a.id,
+      type: a.type,
+      status: a.status,
+      reason: a.reason,
+      target: a.target,
+      requesterId: a.requesterId,
+      createdAt: a.createdAt,
+      resolvedAt: a.resolvedAt,
+      decisionBy: a.decisionBy
+    }));
+}
+
+function scheduleDtos(): ScheduleDto[] {
+  return getStores().schedules.loadAll().map((s: ScheduleRecord) => ({
+    id: s.id,
+    name: s.name,
+    enabled: s.enabled,
+    kind: s.kind,
+    autonomyLevel: s.autonomyLevel,
+    cron: s.cron,
+    intervalMs: s.intervalMs,
+    lastRunAt: s.lastRunAt,
+    runCount: s.runCount
+  }));
+}
+
 function pushRun(panelRef: vscode.WebviewPanel, run: Run): void {
   const message = { command: 'RUN_UPDATED', payload: { run: getRunDto(run) } };
   try {
@@ -370,6 +509,9 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EVENT_RULES', payload: eventRuleDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_WORKFLOWS', payload: workflowDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EXEC_WINDOWS', payload: executionWindowDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_ACTIVITY', payload: activityEventDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_APPROVALS', payload: approvalDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_SCHEDULES', payload: scheduleDtos() });
   } catch {
     // panel may be disposed mid-flight
   }
@@ -516,7 +658,12 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         if (runId) {
           try {
             const cancelled = queueService.cancelRun(runId);
-            if (cancelled) {pushRun(newPanel, cancelled);}
+            if (cancelled) {
+              pushRun(newPanel, cancelled);
+              postResponse(newPanel, message?.requestId, { cancelled: true, run: getRunDto(cancelled) });
+            } else {
+              postResponse(newPanel, message?.requestId, undefined, 'Run not cancellable (already finished or missing)');
+            }
           } catch (error) {
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
           }
@@ -530,15 +677,21 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
           try {
             const updated = findingsService.updateStatus(findingId, decision);
             if (updated) {
+              const dto = findingDtos().find(f => f.id === findingId);
               newPanel.webview.postMessage({
                 command: 'FINDING_UPDATED',
-                payload: { finding: findingDtos().find(f => f.id === findingId) }
+                payload: { finding: dto }
               });
+              postResponse(newPanel, message?.requestId, { decided: true, findingId, decision, finding: dto });
+            } else {
+              postResponse(newPanel, message?.requestId, undefined, 'Finding not found or already resolved');
             }
           } catch (error) {
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
           }
         }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
         } else if (command === 'WORKFORCE_VALIDATE_FINDING') {
         const findingId: string | undefined = message?.payload?.findingId;
         const recommendation: string | undefined = message?.payload?.recommendation;
@@ -559,10 +712,14 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
               validatorId
             );
             if (updated) {
+              const dto = findingDtos().find(f => f.id === findingId);
               newPanel.webview.postMessage({
                 command: 'FINDING_UPDATED',
-                payload: { finding: findingDtos().find(f => f.id === findingId) }
+                payload: { finding: dto }
               });
+              postResponse(newPanel, message?.requestId, { validated: true, findingId, finding: dto });
+            } else {
+              postResponse(newPanel, message?.requestId, undefined, 'Finding not found or already validated');
             }
           } catch (error) {
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));

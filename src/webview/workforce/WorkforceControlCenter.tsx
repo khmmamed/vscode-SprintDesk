@@ -45,6 +45,8 @@ interface RunDto {
   summary?: { findings: number; errors: number };
   mode?: WorkerMode;
   model?: string;
+  windowId?: string;
+  windowName?: string;
 }
 
 interface QueueDto {
@@ -144,6 +146,58 @@ interface WorkflowDto {
   version: string;
   enabled: boolean;
   updatedAt: string;
+}
+
+interface TaskDto {
+  id: string;
+  title: string;
+  code: string;
+  status: string;
+  workStatus?: string;
+  priority?: string;
+  agent?: string;
+}
+
+interface ActivityEventDto {
+  id: string;
+  type: string;
+  source: string;
+  timestamp: string;
+  label: string;
+  links: {
+    runId?: string;
+    taskId?: string;
+    workflowId?: string;
+    ruleId?: string;
+    findingId?: string;
+    windowId?: string;
+    scheduleId?: string;
+    employeeId?: string;
+  };
+}
+
+interface ApprovalDto {
+  id: string;
+  type: string;
+  status: "pending" | "approved" | "rejected";
+  reason: string;
+  target: string;
+  requesterId?: string;
+  createdAt: string;
+  resolvedAt?: string;
+  decisionBy?: string;
+}
+
+interface ScheduleDto {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: string;
+  autonomyLevel: number;
+  cron?: string;
+  intervalMs?: number;
+  lastRunAt?: string;
+  runCount: number;
 }
 
 interface FindingDto {
@@ -437,20 +491,63 @@ const styles: Record<string, React.CSSProperties> = {
   },
   empty: { color: "#9ca3af", fontSize: 13, padding: "16px 4px" },
   error: { color: "#e53935", fontSize: 12, marginBottom: 8 },
-  ok: { color: "#4caf50", fontSize: 12, marginBottom: 8 }
+  ok: { color: "#4caf50", fontSize: 12, marginBottom: 8 },
+  cardFocused: {
+    border: "1px solid var(--vscode-focusBorder, #4fc1ff)",
+    borderRadius: 6,
+    padding: "8px 10px",
+    marginBottom: 8
+  },
+  link: {
+    display: "inline-flex",
+    fontSize: 11,
+    padding: "1px 8px",
+    marginLeft: 4,
+    borderRadius: 4,
+    border: "1px solid var(--vscode-focusBorder, #4fc1ff)",
+    color: "var(--vscode-focusBorder, #4fc1ff)",
+    cursor: "pointer",
+    background: "transparent"
+  },
+  ticker: {
+    fontSize: 11,
+    color: "#9ca3af",
+    padding: "4px 8px",
+    border: "1px solid var(--vscode-panel-border, #333)",
+    borderRadius: 4,
+    marginBottom: 4
+  },
+  loading: { fontSize: 12, color: "#9ca3af", padding: "8px 4px" }
 };
 
 export const WorkforceControlCenter: React.FunctionComponent = () => {
-  const [tab, setTab] = React.useState<WorkforceSection>("employees");
+  const [tab, setTab] = React.useState<WorkforceSection>("runs");
+  const [loaded, setLoaded] = React.useState(false);
   const [runs, setRuns] = React.useState<RunDto[]>([]);
+  const [tasks, setTasks] = React.useState<TaskDto[]>([]);
   const [employees, setEmployees] = React.useState<EmployeeDto[]>([]);
   const [findings, setFindings] = React.useState<FindingDto[]>([]);
+  const [approvals, setApprovals] = React.useState<ApprovalDto[]>([]);
+  const [schedules, setSchedules] = React.useState<ScheduleDto[]>([]);
+  const [activity, setActivity] = React.useState<ActivityEventDto[]>([]);
   const [overview, setOverview] = React.useState<OverviewDto>(EMPTY_OVERVIEW);
   const [counts, setCounts] = React.useState<CountsDto>(EMPTY_COUNTS);
   const [queue, setQueue] = React.useState<QueueDto>(EMPTY_QUEUE);
   const [runFilter, setRunFilter] = React.useState<RunFilter>("all");
   const [findingFilter, setFindingFilter] = React.useState<FindingFilter>("all");
   const [queueResult, setQueueResult] = React.useState<string>("");
+  const [runAction, setRunAction] = React.useState<string>("");
+  const [runActionError, setRunActionError] = React.useState<string>("");
+  const [findingAction, setFindingAction] = React.useState<string>("");
+  const [findingActionError, setFindingActionError] = React.useState<string>("");
+
+  const [runFocus, setRunFocus] = React.useState<string | null>(null);
+  const [findingFocus, setFindingFocus] = React.useState<string | null>(null);
+  const [windowFocus, setWindowFocus] = React.useState<string | null>(null);
+  const [workflowFocus, setWorkflowFocus] = React.useState<string | null>(null);
+  const [ruleFocus, setRuleFocus] = React.useState<string | null>(null);
+  const [employeeFocus, setEmployeeFocus] = React.useState<string | null>(null);
+  const [taskFocus, setTaskFocus] = React.useState<string | null>(null);
 
   const [form, setForm] = React.useState<{
     title: string;
@@ -522,6 +619,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         }
       } else if (command === "SET_WORKFORCE_RUNS") {
         setRuns(payload || []);
+      } else if (command === "SET_WORKFORCE_TASKS") {
+        setTasks(payload || []);
       } else if (command === "SET_WORKFORCE_EMPLOYEES") {
         setEmployees(payload || []);
       } else if (command === "AGENT_CONFIGURED") {
@@ -547,10 +646,17 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         }
       } else if (command === "SET_WORKFORCE_OVERVIEW") {
         if (payload?.overview) setOverview(payload.overview);
+        setLoaded(true);
       } else if (command === "SET_WORKFORCE_COUNTS") {
         if (payload) setCounts(payload);
       } else if (command === "SET_WORKFORCE_QUEUE") {
         if (payload) setQueue(payload);
+      } else if (command === "SET_WORKFORCE_APPROVALS") {
+        setApprovals(payload || []);
+      } else if (command === "SET_WORKFORCE_SCHEDULES") {
+        setSchedules(payload || []);
+      } else if (command === "SET_WORKFORCE_ACTIVITY") {
+        setActivity(payload || []);
       } else if (command === "SET_WORKFORCE_EVENT_RULES") {
         setEventRules(payload || []);
       } else if (command === "SET_WORKFORCE_EXEC_WINDOWS") {
@@ -574,6 +680,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setRuleError(messageError);
           setValidateError(messageError);
           setWindowError(messageError);
+          setRunActionError(messageError);
+          setFindingActionError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -583,11 +691,17 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (payload?.deleted !== undefined) setRuleResult(payload?.deleted ? "Rule deleted." : "");
           if (payload?.queueProcessed) setQueueResult(`Queue pass: ${payload.claimed} claimed, ${payload.started} started, ${payload.skipped} skipped.`);
           if (payload?.retried) setQueueResult(`Run ${payload.run?.id} queued for retry.`);
+          if (payload?.cancelled) {
+            const name = payload?.run?.taskTitle || payload?.runId;
+            setRunAction(name ? `Run ${name} cancelled.` : "Run cancelled.");
+          }
           if (payload?.window) {
             if (payload?.started) setWindowResult(`Execution window "${payload.window.name}" started.`);
             else if (payload?.cancelled) setWindowResult(`Execution window "${payload.window.name}" cancelled.`);
             else setWindowResult(`Execution window "${payload.window.name}" created.`);
           }
+          if (payload?.decided) setFindingAction(`Finding ${payload.decision === "approved" ? "approved" : "rejected"}.`);
+          if (payload?.validated) setFindingAction("Agent validation recorded.");
         }
       }
     };
@@ -637,6 +751,41 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const gotoFindings = (filter: FindingFilter): void => {
     setFindingFilter(filter);
     setTab("findings");
+  };
+
+  const openRun = (runId: string): void => {
+    setRunFocus(runId);
+    setTab("runs");
+  };
+
+  const openFinding = (findingId: string): void => {
+    setFindingFocus(findingId);
+    setTab("findings");
+  };
+
+  const openWindow = (windowId: string): void => {
+    setWindowFocus(windowId);
+    setTab("windows");
+  };
+
+  const openWorkflow = (workflowId: string): void => {
+    setWorkflowFocus(workflowId);
+    setTab("workflows");
+  };
+
+  const openRule = (ruleId: string): void => {
+    setRuleFocus(ruleId);
+    setTab("event-rules");
+  };
+
+  const openTask = (taskId: string): void => {
+    setTaskFocus(taskId);
+    setTab("tasks");
+  };
+
+  const openEmployee = (employeeId: string): void => {
+    setEmployeeFocus(employeeId);
+    setTab("employees");
   };
 
   const decideFinding = (findingId: string, decision: "approved" | "rejected"): void => {
@@ -851,6 +1000,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         </span>
       </div>
 
+      {!loaded && <div style={styles.loading}>Loading workforce state…</div>}
+
       <div style={styles.statRow}>
         <StatChip label={`Workers ${queue.busyEmployees}/${queue.maxConcurrentRuns}`} onClick={() => setTab("employees")} />
         <StatChip label={`Running ${overview.runs.running}`} onClick={() => gotoRuns("running")} />
@@ -867,6 +1018,21 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         <StatChip label={`Event Rules ${counts.eventRules}`} onClick={() => setTab("event-rules")} />
         <StatChip label={`Windows ${counts.exeWindows}`} onClick={() => setTab("windows")} />
       </div>
+
+      {activity.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          {activity.slice(0, 4).map(ev => (
+            <div key={ev.id} style={styles.ticker}>
+              <span style={{ color: "#e0e0e0", marginRight: 6 }}>{ev.label}</span>
+              <span style={styles.muted}>{formatTime(ev.timestamp)}</span>
+              {ev.links.runId && <button style={styles.link} onClick={() => openRun(ev.links.runId!)}>run</button>}
+              {ev.links.findingId && <button style={styles.link} onClick={() => openFinding(ev.links.findingId!)}>finding</button>}
+              {ev.links.windowId && <button style={styles.link} onClick={() => openWindow(ev.links.windowId!)}>window</button>}
+              <button style={{ ...styles.link, marginLeft: "auto" }} onClick={() => setTab("activity")}>more…</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={styles.tabs}>
         {TABS.map(t => (
@@ -1067,6 +1233,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
             <button style={styles.button} onClick={processQueueNow}>Process Queue</button>
           </div>
           {queueResult && <div style={styles.ok}>{queueResult}</div>}
+          {runActionError && <div style={styles.error}>{runActionError}</div>}
+          {runAction && <div style={styles.ok}>{runAction}</div>}
           <div style={{ fontSize: 12, marginBottom: 8 }}>
             <span style={styles.muted}>
               Worker: {queue.workerMode} (queue mode) · Occupancy {queue.allocated}/{queue.maxConcurrentRuns} · Attempts &gt;1: {queue.multiAttempt}
@@ -1075,8 +1243,9 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           {filteredRuns.length === 0 && <div style={styles.empty}>No {runFilter === "all" ? "runs" : `${runFilter} runs`} yet.</div>}
           {filteredRuns.map(run => {
             const runFindings = findings.filter(f => f.runId === run.id);
+            const expanded = expandedRun === run.id || runFocus === run.id;
             return (
-              <div key={run.id} style={styles.card}>
+              <div key={run.id} style={runFocus === run.id ? styles.cardFocused : styles.card}>
                 <div style={styles.row}>
                   <span style={styles.name}>{run.taskTitle}</span>
                   <span style={styles.muted}>{run.taskCode}</span>
@@ -1085,6 +1254,9 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                   </span>
                   <span style={styles.muted}>Agent: {run.agentName}</span>
                   {run.attempts > 1 && <span style={styles.chip}>attempt {run.attempts}</span>}
+                  {run.windowName && (
+                    <button style={styles.link} onClick={() => openWindow(run.windowId!)}>window: {run.windowName}</button>
+                  )}
                   <span style={{ flex: 1 }} />
                   {run.startedAt && <span style={styles.muted}>Started {formatTime(run.startedAt)}</span>}
                   {run.durationMs !== undefined && <span style={styles.muted}>{formatDuration(run.durationMs)}</span>}
@@ -1097,8 +1269,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                   {run.status === "completed" && run.agentId && (
                     <button style={styles.buttonGhost} onClick={() => retryRun(run.id)}>Run Again</button>
                   )}
-                  <button style={styles.buttonGhost} onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}>
-                    {expandedRun === run.id ? "Hide" : "Details"}
+                  <button style={styles.buttonGhost} onClick={() => setExpandedRun(expanded ? null : run.id)}>
+                    {expanded ? "Hide" : "Details"}
                   </button>
                 </div>
                 {run.status === "completed" && run.summary && (
@@ -1116,15 +1288,28 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                     {run.error && <span style={styles.muted}> · {run.error}</span>}
                   </div>
                 )}
-                {expandedRun === run.id && (
+                {expanded && (
                   <div>
                     <div style={styles.detail}>
-                      <div><span style={styles.muted}>Task: </span>{run.taskCode} — {run.taskTitle}</div>
-                      {run.taskWorkflow && <div><span style={styles.muted}>Workflow: </span>{run.taskWorkflow}</div>}
-                      {run.trigger && (
-                        <div><span style={styles.muted}>Trigger: </span>Event Rule "{run.trigger.ruleName}" ({run.trigger.eventType})</div>
+                      <div>
+                        <span style={styles.muted}>Task: </span><button style={styles.link} onClick={() => openTask(run.taskId)}>{run.taskCode} — {run.taskTitle}</button>
+                      </div>
+                      {run.taskWorkflow && (
+                        <div>
+                          <span style={styles.muted}>Workflow: </span><button style={styles.link} onClick={() => openWorkflow(run.taskWorkflow!)}>{run.taskWorkflow}</button>
+                        </div>
                       )}
-                      <div><span style={styles.muted}>Agent: </span>{run.agentName}{run.agentId ? ` (${run.agentId})` : ""}</div>
+                      {run.trigger && (
+                        <div>
+                          <span style={styles.muted}>Trigger: </span>
+                          <button style={styles.link} onClick={() => openRule(run.trigger!.ruleId)}>Event Rule "{run.trigger.ruleName}"</button>
+                          <span style={styles.muted}> ({run.trigger.eventType})</span>
+                        </div>
+                      )}
+                      <div>
+                        <span style={styles.muted}>Agent: </span>
+                        {run.agentId ? <button style={styles.link} onClick={() => openEmployee(run.agentId!)}>{run.agentName} ({run.agentId})</button> : <span>{run.agentName}</span>}
+                      </div>
                       <div>
                         <span style={styles.muted}>Worker (queue): </span>{run.mode || "—"}
                         <span style={styles.muted}> · Model: </span>{run.model || "—"}
@@ -1141,9 +1326,9 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                       <div style={{ marginTop: 6, fontSize: 12 }}>
                         <span style={styles.muted}>Findings ({runFindings.length}): </span>
                         {runFindings.map(f => (
-                          <span key={f.id} style={{ ...styles.chip, marginRight: 4 }} title={f.title}>
+                          <button key={f.id} style={styles.link} onClick={() => openFinding(f.id)} title={f.title}>
                             {f.title} · {reviewStateLabel(f)}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -1173,11 +1358,13 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
               </button>
             ))}
           </div>
+          {findingActionError && <div style={styles.error}>{findingActionError}</div>}
+          {findingAction && <div style={styles.ok}>{findingAction}</div>}
           {filteredFindings.length === 0 && (
             <div style={styles.empty}>No findings yet. Findings are captured from the Findings section of completed run output.</div>
           )}
           {filteredFindings.map(f => (
-            <div key={f.id} style={styles.card}>
+            <div key={f.id} style={findingFocus === f.id ? styles.cardFocused : styles.card}>
               <div style={styles.row}>
                 <span style={styles.name}>{f.title}</span>
                 <span style={{ ...styles.chip, color: severityColor(f.severity) }}>{f.severity}</span>
@@ -1208,6 +1395,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 )}
               </div>
               <div style={{ marginTop: 6, fontSize: 12 }}>
+                {f.runId && <button style={styles.link} onClick={() => openRun(f.runId)}>run</button>}
                 <span style={styles.muted}>Agent: {f.agentName}</span>
                 {f.category && <span style={styles.muted}> · {f.category}</span>}
                 {f.taskTitle && <span style={styles.muted}> · Task: {f.taskTitle}</span>}
@@ -1252,7 +1440,10 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
               {f.agentReview && (
                 <div style={{ marginTop: 6, fontSize: 12 }}>
                   <span style={styles.muted}>
-                    Validated by {f.agentReview.validatorName || f.agentReview.validatorId}
+                    Validated by{" "}
+                  </span>
+                  <button style={styles.link} onClick={() => openEmployee(f.agentReview!.validatorId)}>{f.agentReview.validatorName || f.agentReview.validatorId}</button>
+                  <span style={styles.muted}>
                     {f.agentReview.confidence !== undefined && ` · ${Math.round(f.agentReview.confidence * 100)}% confidence`}
                     {f.agentReview.reason && ` · ${f.agentReview.reason}`}
                     {` · ${formatTime(f.agentReview.validatedAt)}`}
@@ -1265,28 +1456,68 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
       )}
 
       {tab === "approvals" && (
-        <div style={styles.empty}>
-          Approvals: {counts.pendingApprovals} pending. The approval gate review UI lands in a later increment.
+        <div>
+          {approvals.filter(a => a.status === "pending").length === 0 && (
+            <div style={styles.empty}>No pending approvals. Approval gates only come into play when a gate is set to manual — everything else applies automatically.</div>
+          )}
+          {approvals.map(a => (
+            <div key={a.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{a.target}</span>
+                <span style={{ ...styles.statusChip, color: a.status === "pending" ? "#ffb74d" : a.status === "approved" ? "#4caf50" : "#e53935" }}>{a.status}</span>
+                <span style={styles.chip}>{a.type}</span>
+                <span style={{ flex: 1 }} />
+                <span style={styles.muted}>{formatTime(a.createdAt)}</span>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={styles.muted}>{a.reason}</span>
+                {a.status !== "pending" && a.decisionBy && <span style={styles.muted}> · decided by {a.decisionBy} {formatTime(a.resolvedAt)}</span>}
+              </div>
+            </div>
+          ))}
         </div>
       )}
       {tab === "schedules" && (
-        <div style={styles.empty}>
-          Schedules: {counts.schedules} defined. The schedules management UI lands in a later increment.
+        <div>
+          {schedules.length === 0 && (
+            <div style={styles.empty}>No schedules defined. A time-based schedule turns each due occurrence into a task + queued run. Define `.SprintDesk/workforce/schedules.yml` to get started.</div>
+          )}
+          {schedules.map(s => (
+            <div key={s.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{s.name}</span>
+                <span style={{ ...styles.statusChip, color: s.enabled ? "#4caf50" : "#9e9e9e" }}>{s.enabled ? "active" : "paused"}</span>
+                <span style={styles.chip}>{s.kind}{s.cron ? ` · ${s.cron}` : s.intervalMs ? ` · every ${Math.round(s.intervalMs / 1000)}s` : ""}</span>
+                <span style={styles.chip}>autonomy {s.autonomyLevel}</span>
+                {s.runCount > 0 && <span style={styles.chip}>{s.runCount} run{s.runCount === 1 ? "" : "s"}</span>}
+                <span style={{ flex: 1 }} />
+                {s.lastRunAt && <span style={styles.muted}>last {formatTime(s.lastRunAt)}</span>}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={styles.muted}>Autonomy 0 = off · 1 = observe/dry-run · 2+ = execute into the queue.</span>
+              </div>
+            </div>
+          ))}
         </div>
       )}
       {tab === "workflows" && (
         <div>
           {workflows.length === 0 && (
-            <div style={styles.empty}>No workflows defined yet. Workflows define the steps a triggered rule runs.</div>
+            <div style={styles.empty}>No workflows defined yet. A workflow declares the steps (tasks, tools, loops, conditions) a run executes — define one in `.SprintDesk/settings/workflows.yml` or via a future editor.</div>
           )}
           {workflows.map(wf => (
-            <div key={wf.id} style={styles.card}>
+            <div key={wf.id} style={workflowFocus === wf.id ? styles.cardFocused : styles.card}>
               <div style={styles.row}>
                 <span style={styles.name}>{wf.name}</span>
                 <span style={{ ...styles.statusChip, color: wf.enabled ? "#4caf50" : "#9e9e9e" }}>{wf.enabled ? "enabled" : "disabled"}</span>
                 <span style={styles.muted}>v{wf.version}</span>
                 <span style={{ flex: 1 }} />
                 <span style={styles.muted}>updated {formatTime(wf.updatedAt)}</span>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={styles.muted}>
+                  Used by execution windows and event rules; an enabled workflow is immediately executable from a new window or rule.
+                </span>
               </div>
             </div>
           ))}
@@ -1352,13 +1583,13 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
             <div style={styles.empty}>No event rules yet. A rule turns matching events into workflow runs — the scheduler stays time-based, this is event-based.</div>
           )}
           {eventRules.map(rule => (
-            <div key={rule.id} style={styles.card}>
+            <div key={rule.id} style={ruleFocus === rule.id ? styles.cardFocused : styles.card}>
               <div style={styles.row}>
                 <span style={styles.name}>{rule.name}</span>
                 <span style={{ ...styles.statusChip, color: rule.enabled ? "#4caf50" : "#9e9e9e" }}>
                   {rule.enabled ? "active" : "paused"}
                 </span>
-                {rule.workflowName && <span style={styles.chip}>workflow: {rule.workflowName}</span>}
+                {rule.workflowName && <button style={styles.link} onClick={() => openWorkflow(rule.workflowId)}>workflow: {rule.workflowName}</button>}
                 {rule.runCount > 0 && <span style={styles.chip}>{rule.runCount} run{rule.runCount === 1 ? "" : "s"}</span>}
                 <span style={{ flex: 1 }} />
                 <button style={styles.buttonGhost} onClick={() => toggleEventRule(rule.id, !rule.enabled)}>
@@ -1462,7 +1693,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
             <div style={styles.empty}>No execution windows yet. A window runs one or more workflows as a synchronous session through the queue.</div>
           )}
           {execWindows.map(win => (
-            <div key={win.id} style={styles.card}>
+            <div key={win.id} style={windowFocus === win.id ? styles.cardFocused : styles.card}>
               <div style={styles.row}>
                 <span style={styles.name}>{win.name}</span>
                 <span style={{ ...styles.statusChip, color: win.status === "running" ? "#4caf50" : win.status === "completed" ? "#90caf9" : win.status === "cancelled" ? "#9e9e9e" : "#ffb74d" }}>
@@ -1514,6 +1745,16 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                       )}
                     </div>
                   )}
+                  {runs.filter(r => r.windowId === win.id).length > 0 && (
+                    <div>
+                      <span style={styles.muted}>Runs: </span>
+                      {runs.filter(r => r.windowId === win.id).map(r => (
+                        <button key={r.id} style={styles.link} onClick={() => openRun(r.id)}>
+                          {r.taskCode} · {r.status}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1521,13 +1762,51 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         </div>
       )}
       {tab === "activity" && (
-        <div style={styles.empty}>
-          Activity: event feed UI lands in a later increment. Runs created here are already captured in the event stream.
+        <div>
+          {activity.length === 0 && (
+            <div style={styles.empty}>No activity yet. Every lifecycle transition — runs, workflows, windows, event rules, schedules, findings, approvals — streams here as it happens.</div>
+          )}
+          {activity.map(ev => (
+            <div key={ev.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{ev.label}</span>
+                <span style={styles.chip}>{ev.type}</span>
+                <span style={styles.muted}>{ev.source}</span>
+                <span style={{ flex: 1 }} />
+                <span style={styles.muted}>{formatTime(ev.timestamp)}</span>
+              </div>
+              <div style={{ marginTop: 6 }}>
+                {ev.links.runId && <button style={styles.link} onClick={() => openRun(ev.links.runId!)}>run</button>}
+                {ev.links.findingId && <button style={styles.link} onClick={() => openFinding(ev.links.findingId!)}>finding</button>}
+                {ev.links.taskId && <button style={styles.link} onClick={() => openTask(ev.links.taskId!)}>task</button>}
+                {ev.links.workflowId && <button style={styles.link} onClick={() => openWorkflow(ev.links.workflowId!)}>workflow</button>}
+                {ev.links.ruleId && <button style={styles.link} onClick={() => openRule(ev.links.ruleId!)}>rule</button>}
+                {ev.links.windowId && <button style={styles.link} onClick={() => openWindow(ev.links.windowId!)}>window</button>}
+                {ev.links.scheduleId && <button style={styles.link} onClick={() => setTab("schedules")}>schedule</button>}
+                {ev.links.employeeId && <button style={styles.link} onClick={() => openEmployee(ev.links.employeeId!)}>employee</button>}
+              </div>
+            </div>
+          ))}
         </div>
       )}
       {tab === "tasks" && (
-        <div style={styles.empty}>
-          Tasks assigned to employees appear here in a later increment. Create one via the Create Task tab.
+        <div>
+          {tasks.length === 0 && (
+            <div style={styles.empty}>No tasks yet. Tasks are created by hand (Create Task tab), by workflows, schedules, or event rules — then become runs in the queue.</div>
+          )}
+          {tasks.map(t => (
+            <div key={t.id} style={taskFocus === t.id ? styles.cardFocused : styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{t.title}</span>
+                <span style={styles.muted}>{t.code}</span>
+                <span style={{ ...styles.statusChip, color: t.status === "done" ? "#4caf50" : t.status === "in-progress" ? "#ffb74d" : "#9e9e9e" }}>{t.status}</span>
+                {t.workStatus && <span style={styles.chip}>{t.workStatus}</span>}
+                {t.priority && <span style={styles.chip}>{t.priority}</span>}
+                <span style={{ flex: 1 }} />
+                {t.agent && <span style={styles.muted}>assigned: <button style={styles.link} onClick={() => openEmployee(t.agent!)}>{t.agent}</button></span>}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

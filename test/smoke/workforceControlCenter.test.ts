@@ -10,11 +10,12 @@ import { emitEvent } from '../../src/services/workforce/events';
 import { getRunsByFilter, runDetail, getQueueSnapshot, getActivitySummary, getExecutionWindowReport } from '../../src/services/workforce/observability';
 import * as executionWindowService from '../../src/services/workforce/executionWindowService';
 import { getDataService } from '../../src/data/DataService';
-import { EventRecord, WorkflowDefinition } from '../../src/data/types';
+import { EventRecord, WorkflowDefinition, ScheduleRecord } from '../../src/data/types';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
 import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/services/workforce/worker/worker';
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
 import { setApprovalGate } from '../../src/services/workforce/gates';
+import { runSchedulerPass } from '../../src/services/workforce/scheduler/scheduler';
 import { LLMProvider } from '../../src/services/workforce/llm/types';
 
 describe('queueService.createRun', () => {
@@ -1295,6 +1296,173 @@ describe('execution windows — synchronous work (v0.11)', () => {
     assert.ok(types.includes('execwindow.created'));
     assert.ok(types.includes('execwindow.started'));
     assert.ok(types.includes('execwindow.completed'));
+  });
+});
+
+describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    executionWindowService.setAutoAdvanceEnabled(false);
+  });
+
+  afterEach(() => {
+    executionWindowService.setAutoAdvanceEnabled(true);
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function seedWorkflow(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+    const now = new Date().toISOString();
+    const wf: WorkflowDefinition = {
+      id: `wf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: 'Research Flow',
+      version: '1',
+      enabled: true,
+      steps: [{ id: 'tasks', type: 'task', title: 'Research {topic}', taskType: 'feature', priority: 'medium' }],
+      createdAt: now,
+      updatedAt: now,
+      ...overrides
+    };
+    getStores().workflows.add(wf);
+    return wf;
+  }
+
+  async function waitFor(check: () => boolean, timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    while (!check()) {
+      if (Date.now() - start > timeoutMs) {throw new Error('timed out waiting for condition');}
+      await new Promise(r => setTimeout(r, 20));
+    }
+  }
+
+  function makeEvent(type: string, source: string, payload: Record<string, unknown>): EventRecord {
+    return {
+      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      source,
+      payload,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  it('smokes the full lifecycle: window → run → finding → agent validation → human decision', async function () {
+    this.timeout(10000);
+    executionWindowService.setAutoAdvanceEnabled(true);
+    const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Reviewer' });
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead' });
+    const wf = seedWorkflow({ name: 'Research Flow' });
+    const window = executionWindowService.createExecutionWindow({ name: 'Full Lifecycle', workflowIds: [wf.id], agentIds: [agent.id], workerMode: 'noop' });
+
+    assert.ok(getActivitySummary().recentEvents.some(e => e.type === 'execwindow.created'), 'window creation lands in the activity stream');
+
+    await executionWindowService.startExecutionWindow(window.id);
+    await waitFor(() => executionWindowService.getExecutionWindowById(window.id)?.status === 'completed');
+
+    const finished = executionWindowService.getExecutionWindowById(window.id)!;
+    const runId = finished.runIds[0];
+    const run = getStores().runs.getById(runId)!;
+    assert.strictEqual(run.status, 'completed');
+
+    const report = getExecutionWindowReport(finished);
+    assert.strictEqual(report.runs.completed, 1, 'window report counts the completed run');
+
+    getStores().runs.update(runId, { result: 'Findings:\n- claim one\nErrors:\n0' });
+    findingsService.materializeFindings(runId);
+    const finding = findingsService.allFindings()[0];
+    assert.ok(finding, 'finding materialized from run output');
+    assert.strictEqual(finding.source?.runId, runId);
+
+    const types = getActivitySummary().recentEvents.map(e => e.type);
+    assert.ok(types.includes('execwindow.started'));
+    assert.ok(types.includes('run.finished'));
+    assert.ok(types.includes('finding.created'));
+
+    findingsService.validateFinding(finding.id, { recommendation: 'recommend-approve', confidence: 0.9, reason: 'solid' }, reviewer.id);
+    const validated = findingsService.allFindings()[0];
+    assert.strictEqual(validated?.agentValidationState, 'validated');
+    assert.strictEqual(validated?.agentReview?.validatorId, reviewer.id);
+    assert.ok(getActivitySummary().recentEvents.some(e => e.type === 'finding.validated'));
+
+    const decided = findingsService.updateStatus(finding.id, 'approved', lead.id);
+    assert.strictEqual(decided?.status, 'approved');
+    assert.strictEqual(decided?.decisionBy, lead.id);
+    assert.ok(
+      getActivitySummary().recentEvents.some(e => e.type === 'finding.resolved' && e.payload['status'] === 'approved'),
+      'human decision resolves the finding in the activity stream'
+    );
+  });
+
+  it('routes a lifecycle event through an event rule into a task and a queued run', async () => {
+    seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const wf = seedWorkflow({ name: 'News Briefing' });
+    const rule = eventRulesService.createEventRule({
+      name: 'PR merged to news agent',
+      matcher: { eventType: 'pull_request.merged', source: 'github' },
+      workflowId: wf.id
+    });
+
+    const results = await eventRulesService.processEventRules(makeEvent('pull_request.merged', 'github', { repo: { name: 'morocco-news' } }));
+
+    assert.strictEqual(results[0]?.triggered, true);
+    assert.strictEqual(results[0]?.status, 'completed');
+    assert.strictEqual(results[0]?.createdTaskIds?.length, 1);
+    assert.strictEqual(getDataService().loadTasks().length, 1);
+    assert.strictEqual(getStores().runs.loadAll().length, 1);
+
+    const run = getStores().runs.loadAll()[0];
+    assert.strictEqual(run.status, 'queued');
+    const task = getDataService().getTask(run.taskId)!;
+    assert.strictEqual(task.source, 'workflow');
+    assert.strictEqual(task.workflow, 'News Briefing');
+    assert.strictEqual(getStores().eventRules.getById(rule.id)?.runCount, 1);
+
+    const fired = getActivitySummary().recentEvents.find(e => e.type === 'eventrule.fired');
+    assert.ok(fired, 'eventrule.fired surfaces in the activity stream');
+    assert.strictEqual(fired?.payload['ruleId'], rule.id);
+  });
+
+  it('routes a time-based schedule into a queued run (autonomy 2 = execute)', () => {
+    seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    const now = new Date(2026, 0, 15, 9, 0, 0);
+    const schedule: ScheduleRecord = {
+      id: 'sched-slice8',
+      name: 'Morning Brief',
+      enabled: true,
+      kind: 'interval',
+      autonomyLevel: 2,
+      taskTemplate: { name: 'Brief', title: 'Morning brief check', type: 'chore', priority: 'low', backlog: 'features' },
+      intervalMs: 60_000,
+      runCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    getStores().schedules.add(schedule);
+
+    const result = runSchedulerPass({ stores: getStores(), dataService: getDataService(), now });
+    assert.strictEqual(result.fired.length, 1);
+    assert.strictEqual(result.fired[0].mode, 'execute');
+    assert.strictEqual(result.fired[0].scheduleId, 'sched-slice8');
+
+    const run = getStores().runs.getById(result.fired[0].runId!)!;
+    assert.strictEqual(run.status, 'queued');
+    const task = getDataService().getTask(result.fired[0].taskId!)!;
+    assert.strictEqual(task.source, 'scheduler');
+    assert.strictEqual(getStores().schedules.getById('sched-slice8')?.runCount, 1);
+    assert.strictEqual(getStores().events.findByType('schedule.fired').length, 1);
+
+    const early = runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 30_000) });
+    assert.strictEqual(early.fired.length, 0, 'interval not elapsed → no duplicate');
+
+    const after = runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 120_000) });
+    assert.strictEqual(after.fired.length, 1, 'interval elapsed → fires again');
   });
 });
 

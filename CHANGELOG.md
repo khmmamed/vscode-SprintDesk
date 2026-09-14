@@ -149,6 +149,39 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   skipped, cancel, drive-through-queue to completion (noop), validation progress in the report, and
   audit/event milestones. Version stays `0.9.0` during development.
 
+### v0.11 Slice 8 — Control Center polish & end-to-end lifecycle
+
+- **One screen, the whole lifecycle.** `sprintdesk.openWorkforce` now opens on the **Runs** tab (default) so a
+  new user sees the live queue immediately, a loading banner appears until the first snapshot arrives, and a
+  **live event ticker** under the dashboard strip streams the most recent lifecycle transitions (window
+  created/started, run finished, finding created/validated/resolved, rule fired) with one-click contextual links.
+- **Full lifecycle nav — no dead ends.** Runs link to their Task, Workflow, Event Rule trigger, Agent, Execution
+  Window, and Findings; Findings link back to their Run and Validator; Event Rules link to their Workflow;
+  Execution Windows expand to the actual run chips (`.SprintDesk` files never need opening). Focus-clicking any
+  referral highlights the target card (`cardFocused` accent border) on its tab.
+- **Activity tab turns the stored event stream into a browsable history:** every `run.*/finding.*/workflow./
+  eventrule./execwindow./schedule./approval.*` transition is listed with type, source, timestamp, and chips that
+  jump to the run/finding/task/workflow/rule/window/schedule/employee it concerns.
+- **Four placeholder tabs became real panels — Tasks** (title, code, status, work status, priority, clickable
+  assigned agent), **Approvals** (read-only list with type/status/target/reason and decision details; resolving
+  the UI stays a later increment), **Schedules** (name, kind + cron/interval, autonomy level, run count, last run;
+  autonomy semantics explained inline), and **Activity**. Each lands with a deliberate empty state that says what
+  the tab is for and how to populate it.
+- **Action feedback everywhere:** Cancel / Retry / Run Again and Approve / Reject / Validate report success or
+  error inline (`runAction` / `findingAction`), matching the existing Create Event Rule / Execute Window /
+  Configure Agent feedback; backend errors from the command layer surface into the right line.
+- **Command layer DTOs widen without new state:** runs now carry `windowId`/`windowName`; new snapshots
+  `SET_WORKFORCE_ACTIVITY` (recent events + resolved labels/links), `SET_WORKFORCE_APPROVALS`, and
+  `SET_WORKFORCE_SCHEDULES` are pushed from the existing stores; Cancel / Decide / Validate now answer with
+  `{ cancelled, decided, validated }` success payloads the webview can render.
+- **Deterministic end-to-end lifecycle smoke (no Ollama):** one test drives the entire chain
+  `Execution Window → workflow → queued run → noop worker completion → findings materialization → agent
+  validation → human approve` and asserts the activity stream at each milestone; two companion tests prove the
+  async alternatives `Event Rule → Workflow → Task → queued Run` and `Schedule → Task → queued Run` (autonomy 2,
+  interval idempotency), all fully re-runnable in CI.
+- UI-1 / v0.11 is now functionally complete end to end; suggest a release/readiness review before `0.12.0`.
+  Version stays `0.9.0` during development.
+
 ## [Unreleased] - v0.10 Workforce Control Center
 
 ### v0.10 Slice 1 — Control Center & end-to-end execution
