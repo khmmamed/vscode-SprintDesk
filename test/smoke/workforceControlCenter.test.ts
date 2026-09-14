@@ -1855,6 +1855,122 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () 
   });
 });
 
+describe('v0.12 Proposal 2 — autonomous classification (Slice E — proposals review)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    taskService.getTaskService(ws.root);
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function seedFinding(overrides: Partial<Parameters<typeof findingsService.createFinding>[0]> = {}) {
+    return findingsService.createFinding({
+      title: 'Timeout in checkout flow',
+      runId: 'run_review_1',
+      agent: 'emp_none',
+      severity: 'medium',
+      ...overrides
+    });
+  }
+
+  function seedPendingProposal(proposedBy?: string) {
+    const finding = seedFinding();
+    return classificationService.createProposal(finding, { title: 'Handle checkout timeout', type: 'bug', priority: 'high' }, proposedBy);
+  }
+
+  it('rejects a pending proposal without touching tasks or the finding', () => {
+    const proposal = seedPendingProposal();
+    assert.strictEqual(proposal?.status, 'pending');
+
+    const rejected = classificationService.rejectProposal(proposal!.id);
+    assert.strictEqual(rejected?.status, 'rejected');
+    assert.strictEqual(rejected?.reason, 'rejected by review');
+    assert.strictEqual(getDataService().loadTasks().length, 0, 'reject never creates a task');
+    assert.strictEqual(getStores().findings.getById(proposal!.findingId)?.status, 'pending', 'finding stays pending');
+    assert.strictEqual(getStores().audit.loadAll().filter(a => a.action === 'classification.reject').length, 1);
+  });
+
+  it('is a no-op for an applied proposal and undefined for a missing id', () => {
+    const proposal = seedPendingProposal();
+    const applied = classificationService.applyProposal(proposal!.id);
+    assert.strictEqual(applied?.status, 'applied');
+
+    const again = classificationService.rejectProposal(proposal!.id);
+    assert.strictEqual(again?.status, 'applied', 'an applied proposal cannot be rejected');
+    assert.strictEqual(classificationService.rejectProposal('prop_nope'), undefined);
+  });
+
+  it('enforces classification:review — plain agents throw, lead/reviewer/human/system pass', () => {
+    const plainAgent = seedAgent();
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Reviewer' });
+    const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Review Bot' });
+    const human = seedAgent({ role: 'human', teamRole: 'human', name: 'Human Reviewer' });
+
+    const denied = seedPendingProposal();
+    assert.throws(
+      () => classificationService.rejectProposal(denied!.id, plainAgent.id),
+      /lacks permission 'classification:review'/
+    );
+    assert.strictEqual(getStores().proposals.byFindingId(denied!.findingId)?.status, 'pending', 'denied actor changes nothing');
+
+    for (const reviewerActor of [lead.id, reviewer.id, human.id]) {
+      const p = seedPendingProposal(reviewerActor);
+      assert.strictEqual(classificationService.rejectProposal(p!.id, reviewerActor)?.status, 'rejected');
+    }
+
+    const system = seedPendingProposal();
+    assert.strictEqual(classificationService.rejectProposal(system!.id)?.status, 'rejected');
+  });
+
+  it('exposes the webview DTO field set from stored proposals', () => {
+    const finding = seedFinding({ severity: 'high' });
+    const proposal = classificationService.createProposal(
+      finding,
+      { title: 'Rotate API keys', type: 'chore', priority: 'high', workflow: 'w_ops', confidence: 0.87 }
+    );
+
+    const stored = getStores().proposals.byFindingId(finding.id);
+    assert.strictEqual(stored?.id, proposal?.id);
+    assert.strictEqual(stored?.title, 'Rotate API keys');
+    assert.strictEqual(stored?.type, 'chore');
+    assert.strictEqual(stored?.priority, 'high');
+    assert.strictEqual(stored?.workflow, 'w_ops');
+    assert.strictEqual(stored?.confidence, 0.87);
+    assert.strictEqual(stored?.status, 'pending');
+    assert.strictEqual(stored?.findingId, finding.id);
+  });
+
+  it('applies a pending proposal into a task from the review surface and dedups a second apply', () => {
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Reviewer' });
+    const proposal = seedPendingProposal(lead.id);
+
+    const applied = classificationService.applyProposal(proposal!.id, lead.id);
+    assert.strictEqual(applied?.status, 'applied');
+    assert.ok(applied?.appliedTaskId, 'applied proposal carries the created task id');
+
+    const tasks = getDataService().loadTasks();
+    assert.strictEqual(tasks.length, 1);
+    assert.strictEqual(tasks[0].title, 'Handle checkout timeout');
+    const linked = getStores().findings.getById(proposal!.findingId);
+    assert.strictEqual(linked?.status, 'approved');
+    assert.strictEqual(linked?.taskId, applied!.appliedTaskId);
+
+    const second = classificationService.applyProposal(proposal!.id, lead.id);
+    assert.strictEqual(second?.status, 'applied', 're-applying an applied proposal is a no-op');
+    assert.strictEqual(getDataService().loadTasks().length, 1, 'no second task is created');
+  });
+});
+
 describe('ollama end-to-end against a local model', () => {
   const enabled = process.env.SPRINTDESK_OLLAMA_E2E === '1';
   const model = process.env.SPRINTDESK_OLLAMA_MODEL || 'gemma4:31b-cloud';

@@ -239,6 +239,36 @@ export function applyProposal(proposalIdInput: string, actorId?: string): TaskPr
   return getStores().proposals.getById(proposal.id);
 }
 
+export function rejectProposal(proposalIdInput: string, actorId?: string): TaskProposal | undefined {
+  const gate = requireEmployeePermission('classification:review', actorId);
+  if (!gate.ok) {throw new Error(gate.error);}
+
+  const proposal = getStores().proposals.getById(proposalIdInput);
+  if (!proposal) {return undefined;}
+  if (proposal.status !== 'pending') {return proposal;}
+
+  const now = new Date().toISOString();
+  getStores().proposals.update(proposal.id, { status: 'rejected', reason: 'rejected by review' });
+
+  emitEvent('task.proposal.rejected', 'classification', {
+    proposalId: proposal.id,
+    findingId: proposal.findingId,
+    actorId
+  });
+
+  getStores().audit.add({
+    id: `audit_${Date.now()}`,
+    actor: actorId || 'system',
+    action: 'classification.reject',
+    targetType: 'proposal',
+    targetId: proposal.id,
+    details: { findingId: proposal.findingId },
+    timestamp: now
+  });
+
+  return getStores().proposals.getById(proposal.id);
+}
+
 export interface ClassificationPassOptions {
   limit?: number;
   actorId?: string;

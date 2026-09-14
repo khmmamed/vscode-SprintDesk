@@ -53,6 +53,18 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   scanned / proposed / applied / approval-requested / failed / duplicates; the newest classification proposals
   appear as a summary line so review stays gate-driven.
 
+### v0.12 Slice E — Classification proposals review
+
+- **Proposals tab:** a dedicated Control Center tab lists classification proposals newest-first with
+  status (pending / applied / duplicate / failed / rejected), type, priority, workflow, confidence, and the
+  failure reason on non-pending rows; a `Proposals N` stat chip mirrors the Approvals chip.
+- **Review actions on pending proposals:** **Apply as Task** routes through the existing
+  `classification:apply`-gated `applyProposal` (idempotent — an applied proposal is never double-created), and
+  **Reject** marks the proposal `rejected` under the `classification:review` permission (`lead` / `reviewer` /
+  `human`, never a plain `agent`), never creating a task and leaving the finding pending.
+- **Live feedback:** apply/reject post a targeted `PROPOSAL_UPDATED` patch that updates the card in place plus
+  a `WORKFORCE_RESPONSE` summary; denials surface a specific permission error instead of silently failing.
+
 ## [0.11.0] - 2026-09-14 Workforce Control Center & Findings
 
 ### v0.11 Slice 1 — Control Center shell & end-to-end execution

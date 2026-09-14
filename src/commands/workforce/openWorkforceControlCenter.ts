@@ -546,12 +546,21 @@ function pushRun(panelRef: vscode.WebviewPanel, run: Run): void {
   }
 }
 
+function pushProposalPatch(panelRef: vscode.WebviewPanel, proposal: TaskProposal): void {
+  try {
+    panelRef.webview.postMessage({ command: 'PROPOSAL_UPDATED', payload: { proposal: toProposalDto(proposal) } });
+  } catch {
+    // panel may be disposed mid-flight
+  }
+}
+
 function pushSnapshot(panelRef: vscode.WebviewPanel): void {
   const overview = getActivitySummary();
   const counts = {
     pendingApprovals: getStores().approvals.loadAll().filter(a => a.status === 'pending').length,
     pendingFindings: findingsService.pendingFindingCount(),
     ...findingsService.getFindingReviewCounts(),
+    proposals: getStores().proposals.loadAll().length,
     schedules: getStores().schedules.loadAll().length,
     workflows: getStores().workflows.loadAll().length,
     eventRules: getStores().eventRules.loadAll().length,
@@ -963,6 +972,22 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
             classifyWithLlm: message?.payload?.classifyWithLlm
           });
           postResponse(newPanel, message?.requestId, result);
+        } catch (error) {
+          postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
+        }
+        workforceTreeDataProvider.refresh();
+        pushSnapshot(newPanel);
+      } else if (command === 'WORKFORCE_APPLY_PROPOSAL' || command === 'WORKFORCE_REJECT_PROPOSAL') {
+        const proposalId: string | undefined = message?.payload?.proposalId;
+        try {
+          if (!proposalId) {throw new Error('proposalId is required');}
+          const proposal = command === 'WORKFORCE_APPLY_PROPOSAL'
+            ? classificationService.applyProposal(proposalId)
+            : classificationService.rejectProposal(proposalId);
+          if (!proposal) {throw new Error('proposal not found');}
+          const done = command === 'WORKFORCE_APPLY_PROPOSAL' ? 'applied' : 'rejected';
+          postResponse(newPanel, message?.requestId, { [done]: true, proposal: toProposalDto(proposal) });
+          pushProposalPatch(newPanel, proposal);
         } catch (error) {
           postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
         }

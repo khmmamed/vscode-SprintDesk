@@ -7,6 +7,7 @@ type WorkforceSection =
   | "tasks"
   | "runs"
   | "findings"
+  | "proposals"
   | "approvals"
   | "schedules"
   | "workflows"
@@ -83,6 +84,7 @@ interface CountsDto {
   pendingFindings: number;
   pendingAgentReview: number;
   pendingHumanReview: number;
+  proposals: number;
   schedules: number;
   workflows: number;
   eventRules: number;
@@ -257,13 +259,14 @@ const EMPTY_QUEUE: QueueDto = {
   offlineAgents: 0
 };
 
-const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, pendingAgentReview: 0, pendingHumanReview: 0, schedules: 0, workflows: 0, eventRules: 0, exeWindows: 0 };
+const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, pendingAgentReview: 0, pendingHumanReview: 0, proposals: 0, schedules: 0, workflows: 0, eventRules: 0, exeWindows: 0 };
 
 const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "employees", label: "Employees" },
   { key: "tasks", label: "Tasks" },
   { key: "runs", label: "Runs" },
   { key: "findings", label: "Findings" },
+  { key: "proposals", label: "Proposals" },
   { key: "approvals", label: "Approvals" },
   { key: "schedules", label: "Schedules" },
   { key: "workflows", label: "Workflows" },
@@ -558,6 +561,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [findingActionError, setFindingActionError] = React.useState<string>("");
   const [approvalAction, setApprovalAction] = React.useState<string>("");
   const [approvalActionError, setApprovalActionError] = React.useState<string>("");
+  const [proposalAction, setProposalAction] = React.useState<string>("");
+  const [proposalActionError, setProposalActionError] = React.useState<string>("");
   const [taskAction, setTaskAction] = React.useState<string>("");
   const [taskActionError, setTaskActionError] = React.useState<string>("");
   const [editingTask, setEditingTask] = React.useState<TaskDto | null>(null);
@@ -690,6 +695,11 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         setApprovals(payload || []);
       } else if (command === "SET_WORKFORCE_PROPOSALS") {
         setProposals(payload || []);
+      } else if (command === "PROPOSAL_UPDATED") {
+        const proposal: ProposalDto | undefined = payload?.proposal;
+        if (proposal) {
+          setProposals(prev => [proposal, ...(prev || []).filter(p => p.id !== proposal.id)]);
+        }
       } else if (command === "APPROVAL_UPDATED") {
         const approval: ApprovalDto | undefined = payload?.approval;
         if (approval) {
@@ -726,6 +736,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setFindingActionError(messageError);
           setApprovalActionError(messageError);
           setTaskActionError(messageError);
+          setProposalActionError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -757,6 +768,12 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
             setTaskAction("Task updated.");
             setEditingTask(null);
             setConfirmDeleteTask(null);
+          }
+          if (payload?.applied) {
+            setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" applied — task created.` : "Proposal applied.");
+          }
+          if (payload?.rejected) {
+            setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" rejected.` : "Proposal rejected.");
           }
           if (payload?.deleted) {
             setTaskAction("Task deleted.");
@@ -807,6 +824,16 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const classifyNow = (): void => {
     setClassifyResult("");
     postRequest("WORKFORCE_RUN_CLASSIFICATION", {});
+  };
+
+  const applyProposal = (proposalId: string): void => {
+    setProposalAction("");
+    postRequest("WORKFORCE_APPLY_PROPOSAL", { proposalId });
+  };
+
+  const rejectProposal = (proposalId: string): void => {
+    setProposalAction("");
+    postRequest("WORKFORCE_REJECT_PROPOSAL", { proposalId });
   };
 
   const gotoRuns = (filter: RunFilter): void => {
@@ -1122,6 +1149,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         <StatChip label={`Agent Reviews ${counts.pendingAgentReview}`} onClick={() => gotoFindings("agent")} />
         <StatChip label={`Human Reviews ${counts.pendingHumanReview}`} onClick={() => gotoFindings("human")} />
         <StatChip label={`Approvals ${counts.pendingApprovals}`} onClick={() => setTab("approvals")} />
+        <StatChip label={`Proposals ${counts.proposals}`} onClick={() => setTab("proposals")} />
         <StatChip label={`Schedules ${counts.schedules}`} onClick={() => setTab("schedules")} />
         <StatChip label={`Workflows ${counts.workflows}`} onClick={() => setTab("workflows")} />
         <StatChip label={`Event Rules ${counts.eventRules}`} onClick={() => setTab("event-rules")} />
@@ -1573,6 +1601,40 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         </div>
       )}
 
+      {tab === "proposals" && (
+        <div>
+          {proposals.length === 0 && (
+            <div style={styles.empty}>No classification proposals yet. Run a classification pass from the Runs tab or review findings with suggested fields — each proposal is reviewed here before it becomes a task.</div>
+          )}
+          {proposalActionError && <div style={styles.error}>{proposalActionError}</div>}
+          {proposalAction && <div style={styles.ok}>{proposalAction}</div>}
+          {proposals.map(p => (
+            <div key={p.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{p.title}</span>
+                <span style={{ ...styles.statusChip, color: p.status === "pending" ? "#ffb74d" : p.status === "applied" ? "#4caf50" : p.status === "failed" ? "#e53935" : "#9e9e9e" }}>{p.status}</span>
+                <span style={styles.chip}>{p.type}</span>
+                <span style={styles.chip}>{p.priority}</span>
+                {p.workflow && <span style={styles.chip}>{p.workflow}</span>}
+                {p.confidence !== undefined && <span style={styles.chip}>{Math.round(p.confidence * 100)}% conf</span>}
+                <span style={{ flex: 1 }} />
+                <span style={styles.muted}>{formatTime(p.createdAt)}</span>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={styles.muted}>finding {p.findingId.slice(0, 8)}</span>
+                {p.status !== "pending" && p.reason && <span style={styles.muted}> · {p.reason}</span>}
+                {p.appliedTaskId && <span style={styles.muted}> · task {p.appliedTaskId}</span>}
+              </div>
+              {p.status === "pending" && (
+                <div style={{ marginTop: 8 }}>
+                  <button style={styles.button} onClick={() => applyProposal(p.id)}>Apply as Task</button>
+                  <button style={styles.buttonGhost} onClick={() => rejectProposal(p.id)}>Reject</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {tab === "approvals" && (
         <div>
           {approvals.filter(a => a.status === "pending").length === 0 && (
