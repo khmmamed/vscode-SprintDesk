@@ -63,7 +63,7 @@ async function handle_sprintdesk_runsUpdate(args: any): Promise<HandlerResult> {
   const actorId = args.actorId || run.agentId;
   if (!actorId) return res('Actor identity required (run.agentId not set)', true);
 
-  const employee = getStores().employees
+  const employee = getStores().people
     .loadAll()
     .find(e => e.id === actorId || e.name === actorId);
   if (!employee) return res(`Caller identity not found: ${actorId}`, true);

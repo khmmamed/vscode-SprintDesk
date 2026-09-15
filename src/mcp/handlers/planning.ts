@@ -366,7 +366,7 @@ async function handle_sprintdesk_projectContext(_args: any): Promise<HandlerResu
       backlogs: ds.loadBacklogs().length,
       runs: stores.runs.count(),
       events: stores.events.count(),
-      employees: stores.employees.count()
+      employees: stores.people.count()
     },
     tasksByStatus: taskStatusCounts,
     activeRuns: stores.runs.findByStatus('running').length,

@@ -10,7 +10,6 @@ export interface Task {
   epic: string | null;
   backlog: string;
   sprint: string | null;
-  assignee?: string;
   createdAt: string;
   updatedAt: string;
   path?: string;
@@ -479,16 +478,6 @@ export interface AgentConfig {
   model?: string;
 }
 
-export interface AgentRole {
-  name: string;
-  role: string;
-  tool: 'opencode' | 'ollama' | 'claude-code' | 'custom';
-  workingDir?: string;
-  promptTemplate?: string;
-  model?: string;
-  command?: string;
-}
-
 // v0.7 provider semantics (additive, non-breaking)
 export type LLMProviderKind = 'ollama' | 'openai';
 
@@ -523,18 +512,6 @@ export interface McpServerConfig {
   updatedAt: string;
 }
 
-export interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-  role?: 'lead' | 'developer' | 'reviewer' | 'observer' | 'agent';
-  agentConfig?: AgentConfig;
-  gitAuthor?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface HistoryEntry {
   id: string;
   itemId: string;
@@ -547,10 +524,6 @@ export interface HistoryEntry {
   authorEmail?: string;
   commitHash?: string;
   timestamp: string;
-}
-
-export interface TeamData {
-  members: TeamMember[];
 }
 
 export interface HistoryData {
@@ -571,10 +544,6 @@ export interface AuditData {
 
 export interface QueueSettingsData {
   queue: QueueSettings[];
-}
-
-export interface EmployeesData {
-  employees: Employee[];
 }
 
 export interface EmployeeTeamsData {

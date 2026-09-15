@@ -42,7 +42,7 @@ describe('MCP registry + safety chain', () => {
 
   it('denies calls without the tool-level capability', () => {
     const agent = makeEmployee({ name: 'Restricted', role: 'agent' });
-    getStores().employees.add(agent);
+    getStores().people.add(agent);
     const gate = canCallTool(agent as any, 'web', 'list');
     assert.strictEqual(gate.ok, false);
     assert.match((gate as { error: string }).error, /lacks capability 'mcp\.web\.list'/);
@@ -64,7 +64,7 @@ describe('MCP registry + safety chain', () => {
 
   it('allows a call when policy and capability are granted', () => {
     const agent = makeEmployee({ name: 'Authorized', role: 'agent', capabilities: ['mcp.web.list'] });
-    getStores().employees.add(agent);
+    getStores().people.add(agent);
     assert.strictEqual(canListTools(agent, 'web').ok, true);
     const call = canCallTool(agent, 'web', 'list');
     assert.strictEqual(call.ok, true);
@@ -72,7 +72,7 @@ describe('MCP registry + safety chain', () => {
 
   it('deny wins over an allow override', () => {
     const employee = makeEmployee({ name: 'Denied', role: 'agent', capabilities: ['mcp.web.list'] });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     getStores().policy.save({
       ...DEFAULT_POLICY,
       overrides: [{ employeeId: employee.id, deny: ['mcp:call'] }]
@@ -84,7 +84,7 @@ describe('MCP registry + safety chain', () => {
 
   it('resolveEmployee finds employees by id or name', () => {
     const employee = makeEmployee({ name: 'Bobby' });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const byId = resolveEmployee(employee.id);
     const byName = resolveEmployee('Bobby');
     assert.strictEqual(byId?.id, employee.id);
@@ -94,7 +94,7 @@ describe('MCP registry + safety chain', () => {
 
   it('listServerTools runs the full chain and denies when the list capability is missing', async () => {
     const agent = makeEmployee({ name: 'Chained', role: 'agent', capabilities: ['mcp.web.other'] });
-    getStores().employees.add(agent);
+    getStores().people.add(agent);
 
     await assert.rejects(
       () => listServerTools('web', agent.name),
@@ -102,14 +102,14 @@ describe('MCP registry + safety chain', () => {
     );
 
     const agentWithList = makeEmployee({ name: 'Chained2', role: 'agent', capabilities: ['mcp.web.list'] });
-    getStores().employees.add(agentWithList);
+    getStores().people.add(agentWithList);
     const gate = requireCall(agentWithList.name, 'web', 'list');
     assert.strictEqual(gate.ok, true);
   });
 
   it('throws a friendly error when the client cannot reach a server', async () => {
     const agent = makeEmployee({ name: 'NoNet', role: 'agent', capabilities: ['mcp.web.list'] });
-    getStores().employees.add(agent);
+    getStores().people.add(agent);
     await assert.rejects(
       () => callServerTool('web', 'list', {}, { agentIdOrName: agent.name }),
       (err: unknown) => (err as Error).message.includes('ECONNREFUSED') || (err as Error).message.includes('connection')

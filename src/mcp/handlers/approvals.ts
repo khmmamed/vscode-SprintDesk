@@ -66,7 +66,7 @@ function handle_sprintdesk_approvalsReject(args: any): HandlerResult {
 
 function handle_sprintdesk_employeeConfigure(args: any): HandlerResult {
   try {
-    const employee = getStores().employees
+    const employee = getStores().people
       .loadAll()
       .find(e => e.id === args.employeeId || e.name === args.employeeId);
     if (!employee) return res(`Employee not found: ${args.employeeId}`, true);

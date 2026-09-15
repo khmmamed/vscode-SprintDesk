@@ -29,7 +29,7 @@ function handle_sprintdesk_policyGet(args: any): HandlerResult {
     return res(JSON.stringify({ role: args.role, permissions: getStores().policy.getRolePermissions(args.role) }, null, 2));
   }
   if (args.employeeId) {
-    const employee = getStores().employees
+    const employee = getStores().people
       .loadAll()
       .find(e => e.id === args.employeeId || e.name === args.employeeId);
     if (!employee) {

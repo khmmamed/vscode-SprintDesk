@@ -29,8 +29,6 @@ export interface Stores {
   events: EventStore;
   audit: AuditStore;
   people: PeopleStore;
-  /** @deprecated Use `people`; retained temporarily for internal compatibility. */
-  employees: PeopleStore;
   teams: EmployeeTeamStore;
   skills: SkillStore;
   policy: PolicyStore;
@@ -69,8 +67,7 @@ export function getStores(workspaceRoot?: string): Stores {
       runs: new RunStore(root),
       events: new EventStore(root),
       audit: new AuditStore(root),
-      people,
-      employees: people,
+people,
       teams: new EmployeeTeamStore(root),
       skills: new SkillStore(root),
       policy: new PolicyStore(root),

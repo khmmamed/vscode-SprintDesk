@@ -104,8 +104,7 @@ readonly dropMimeTypes = [
     'application/vnd.code.tree.sprintdesk-backlogs',
     'application/vnd.code.tree.sprintdesk-tasks',
     'application/vnd.code.tree.sprintdesk-epics',
-    'application/vnd.code.tree.sprintdesk-sprints',
-    'application/vnd.code.tree.sprintdesk-team'
+    'application/vnd.code.tree.sprintdesk-sprints'
   ];
   readonly dragMimeTypes = ['application/vnd.code.tree.sprintdesk-backlogs'];
 

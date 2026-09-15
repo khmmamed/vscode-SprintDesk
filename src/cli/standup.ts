@@ -39,7 +39,7 @@ export function buildStandup(ws: string): string {
   const recentEvents = stores.events.latest(5);
 
   const availability = workforceService.getWorkforceSummary();
-  const byAvailability = stores.employees.loadAll().reduce<Record<string, number>>((acc, e) => {
+  const byAvailability = stores.people.loadAll().reduce<Record<string, number>>((acc, e) => {
     const k = e.status || 'idle';
     acc[k] = (acc[k] || 0) + 1;
     return acc;
@@ -66,7 +66,7 @@ export function buildStandup(ws: string): string {
       for (const missing of r.evaluation.missing) skillGaps.add(missing);
     }
   }
-  const employeesWithCertifiedSkills = stores.employees
+  const employeesWithCertifiedSkills = stores.people
     .loadAll()
     .filter(e => (e.skills || []).length > 0).length;
 

@@ -64,7 +64,7 @@ export function resolveEmployee(agentIdOrName?: string): Employee | undefined {
     return undefined;
   }
   return getStores()
-    .employees.loadAll()
+    .people.loadAll()
     .find(e => e.id === agentIdOrName || e.name === agentIdOrName);
 }
 

@@ -335,7 +335,7 @@ export const MOVE_TOOLS = [
 export const AGENT_TOOLS = [
   {
     name: 'sprintdesk_agentsList',
-    description: 'List available agents (workforce employees + team agents)',
+    description: 'List available agents (from people/agents.yml)',
     inputSchema: {
       type: 'object' as const,
       properties: {},
@@ -350,63 +350,6 @@ export const AGENT_TOOLS = [
         agentId: { type: 'string', description: 'Agent ID' },
       },
       required: ['agentId'],
-    },
-  },
-];
-
-export const TEAM_TOOLS = [
-  {
-    name: 'sprintdesk_listTeam',
-    description: 'List team members (from .SprintDesk/teams)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-    },
-  },
-  {
-    name: 'sprintdesk_syncTeamFromGit',
-    description: 'Sync team members from git contributors',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-    },
-  },
-  {
-    name: 'sprintdesk_addTeamMember',
-    description: 'Add a team member (does not automatically create a workforce employee)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Member name' },
-        email: { type: 'string', description: 'Member email' },
-        role: { type: 'string', enum: ['lead', 'developer', 'reviewer', 'observer', 'agent'], description: 'Team role (default developer)' },
-        avatar: { type: 'string', description: 'Optional avatar url' },
-        agentConfig: { type: 'object', description: 'Optional agent configuration (tool/model/command)' },
-      },
-      required: ['name', 'email'],
-    },
-  },
-  {
-    name: 'sprintdesk_removeTeamMember',
-    description: 'Remove a team member by id or email',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'Member id' },
-        email: { type: 'string', description: 'Member email' },
-      },
-    },
-  },
-  {
-    name: 'sprintdesk_runAgent',
-    description: 'Run a team agent interactively against a task (legacy terminal/git flow)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        agentId: { type: 'string', description: 'Agent id' },
-        taskCode: { type: 'string', description: 'Task code' },
-      },
-      required: ['agentId', 'taskCode'],
     },
   },
 ];
@@ -889,7 +832,6 @@ export const ALL_TOOLS = [
   ...SPRINT_TOOLS,
   ...BACKLOG_TOOLS,
   ...MOVE_TOOLS,
-  ...TEAM_TOOLS,
   ...AGENT_TOOLS,
   ...TASK_WORK_TOOLS,
   ...RUN_TOOLS,

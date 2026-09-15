@@ -204,7 +204,7 @@ describe('C7 workflow DSL', () => {
 
   it('loops abort immediately when a body step fails (bounded, no runaway)', async () => {
     const staff = makeEmployee({ name: 'Probe', role: 'agent', capabilities: ['mcp.web.boom'] });
-    getStores(ws.root).employees.add(staff);
+    getStores(ws.root).people.add(staff);
     upsertMcpServer({ id: 'web', kind: 'http', url: 'http://127.0.0.1:1/mcp', enabled: true });
 
     const def = workflow('wf-loop-fail', [loopStep('batch', 3, [toolStep('probe', 'web', 'boom', 'Probe')])]);
@@ -240,7 +240,7 @@ describe('C7 workflow DSL', () => {
 
   it('failures are observable by conditions via continueOnError, enabling else branches', async () => {
     const staff = makeEmployee({ name: 'Probe', role: 'agent', capabilities: ['mcp.web.boom'] });
-    getStores(ws.root).employees.add(staff);
+    getStores(ws.root).people.add(staff);
     upsertMcpServer({ id: 'web', kind: 'http', url: 'http://127.0.0.1:1/mcp', enabled: true });
 
     const def = workflow('wf-cond-else', [
@@ -280,7 +280,7 @@ describe('C7 workflow DSL', () => {
 
   it('tool steps are denied by the MCP capability gate', async () => {
     const staff = makeEmployee({ name: 'Restricted', role: 'agent' });
-    getStores(ws.root).employees.add(staff);
+    getStores(ws.root).people.add(staff);
     upsertMcpServer({ id: 'web', kind: 'http', url: 'http://127.0.0.1:1/mcp', enabled: true });
 
     const def = workflow('wf-tool-deny', [toolStep('t', 'web', 'list', 'Restricted')]);
@@ -294,7 +294,7 @@ describe('C7 workflow DSL', () => {
 
   it('tool steps pass the gate before the network call (outcome reflects the call)', async () => {
     const staff = makeEmployee({ name: 'Chained', role: 'agent', capabilities: ['mcp.web.list'] });
-    getStores(ws.root).employees.add(staff);
+    getStores(ws.root).people.add(staff);
     upsertMcpServer({ id: 'web', kind: 'http', url: 'http://127.0.0.1:1/mcp', enabled: true });
 
     const def = workflow('wf-tool-net', [toolStep('t', 'web', 'list', 'Chained')]);
@@ -311,7 +311,7 @@ describe('C7 workflow DSL', () => {
     const mock = await startMockMcp({ content: [{ type: 'text', text: 'steal-this-secret' }] });
     try {
       const staff = makeEmployee({ name: 'ToolUser', role: 'agent', capabilities: ['mcp.web.fetch'] });
-      getStores(ws.root).employees.add(staff);
+      getStores(ws.root).people.add(staff);
       upsertMcpServer({ id: 'web', kind: 'http', url: `http://127.0.0.1:${mock.port}/mcp`, enabled: true });
 
       const def = workflow('wf-tool-ok', [

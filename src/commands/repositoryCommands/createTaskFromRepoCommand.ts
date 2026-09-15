@@ -62,11 +62,6 @@ export function registerCreateTaskFromRepoCommand(context: vscode.ExtensionConte
           placeHolder: 'e.g., ui, api'
         });
 
-        const assignee = await vscode.window.showInputBox({
-          prompt: 'Enter assignee (optional)',
-          placeHolder: 'e.g., John Doe'
-        });
-
         const dataService = getDataService(repoPath);
         const task = taskService.createTask(repoPath, {
           title: taskTitle,

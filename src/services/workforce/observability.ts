@@ -75,7 +75,7 @@ function findTriggerForTask(taskId: string): RunTriggerReport | undefined {
 export function runDetail(run: Run): RunDetailReport {
   const root = fileService.getWorkspaceRoot();
   const task = root && run.taskId ? getDataService(root).getTask(run.taskId) : undefined;
-  const employee = run.agentId ? getStores().employees.getById(run.agentId) : undefined;
+  const employee = run.agentId ? getStores().people.getById(run.agentId) : undefined;
   const trigger = task ? findTriggerForTask(task.id) : undefined;
   const findings = getStores()
     .findings.byRunId(run.id)
@@ -103,7 +103,7 @@ export interface QueueSnapshot {
 export function getQueueSnapshot(): QueueSnapshot {
   const stores = getStores();
   const runs = stores.runs.loadAll();
-  const employees = stores.employees.loadAll();
+  const employees = stores.people.loadAll();
   const settings = getQueueSettings();
   const now = new Date().toISOString();
   return {
@@ -181,7 +181,7 @@ export function getExecutionWindowReport(window: ExecutionWindow): ExecutionWind
       .map(id => stores.workflows.getById(id)?.name)
       .filter((n): n is string => !!n),
     agentNames: window.agentIds
-      .map(id => stores.employees.getById(id)?.name)
+      .map(id => stores.people.getById(id)?.name)
       .filter((n): n is string => !!n),
     runCount: runs.length,
     runs: {
@@ -210,7 +210,7 @@ export function getActivitySummary(recentEventLimit = 20): ActivitySummary {
 
   return {
     asOf: new Date().toISOString(),
-    employees: countEmployees(stores.employees.loadAll()),
+    employees: countEmployees(stores.people.loadAll()),
     runs: countRuns(stores.runs.loadAll()),
     tasks: {
       total: tasks.length,

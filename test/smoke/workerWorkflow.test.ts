@@ -32,7 +32,7 @@ describe('C4 workflow: retries, timeout, classification', () => {
 
   function makeAgent(command: string) {
     const agent = makeEmployee({ status: 'idle', agentConfig: makeAgentConfig({ tool: 'custom', command }) });
-    getStores().employees.add(agent);
+    getStores().people.add(agent);
     return agent;
   }
 
@@ -52,7 +52,7 @@ describe('C4 workflow: retries, timeout, classification', () => {
     assert.strictEqual(result?.status, 'completed');
     assert.match(result?.output || '', /ALL GOOD/);
     assert.strictEqual(getStores().runs.getById(runId)?.status, 'completed');
-    assert.strictEqual(getStores().employees.getById(agent.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(agent.id)?.status, 'idle');
   });
 
   it('requeues a failed run up to maxRunRetries then fails terminally', async () => {
@@ -65,7 +65,7 @@ describe('C4 workflow: retries, timeout, classification', () => {
     const afterFirst = getStores().runs.getById(runId);
     assert.strictEqual(afterFirst?.status, 'queued');
     assert.strictEqual(afterFirst?.attempts, 2);
-    assert.strictEqual(getStores().employees.getById(agent.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(agent.id)?.status, 'idle');
 
     const retried = getStores().events.latest(10).find(e => e.type === 'run.retried');
     assert.ok(retried);
@@ -77,7 +77,7 @@ describe('C4 workflow: retries, timeout, classification', () => {
     const afterSecond = getStores().runs.getById(runId);
     assert.strictEqual(afterSecond?.status, 'failed');
     assert.strictEqual(afterSecond?.attempts, 2);
-    assert.strictEqual(getStores().employees.getById(agent.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(agent.id)?.status, 'idle');
 
     const finished = getStores().events.latest(10).find(e => e.type === 'run.finished' && e.payload.runId === runId);
     assert.ok(finished);
@@ -107,7 +107,7 @@ describe('C4 workflow: retries, timeout, classification', () => {
     const finished = getStores().events.latest(10).find(e => e.type === 'run.finished' && e.payload.runId === runId);
     assert.ok(finished);
     assert.strictEqual(finished.payload.classification, 'timeout');
-    assert.strictEqual(getStores().employees.getById(agent.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(agent.id)?.status, 'idle');
   });
 
   it('classifies spawn errors (missing executable) as spawn-error', async () => {
@@ -171,7 +171,7 @@ describe('C4 workflow: retries, timeout, classification', () => {
   it('does not requeue an invalid-config failure (non-retryable)', async () => {
     updateQueueSettings({ maxRunRetries: 5, retryBackoffMs: 0 });
     const agent = makeEmployee({ status: 'idle', agentConfig: makeAgentConfig({ tool: 'custom', command: '' }) });
-    getStores().employees.add(agent);
+    getStores().people.add(agent);
     const runId = startRunFor(agent.id);
 
     const result = await executeRun(runId, 'headless');
@@ -218,7 +218,7 @@ describe('C4 workflow: retries, timeout, classification', () => {
     const skip = pass.skipped.find(s => s.runId === runId);
     assert.strictEqual(skip?.reason, 'retry-delay');
     assert.strictEqual(getStores().runs.getById(runId)?.status, 'queued');
-    assert.strictEqual(getStores().employees.getById(agent.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(agent.id)?.status, 'idle');
   });
 
   it('claims a queued run once its availableAt has passed', async () => {
@@ -256,6 +256,6 @@ describe('C4 workflow: retries, timeout, classification', () => {
     const run = getStores().runs.getById(runId)!;
     assert.strictEqual(run.status, 'failed');
     assert.strictEqual(run.attempts, 3);
-    assert.strictEqual(getStores().employees.getById(agent.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(agent.id)?.status, 'idle');
   });
 });

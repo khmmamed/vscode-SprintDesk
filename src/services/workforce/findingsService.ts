@@ -117,7 +117,7 @@ export function materializeFindings(runId: string): Finding[] {
   const run = getStores().runs.getById(runId);
   if (!run || !run.result) {return [];}
 
-  const employee = run.agentId ? getStores().employees.getById(run.agentId) : undefined;
+  const employee = run.agentId ? getStores().people.getById(run.agentId) : undefined;
   const bullets = extractFindingBullets(run.result);
 
   return bullets.map(b => createFinding({
@@ -231,7 +231,7 @@ export function validateFinding(findingId: string, input: FindingValidationInput
   // Idempotent: an already-validated finding is returned unchanged (no duplicate event/audit).
   if (finding.agentReview) {return finding;}
 
-  const employee = validatorId ? getStores().employees.getById(validatorId) : undefined;
+  const employee = validatorId ? getStores().people.getById(validatorId) : undefined;
   const now = new Date().toISOString();
   const review: FindingAgentReview = {
     validatorId: validatorId || 'system',
@@ -280,7 +280,7 @@ export function validateFinding(findingId: string, input: FindingValidationInput
 }
 
 export function resolveEmployeeForRun(run: Run): Employee | undefined {
-  return run.agentId ? getStores().employees.getById(run.agentId) : undefined;
+  return run.agentId ? getStores().people.getById(run.agentId) : undefined;
 }
 
 export interface FindingSummary {

@@ -14,6 +14,7 @@ export type QueueSkipReason =
   | 'employee-not-found'
   | 'employee-offline'
   | 'no-permission'
+  | 'not-agent'
   | 'concurrency-limit'
   | 'not-assigned'
   | 'retry-delay';
@@ -121,7 +122,7 @@ function dataService() {
 
 function employeeById(id?: string): Employee | undefined {
   if (!id) {return undefined;}
-  return getStores().employees.getById(id);
+  return getStores().people.getById(id);
 }
 
 function runningRuns(): Run[] {
@@ -215,7 +216,7 @@ export function createRun(taskId: string, agentIdOrName?: string, opts?: { actor
   const task = ds.getTask(taskId) || ds.loadTasks().find(t => t.code === taskId);
   if (!task) {throw new Error(`Task not found: ${taskId}`);}
 
-  const employees = getStores().employees.loadAll();
+  const employees = getStores().people.loadAll();
   const byIdOrName = (id?: string): Employee | undefined =>
     id ? employees.find(e => e.id === id || e.name === id) : undefined;
 
@@ -226,6 +227,10 @@ export function createRun(taskId: string, agentIdOrName?: string, opts?: { actor
 
   const gate = requireEmployeePermission('run:create', agent.id);
   if (!gate.ok) {throw new Error(gate.error);}
+
+  if (agent.role !== 'agent') {
+    throw new Error(`Only agent records can start workforce runs. ${agent.name} is a ${agent.role}.`);
+  }
 
   if (agent.status === 'offline') {
     throw new Error(`Agent ${agent.name} is offline and cannot take work`);
@@ -461,6 +466,11 @@ export function processQueue(options: QueueProcessOptions = {}): QueueProcessRes
     const gate = requireEmployeePermission('run:create', employee.id);
     if (!gate.ok) {
       skip('no-permission', gate.error);
+      continue;
+    }
+
+    if (employee.role !== 'agent') {
+      skip('not-agent', `${employee.name} is ${employee.role}, only agents can start runs`);
       continue;
     }
 

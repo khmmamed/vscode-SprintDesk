@@ -18,23 +18,23 @@ describe('YAML stores', () => {
     ws.cleanup();
   });
 
-  it('persists employees to .SprintDesk/workforce/employees.yml', () => {
+  it('persists people to .SprintDesk/people/humans.yml', () => {
     const stores = getStores(ws.root);
     const employee = makeEmployee({ name: 'Persist Me', role: 'human' });
-    stores.employees.add(employee);
+    stores.people.add(employee);
 
-    const reloaded = getStores(ws.root).employees;
+    const reloaded = getStores(ws.root).people;
     assert.strictEqual(reloaded.getById(employee.id)?.name, 'Persist Me');
 
-    const file = path.join(ws.root, '.SprintDesk', 'workforce', 'employees.yml');
+    const file = path.join(ws.root, '.SprintDesk', 'people', 'humans.yml');
     const content = fs.readFileSync(file, 'utf8');
-    assert.ok(content.includes('Persist Me'), 'employee should be written to disk');
+    assert.ok(content.includes('Persist Me'), 'person should be written to disk');
   });
 
   it('round-trips run lifecycle updates', () => {
     const stores = getStores(ws.root);
     const employee = makeEmployee();
-    stores.employees.add(employee);
+    stores.people.add(employee);
     const task = makeTask();
     const run = makeRun(task.id, employee.id);
 

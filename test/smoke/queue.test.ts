@@ -11,7 +11,7 @@ function seedSkilledAgent(skills: string[]) {
     skills: skills.map(name => ({ name, level: 1 as const })),
     agentConfig: makeAgentConfig()
   });
-  getStores().employees.add(employee);
+  getStores().people.add(employee);
   return employee;
 }
 
@@ -39,13 +39,13 @@ describe('queueService headless loop', () => {
 
     const run = getStores().runs.getById(pass.executed[0].runId);
     assert.strictEqual(run?.status, 'completed');
-    assert.strictEqual(getStores().employees.getById(employee.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(employee.id)?.status, 'idle');
     assert.strictEqual(getDataService(ws.root).getTask(task.id)?.workStatus, 'done');
   });
 
   it('does not claim runs for offline employees', async () => {
     const employee = seedSkilledAgent(['typescript', 'vscode-extension', 'apis']);
-    getStores().employees.update(employee.id, { status: 'offline' });
+    getStores().people.update(employee.id, { status: 'offline' });
     const task = makeTask({ type: 'feature' });
     makeRun(task.id, employee.id);
 
@@ -95,16 +95,16 @@ describe('queueService headless loop', () => {
     const result = await worker.executeRun(run.id, 'noop');
     assert.strictEqual(result, undefined);
     assert.strictEqual(getStores().runs.getById(run.id)?.status, 'queued');
-    assert.strictEqual(getStores().employees.getById(employee.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(employee.id)?.status, 'idle');
 
     const started = queueService.startRun(run.id);
     assert.strictEqual(started?.status, 'running');
-    assert.strictEqual(getStores().employees.getById(employee.id)?.status, 'busy');
+    assert.strictEqual(getStores().people.getById(employee.id)?.status, 'busy');
 
     const direct = await worker.executeRun(run.id, 'noop');
     assert.strictEqual(direct?.status, 'completed');
     assert.strictEqual(getStores().runs.getById(run.id)?.status, 'completed');
-    assert.strictEqual(getStores().employees.getById(employee.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(employee.id)?.status, 'idle');
     assert.strictEqual(getDataService(ws.root).getTask(task.id)?.workStatus, 'done');
   });
 });

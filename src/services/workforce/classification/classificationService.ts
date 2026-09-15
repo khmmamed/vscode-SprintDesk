@@ -270,7 +270,8 @@ export function rejectProposal(proposalIdInput: string, actorId?: string): TaskP
 }
 
 export function requeueProposal(proposalIdInput: string, actorId?: string): TaskProposal | undefined {
-  requireEmployeePermission('classification:review', actorId);
+  const gate = requireEmployeePermission('classification:review', actorId);
+  if (!gate.ok) {throw new Error(gate.error);}
   const proposal = getStores().proposals.getById(proposalIdInput);
   if (!proposal) {return undefined;}
   if (proposal.status !== 'rejected') {return proposal;}

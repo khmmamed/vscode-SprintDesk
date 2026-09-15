@@ -167,7 +167,7 @@ export function setTaskStatus(taskId: string, status: Task['status']): void {
 }
 
 export function getTaskAssignee(task: Task): string | undefined {
-  return task.agent ?? task.assignee;
+  return task.agent;
 }
 
 export function startTask(taskId: string): void {

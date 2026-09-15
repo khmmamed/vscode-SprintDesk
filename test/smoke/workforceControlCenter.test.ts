@@ -34,7 +34,7 @@ describe('queueService.createRun', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -53,7 +53,7 @@ describe('queueService.createRun', () => {
   it('falls back to the task agent when no agent is given', () => {
     const employee = seedAgent({ name: 'Agent Alpha' });
     const task = makeTask({ type: 'feature', agent: employee.id });
-    getStores().employees.add(makeEmployee());
+    getStores().people.add(makeEmployee());
 
     const run = queueService.createRun(task.id);
     assert.strictEqual(run.agentId, employee.id);
@@ -62,7 +62,7 @@ describe('queueService.createRun', () => {
   it('uses the task agent by code when taskId is a task code', () => {
     const employee = seedAgent();
     const task = makeTask({ type: 'feature' });
-    getStores().employees.add(makeEmployee());
+    getStores().people.add(makeEmployee());
 
     const run = queueService.createRun(task.code, employee.id);
     assert.strictEqual(run.taskId, task.id);
@@ -143,7 +143,7 @@ describe('summarizeRunOutput / finishRun', () => {
 
   it('stores the summary on the run via finishRun', () => {
     const employee = makeEmployee();
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const task = makeTask({ type: 'feature' });
     const run = makeRun(task.id, employee.id);
 
@@ -248,7 +248,7 @@ describe('run lifecycle controls (control-center checklist)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -271,11 +271,11 @@ describe('run lifecycle controls (control-center checklist)', () => {
     const employee = seedAgent({ agentConfig: makeAgentConfig() });
     const { run } = queuedRun(employee.id);
     queueService.startRun(run.id);
-    assert.strictEqual(getStores().employees.getById(employee.id)?.status, 'busy');
+    assert.strictEqual(getStores().people.getById(employee.id)?.status, 'busy');
 
     const cancelled = queueService.cancelRun(run.id, employee.id);
     assert.strictEqual(cancelled?.status, 'cancelled');
-    assert.strictEqual(getStores().employees.getById(employee.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(employee.id)?.status, 'idle');
   });
 
   it('does not cancel a finished run', () => {
@@ -364,7 +364,7 @@ describe('findings (first-class workforce objects, v0.11)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -478,7 +478,7 @@ describe('agent validation & review (v0.11)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -630,7 +630,7 @@ describe('applyConfigChange (agent model/configuration, v0.11)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -645,7 +645,7 @@ describe('applyConfigChange (agent model/configuration, v0.11)', () => {
     assert.strictEqual(result.applied, true);
     assert.strictEqual(result.approvalRequired, undefined);
 
-    const stored = getStores().employees.getById(employee.id);
+    const stored = getStores().people.getById(employee.id);
     assert.strictEqual(stored?.modelProfile?.provider, 'ollama');
     assert.strictEqual(stored?.modelProfile?.model, 'gemma4:31b-cloud');
     assert.strictEqual(stored?.modelProfile?.baseUrl, 'http://localhost:11434');
@@ -663,7 +663,7 @@ describe('applyConfigChange (agent model/configuration, v0.11)', () => {
 
     assert.strictEqual(result.applied, false);
     assert.strictEqual(result.approvalRequired, true);
-    assert.strictEqual(getStores().employees.getById(employee.id)?.modelProfile, undefined);
+    assert.strictEqual(getStores().people.getById(employee.id)?.modelProfile, undefined);
 
     const pending = getStores().approvals.loadAll().filter(a => a.status === 'pending' && a.type === 'config-change');
     assert.strictEqual(pending.length, 1);
@@ -684,7 +684,7 @@ describe('applyConfigChange (agent model/configuration, v0.11)', () => {
 
     const approved = approvals.resolveApproval(pending[0].id, 'approved');
     assert.strictEqual(approved?.status, 'approved');
-    assert.strictEqual(getStores().employees.getById(employee.id)?.agentConfig?.tool, 'opencode');
+    assert.strictEqual(getStores().people.getById(employee.id)?.agentConfig?.tool, 'opencode');
   });
 
   it('throws for a missing employee', () => {
@@ -705,7 +705,7 @@ describe('event rules (async automation, v0.11)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -927,7 +927,7 @@ describe('operational execution & queue visibility (v0.11)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -1133,7 +1133,7 @@ describe('execution windows — synchronous work (v0.11)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -1317,7 +1317,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -1482,7 +1482,7 @@ describe('v0.12 Proposal 1 — approvals resolve (Slice A)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -1497,7 +1497,7 @@ describe('v0.12 Proposal 1 — approvals resolve (Slice A)', () => {
     const approved = approvals.approve(pending[0].id);
     assert.strictEqual(approved?.status, 'approved');
     assert.ok(approved?.resolvedAt, 'approve records resolvedAt');
-    assert.strictEqual(getStores().employees.getById(employee.id)?.agentConfig?.tool, 'opencode');
+    assert.strictEqual(getStores().people.getById(employee.id)?.agentConfig?.tool, 'opencode');
 
     assert.ok(
       getActivitySummary().recentEvents.some(e => e.type === 'approval.resolved' && e.payload['approvalId'] === pending[0].id),
@@ -1554,7 +1554,7 @@ describe('v0.12 Proposal 1 — tasks CRUD (Slice B)', () => {
 
   it('updates title, priority, status and agent on a task', () => {
     const employee = makeEmployee({ name: 'Agent Alpha' });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const task = makeTask({ type: 'feature', priority: 'medium', status: 'waiting' });
 
     taskService.updateTask(task.id, {
@@ -1599,7 +1599,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -1736,7 +1736,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () 
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -1869,7 +1869,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice E — proposals 
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -2112,7 +2112,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal e
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -2249,7 +2249,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
 
   function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
     const employee = makeEmployee(overrides);
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     return employee;
   }
 
@@ -2284,7 +2284,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
     const proposal = seedRejectedProposal(lead.id);
     assert.strictEqual(proposal?.status, 'rejected');
 
-    const findingId = proposal!.findingId земли;
+    const findingId = proposal!.findingId;
     const requeued = classificationService.requeueProposal(proposal!.id, lead.id);
 
     assert.strictEqual(requeued?.status, 'pending');
@@ -2358,7 +2358,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
     // no fresh classification pass — requeue is a pure status transition
     assert.strictEqual(getStores().events.findByType('classification.pass').length, 0);
 
-    const tasks = getStores().loadTasks();
+    const tasks = getDataService().loadTasks();
     assert.strictEqual(tasks.length, 1);
     assert.strictEqual(tasks[0].title, 'Requeue apply task');
     assert.strictEqual(tasks[0].type, 'bug');
@@ -2391,7 +2391,7 @@ describe('ollama end-to-end against a local model', () => {
       name: 'Morocco News Agent',
       modelProfile: { name: 'Morocco News Agent', provider: 'ollama', model, baseUrl: 'http://localhost:11434' }
     });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const task = makeTask({ title: 'Research Moroccan election news and summarize the key parties and dates', type: 'feature' });
 
     const run = queueService.createRun(task.id, employee.id);

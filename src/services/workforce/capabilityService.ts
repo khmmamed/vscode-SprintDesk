@@ -81,7 +81,7 @@ function statusRank(status: Employee['status']): number {
 }
 
 export function rankEmployees(task: Pick<Task, 'type' | 'requiredSkills'>, options: RecommendOptions = {}): EmployeeScore[] {
-  const all = getStores().employees.loadAll();
+  const all = getStores().people.loadAll();
   const evaluated = all
     .map(employee => {
       const evaluation = evaluate(task, employee);
@@ -140,7 +140,7 @@ export function requireEmployeePermission(permission: PermissionId, agentIdOrNam
   if (!agentIdOrName) {
     return { ok: true };
   }
-  const employee = getStores().employees
+  const employee = getStores().people
     .loadAll()
     .find(e => e.id === agentIdOrName || e.name === agentIdOrName);
   if (!employee) {

@@ -99,7 +99,7 @@ export async function classifyFinding(
   finding: Finding,
   options: { providerOverride?: LLMProvider } = {}
 ): Promise<ClassificationOutcome> {
-  const employee = getStores().employees.loadAll().find(e => e.id === finding.agent || e.name === finding.agentName);
+  const employee = getStores().people.loadAll().find(e => e.id === finding.agent || e.name === finding.agentName);
   if (!employee) {
     return { ok: false, reason: 'no employee found for the finding' };
   }

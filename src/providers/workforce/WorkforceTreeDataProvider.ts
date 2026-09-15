@@ -350,7 +350,7 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     }
 
     return runs.map(run => {
-      const employee = run.agentId ? getStores().employees.getById(run.agentId) : undefined;
+      const employee = run.agentId ? getStores().people.getById(run.agentId) : undefined;
       const tooltip = run.error ? `${taskTitleFor(run)} - ${run.error}` : taskTitleFor(run);
       return new WorkforceItem(
         taskTitleFor(run),

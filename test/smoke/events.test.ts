@@ -30,7 +30,7 @@ describe('workforce events + observability', () => {
 
   it('startRun emits run.started', () => {
     const employee = makeEmployee({ status: 'idle' });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const task = makeTask({});
     const run = makeRun(task.id, employee.id);
 
@@ -45,7 +45,7 @@ describe('workforce events + observability', () => {
 
   it('finishRun emits run.finished with status', () => {
     const employee = makeEmployee({});
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const task = makeTask({});
     const run = makeRun(task.id, employee.id);
 
@@ -60,7 +60,7 @@ describe('workforce events + observability', () => {
 
   it('cancelRun emits run.cancelled', () => {
     const employee = makeEmployee({ teamRole: 'lead' });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const task = makeTask({});
     const run = makeRun(task.id, employee.id);
 
@@ -83,7 +83,7 @@ describe('workforce events + observability', () => {
 
   it('updateEmployee emits employee.status only on actual status change', () => {
     const employee = makeEmployee({ status: 'idle' });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
 
     updateEmployee(employee.id, { status: 'busy' });
     updateEmployee(employee.id, { status: 'busy' });
@@ -100,9 +100,9 @@ describe('workforce events + observability', () => {
 
   it('activity summary aggregates state and recent events', () => {
     const employee = makeEmployee({ status: 'busy', role: 'agent' });
-    getStores().employees.add(employee);
+    getStores().people.add(employee);
     const human = makeEmployee({ status: 'offline', role: 'human' });
-    getStores().employees.add(human);
+    getStores().people.add(human);
     makeTask({});
     const run = makeRun(makeTask({}).id, employee.id);
     startRun(run.id);
@@ -129,7 +129,7 @@ describe('workforce events + observability', () => {
 
   it('executeRun finishes a running run as failed when agent config is missing', async () => {
     const agent = makeEmployee({ status: 'idle', agentConfig: undefined });
-    getStores().employees.add(agent);
+    getStores().people.add(agent);
     const task = makeTask({});
     const run = makeRun(task.id, agent.id);
     startRun(run.id);
@@ -139,6 +139,6 @@ describe('workforce events + observability', () => {
     assert.match(result?.error || '', /Agent not configured/);
     const stored = getStores().runs.getById(run.id);
     assert.strictEqual(stored?.status, 'failed');
-    assert.strictEqual(getStores().employees.getById(agent.id)?.status, 'idle');
+    assert.strictEqual(getStores().people.getById(agent.id)?.status, 'idle');
   });
 });

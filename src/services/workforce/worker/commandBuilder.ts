@@ -1,28 +1,8 @@
-import * as fs from 'fs';
 import * as path from 'path';
-import { AgentConfig, AgentRole } from '../../../data/types';
-import { getWorkspaceRoot } from '../../fileService';
+import { AgentConfig } from '../../../data/types';
 
 export function sanitizeBranchName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-}
-
-export function getRoleFilePath(agentName: string): string {
-  const wsRoot = getWorkspaceRoot();
-  if (!wsRoot) {return '';}
-  return path.join(wsRoot, '.SprintDesk', 'teams', `${agentName}.json`);
-}
-
-export function loadAgentRole(agentName: string): AgentRole | undefined {
-  const rolePath = getRoleFilePath(agentName);
-  if (!rolePath || !fs.existsSync(rolePath)) {return undefined;}
-
-  try {
-    const content = fs.readFileSync(rolePath, 'utf8');
-    return JSON.parse(content);
-  } catch {
-    return undefined;
-  }
 }
 
 export function buildAgentCommand(
@@ -37,29 +17,23 @@ export function buildAgentCommand(
   }
   const taskDir = taskPath && taskPath !== 'undefined' ? path.dirname(taskPath) : process.cwd();
   const taskFile = path.basename(taskPath);
-  const roleFile = getRoleFilePath(agentName);
 
-  const role = loadAgentRole(agentName);
-  const roleDescription = role?.role || '';
-  const defaultTemplate = 'Read your role from {roleFile} and work on task {taskFile}';
-  const template = role?.promptTemplate || defaultTemplate;
-
-  const fullPrompt = `[${roleDescription}] Read role from ${roleFile} and work on task ${taskPath}`;
+  const fullPrompt = `[${agentName}] ${taskDescription}\n\nTask: ${taskTitle}\nWork in: ${taskDir}`;
 
   switch (config.tool) {
     case 'opencode': {
       return { command: 'opencode', args: ['-s', '--prompt', fullPrompt] };
     }
     case 'ollama': {
-      const model = config.model || role?.model || 'llama3';
-      const prompt = `Role: ${roleDescription}\n\nTask: ${taskTitle}\nWork in: ${taskDir}`;
+      const model = config.model || 'llama3';
+      const prompt = `Task: ${taskTitle}\nWork in: ${taskDir}`;
       return { command: 'ollama', args: ['run', model, prompt] };
     }
     case 'claude-code': {
       return { command: 'claude', args: ['code', '--task', taskPath] };
     }
     case 'custom': {
-      const cmd = (config.command || role?.command || '')
+      const cmd = (config.command || '')
         .replace(/\{task_path\}/g, taskPath)
         .replace(/\{task_dir\}/g, taskDir)
         .replace(/\{task_file\}/g, taskFile)

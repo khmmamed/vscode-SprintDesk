@@ -372,7 +372,7 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
     const sdPath = path.join(ws, '.SprintDesk');
 
 // Ensure all directories exist
-    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp', 'teams'];
+    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp', 'people', 'workforce'];
     for (const dir of dirs) {
       const fullPath = path.join(sdPath, dir);
       if (!fs.existsSync(fullPath)) {
@@ -426,7 +426,7 @@ Local MCP server for integrating SprintDesk with AI agents like Copilot, Claude,
 - sprintdesk_tasksAutoAssign
 
 ### Workforce Tools
-- sprintdesk_agentsList, sprintdesk_agentsGet, sprintdesk_runAgent
+- sprintdesk_agentsList, sprintdesk_agentsGet
 
 ### Run Tools
 - sprintdesk_runsCreate, sprintdesk_runsList, sprintdesk_runsGet

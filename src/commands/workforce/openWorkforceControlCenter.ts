@@ -278,7 +278,7 @@ function allRunDtos(): RunDto[] {
 }
 
 function employeeDtos(): EmployeeDto[] {
-  return getStores().employees.loadAll().map(e => ({
+  return getStores().people.loadAll().map(e => ({
     id: e.id,
     name: e.name,
     role: e.role,
@@ -1019,7 +1019,7 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
 
         if (change?.modelProfile && typeof change.modelProfile.model === 'string' && change.modelProfile.model.trim()) {
           const mp: EmployeeModelProfile = {
-            name: getStores().employees.getById(employeeId || '')?.name || employeeId || '',
+            name: getStores().people.getById(employeeId || '')?.name || employeeId || '',
             provider: change.modelProfile.provider === 'openai' ? 'openai' : 'ollama',
             model: String(change.modelProfile.model).trim()
           };

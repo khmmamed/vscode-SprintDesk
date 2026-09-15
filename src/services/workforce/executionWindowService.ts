@@ -98,7 +98,7 @@ function runForTask(taskId: string): string | undefined {
 
 function assignAgents(window: ExecutionWindow, runIds: string[]): void {
   const stores = getStores();
-  const employees = stores.employees.loadAll();
+  const employees = stores.people.loadAll();
   const pool = (window.agentIds.length > 0
     ? employees.filter(e => window.agentIds.includes(e.id))
     : employees.filter(e => e.role === 'agent'))

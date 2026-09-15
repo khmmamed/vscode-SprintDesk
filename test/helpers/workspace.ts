@@ -18,8 +18,12 @@ export function makeWorkspace(): TestWorkspace {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sprintdesk-test-'));
   fs.mkdirSync(path.join(root, '.SprintDesk', 'data'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'Tasks'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.SprintDesk', 'people'), { recursive: true });
   for (const key of ['tasks', 'backlogs', 'epics', 'sprints']) {
     fs.writeFileSync(path.join(root, '.SprintDesk', 'data', `${key}.yml`), `${key}: []`, 'utf8');
+  }
+  for (const key of ['humans', 'agents']) {
+    fs.writeFileSync(path.join(root, '.SprintDesk', 'people', `${key}.yml`), `${key}: []`, 'utf8');
   }
   currentRoot = root;
   setWorkspaceRootOverride(root);

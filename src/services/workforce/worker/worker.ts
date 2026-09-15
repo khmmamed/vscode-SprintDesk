@@ -66,7 +66,7 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
   const task = ds.getTask(run.taskId);
   if (!task) {return undefined;}
 
-  const employee = getStores().employees.getById(run.agentId || '');
+  const employee = getStores().people.getById(run.agentId || '');
   if (!employee) {return undefined;}
 
   const runnable = resolveRunnableState(employee, mode);

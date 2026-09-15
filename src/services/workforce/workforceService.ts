@@ -21,7 +21,7 @@ export interface ResolvedEmployeeTeam extends EmployeeTeam {
 export function getWorkforce(): Workforce {
   const stores = getStores();
   const teams = stores.teams.loadAll();
-  const employees = stores.employees.loadAll();
+  const employees = stores.people.loadAll();
   const memberIds = new Set(teams.flatMap(t => t.memberIds));
 
   return {
@@ -86,7 +86,7 @@ export function addEmployee(input: {
     createdAt: now,
     updatedAt: now
   };
-  stores.employees.add(employee);
+  stores.people.add(employee);
 
   if (input.teamId) {
     assignToTeam(employee.id, input.teamId);
@@ -100,10 +100,10 @@ export function updateEmployee(
   updates: Partial<Pick<Employee, 'name' | 'role' | 'capabilities' | 'status' | 'gitAuthor' | 'description' | 'skills' | 'teamRole' | 'agentConfig'>>
 ): Employee | undefined {
   const stores = getStores();
-  const existing = stores.employees.getById(employeeId);
+  const existing = stores.people.getById(employeeId);
   if (!existing) return undefined;
 
-  stores.employees.update(employeeId, { ...updates, updatedAt: new Date().toISOString() });
+  stores.people.update(employeeId, { ...updates, updatedAt: new Date().toISOString() });
   if (updates.status && updates.status !== existing.status) {
     emitEvent('employee.status', 'workforce', {
       employeeId,
@@ -112,7 +112,7 @@ export function updateEmployee(
       to: updates.status
     });
   }
-  return stores.employees.getById(employeeId);
+  return stores.people.getById(employeeId);
 }
 
 export function setEmployeeStatus(
@@ -124,10 +124,10 @@ export function setEmployeeStatus(
 
 export function removeEmployee(employeeId: string): boolean {
   const stores = getStores();
-  const existing = stores.employees.getById(employeeId);
+  const existing = stores.people.getById(employeeId);
   if (!existing) return false;
 
-  stores.employees.delete(employeeId);
+  stores.people.delete(employeeId);
 
   for (const team of stores.teams.loadAll()) {
     if (team.memberIds.includes(employeeId) || team.leadId === employeeId) {
@@ -145,7 +145,7 @@ export function removeEmployee(employeeId: string): boolean {
 
 export function assignToTeam(employeeId: string, teamId: string): void {
   const stores = getStores();
-  const employee = stores.employees.getById(employeeId);
+  const employee = stores.people.getById(employeeId);
   if (!employee) throw new Error(`Employee not found: ${employeeId}`);
 
   const target = stores.teams.getById(teamId);
@@ -318,7 +318,7 @@ export interface EmployeeConfigChange {
 
 export function performConfigChange(employeeId: string, changes: EmployeeConfigChange, requesterId?: string): Employee {
   const stores = getStores();
-  const employee = stores.employees.loadAll().find(e => e.id === employeeId || e.name === employeeId);
+  const employee = stores.people.loadAll().find(e => e.id === employeeId || e.name === employeeId);
   if (!employee) throw new Error(`Employee not found: ${employeeId}`);
 
   const updates: Partial<Pick<Employee, 'modelProfile' | 'agentConfig' | 'capabilities'>> = {};
@@ -354,7 +354,7 @@ export function applyConfigChange(
   changes: EmployeeConfigChange,
   requesterId?: string
 ): ApplyConfigResult {
-  const employee = getStores().employees.loadAll().find(e => e.id === employeeId || e.name === employeeId);
+  const employee = getStores().people.loadAll().find(e => e.id === employeeId || e.name === employeeId);
   if (!employee) {throw new Error(`Employee not found: ${employeeId}`);}
 
   if (gateMode('config-change') === 'manual') {
