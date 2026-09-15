@@ -121,8 +121,14 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     }
 
     switch (element.contextValue) {
-      case 'workforceEmployees':
+      case 'workforcePeople':
+        return Promise.resolve(this.buildPeopleRows());
+      case 'workforceTeams':
         return Promise.resolve(this.buildTeamRows());
+      case 'workforceHumans':
+        return Promise.resolve(this.buildPeopleRowsByRole('human'));
+      case 'workforceAgents':
+        return Promise.resolve(this.buildPeopleRowsByRole('agent'));
       case 'workforceTeam':
         return Promise.resolve(this.buildMemberRows(element.team));
       case 'workforceUnassigned':
@@ -151,12 +157,12 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
 
     return [
       new WorkforceItem(
-        `Employees (${employees.length})`,
+        `People (${employees.length})`,
         vscode.TreeItemCollapsibleState.Expanded,
-        'workforceEmployees',
+        'workforcePeople',
         undefined, undefined, undefined, undefined, undefined,
         'organization',
-        teams.length > 0 ? `${teams.length} team(s)` : undefined
+        `${employees.filter(person => person.role === 'human').length} humans · ${employees.filter(person => person.role === 'agent').length} agents · ${teams.length} teams`
       ),
       new WorkforceItem(
         `Tasks (${assignedTasks})`,
@@ -264,6 +270,29 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     }
 
     return items;
+  }
+
+  private buildPeopleRows(): WorkforceItem[] {
+    const { employees, teams } = workforceService.getWorkforce();
+    const humans = employees.filter(person => person.role === 'human').length;
+    const agents = employees.filter(person => person.role === 'agent').length;
+    return [
+      new WorkforceItem(`Humans (${humans})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceHumans', undefined, undefined, undefined, undefined, undefined, 'account-group'),
+      new WorkforceItem(`Agents (${agents})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceAgents', undefined, undefined, undefined, undefined, undefined, 'robot'),
+      new WorkforceItem(`Teams (${teams.length})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceTeams', undefined, undefined, undefined, undefined, undefined, 'organization')
+    ];
+  }
+
+  private buildPeopleRowsByRole(role: Employee['role']): WorkforceItem[] {
+    return workforceService.getWorkforce().employees
+      .filter(person => person.role === role)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(person => new WorkforceItem(
+        person.name,
+        vscode.TreeItemCollapsibleState.None,
+        person.role === 'agent' ? 'employeeAgent' : 'employee',
+        person
+      ));
   }
 
   private buildMemberRows(team?: EmployeeTeam): WorkforceItem[] {

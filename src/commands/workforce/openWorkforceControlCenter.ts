@@ -196,6 +196,7 @@ export interface ProposalDto {
   reason?: string;
   editedAt?: string;
   editCount?: number;
+  requeuedAt?: string;
 }
 
 export interface ScheduleDto {
@@ -516,7 +517,8 @@ function toProposalDto(p: TaskProposal): ProposalDto {
     ...(p.appliedTaskId ? { appliedTaskId: p.appliedTaskId } : {}),
     ...(p.reason ? { reason: p.reason } : {}),
     ...(p.editedAt ? { editedAt: p.editedAt } : {}),
-    ...(p.edits && p.edits.length > 0 ? { editCount: p.edits.length } : {})
+    ...(p.edits && p.edits.length > 0 ? { editCount: p.edits.length } : {}),
+    ...(p.requeuedAt ? { requeuedAt: p.requeuedAt } : {})
   };
 }
 
@@ -983,17 +985,26 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         }
         workforceTreeDataProvider.refresh();
         pushSnapshot(newPanel);
-      } else if (command === 'WORKFORCE_APPLY_PROPOSAL' || command === 'WORKFORCE_REJECT_PROPOSAL' || command === 'WORKFORCE_EDIT_PROPOSAL') {
+      } else if (command === 'WORKFORCE_APPLY_PROPOSAL' || command === 'WORKFORCE_REJECT_PROPOSAL' || command === 'WORKFORCE_EDIT_PROPOSAL' || command === 'WORKFORCE_REQUEUE_PROPOSAL') {
         const proposalId: string | undefined = message?.payload?.proposalId;
         try {
           if (!proposalId) {throw new Error('proposalId is required');}
-          const proposal = command === 'WORKFORCE_APPLY_PROPOSAL'
-            ? classificationService.applyProposal(proposalId)
-            : command === 'WORKFORCE_REJECT_PROPOSAL'
-              ? classificationService.rejectProposal(proposalId)
-              : classificationService.editProposal(proposalId, message?.payload?.changes || {});
+          let proposal: TaskProposal | undefined;
+          let done: string;
+          if (command === 'WORKFORCE_APPLY_PROPOSAL') {
+            proposal = classificationService.applyProposal(proposalId);
+            done = 'applied';
+          } else if (command === 'WORKFORCE_REJECT_PROPOSAL') {
+            proposal = classificationService.rejectProposal(proposalId);
+            done = 'rejected';
+          } else if (command === 'WORKFORCE_EDIT_PROPOSAL') {
+            proposal = classificationService.editProposal(proposalId, message?.payload?.changes || {});
+            done = 'edited';
+          } else {
+            proposal = classificationService.requeueProposal(proposalId);
+            done = 'requeued';
+          }
           if (!proposal) {throw new Error('proposal not found');}
-          const done = command === 'WORKFORCE_APPLY_PROPOSAL' ? 'applied' : command === 'WORKFORCE_REJECT_PROPOSAL' ? 'rejected' : 'edited';
           postResponse(newPanel, message?.requestId, { [done]: true, proposal: toProposalDto(proposal) });
           pushProposalPatch(newPanel, proposal);
         } catch (error) {

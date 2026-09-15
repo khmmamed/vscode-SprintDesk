@@ -12,12 +12,12 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
       provider.refresh();
     }),
 
-    vscode.commands.registerCommand('sprintdesk.syncWorkforceFromTeam', async () => {
-      const added = workforceService.syncWorkforceFromTeam();
+    vscode.commands.registerCommand('sprintdesk.syncPeopleFromGit', async () => {
+      const added = await workforceService.syncPeopleFromGit();
       provider.refresh();
       vscode.window.showInformationMessage(added > 0
-        ? `Workforce synced: ${added} employee(s) added from team`
-        : 'Workforce up to date (no new employees from team)');
+        ? `People synced: ${added} human(s) added from Git`
+        : 'People are up to date with Git');
     }),
 
     vscode.commands.registerCommand('sprintdesk.addEmployee', async () => {
@@ -63,7 +63,7 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
       });
 
       provider.refresh();
-      vscode.window.showInformationMessage(`Employee ${employee.name} added`);
+      vscode.window.showInformationMessage(`Person ${employee.name} added`);
     }),
 
     vscode.commands.registerCommand('sprintdesk.createTeam', async () => {

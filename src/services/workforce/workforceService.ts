@@ -3,7 +3,7 @@ import * as fileService from '../fileService';
 import { getDataService, DataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
 import { AgentConfig, Approval, Employee, EmployeeModelProfile, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
-import * as teamService from '../team/teamService';
+import { getHost } from '../../host';
 import { emitEvent } from './events';
 import { gateMode, requestApproval } from './gates';
 
@@ -62,6 +62,7 @@ export function addEmployee(input: {
   capabilities?: string[];
   status?: 'idle' | 'busy' | 'offline';
   gitAuthor?: string;
+  email?: string;
   description?: string;
   teamId?: string;
   skills?: EmployeeSkill[];
@@ -77,6 +78,7 @@ export function addEmployee(input: {
     capabilities: input.capabilities || [],
     status: input.status || 'idle',
     gitAuthor: input.gitAuthor,
+    email: input.email,
     description: input.description,
     skills: input.skills || [],
     teamRole: input.teamRole,
@@ -205,41 +207,37 @@ export function deleteTeam(teamId: string): boolean {
   return true;
 }
 
-export function syncWorkforceFromTeam(): number {
+export async function syncPeopleFromGit(): Promise<number> {
   const stores = getStores();
-  const existing = stores.employees.loadAll();
-  const matchBy = (key: 'name' | 'gitAuthor') =>
-    new Set(existing.map(e => e[key]).filter(Boolean));
-
-  const memberNames = matchBy('name');
-  const memberGits = matchBy('gitAuthor');
+  const existing = stores.people.loadAll();
+  const knownEmails = new Set(existing.map(person => person.email).filter(Boolean));
+  const knownAuthors = new Set(existing.map(person => person.gitAuthor || person.name).filter(Boolean));
 
   let added = 0;
   const now = new Date().toISOString();
+  const workspaceRoot = fileService.getWorkspaceRoot();
+  if (!workspaceRoot) throw new Error('No workspace found');
 
-  for (const member of teamService.loadTeamMembers()) {
-    const nameMatch = memberNames.has(member.name);
-    const gitMatch = member.gitAuthor ? memberGits.has(member.gitAuthor) : false;
-    if (nameMatch || gitMatch) continue;
+  const { stdout } = await getHost().exec('git log --format="%ae|%an" --all', { cwd: workspaceRoot });
+  for (const line of stdout.trim().split('\n').filter(Boolean)) {
+    const [email, name] = line.split('|');
+    if (!email || !name || knownEmails.has(email) || knownAuthors.has(name)) continue;
 
-    const employee: Employee = {
-      id: `emp_${Date.now()}_${added}`,
-      name: member.name,
-      role: member.role === 'agent' ? 'agent' : 'human',
+    stores.people.add({
+      id: `person_${Date.now()}_${added}`,
+      name,
+      email,
+      role: 'human',
       status: 'idle',
-      gitAuthor: member.gitAuthor || member.name,
-      agentConfig: member.agentConfig,
-      teamRole: member.role === 'lead' ? 'lead' : member.role === 'agent' ? 'agent' : undefined,
-      description: member.role === 'agent'
-        ? `Agent (${member.agentConfig?.tool || 'tool not configured'})`
-        : 'Team member',
+      gitAuthor: name,
+      description: 'Git contributor',
+      skills: [],
       createdAt: now,
       updatedAt: now
-    };
-    stores.employees.add(employee);
-    matchBy('name').add(member.name);
-    if (member.gitAuthor) matchBy('gitAuthor').add(member.gitAuthor);
-    added++;
+    });
+    knownEmails.add(email);
+    knownAuthors.add(name);
+    added += 1;
   }
 
   return added;

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TeamMember, Task } from '../data/types';
+import { Employee, Task } from '../data/types';
 import { getDataService } from '../data/DataService';
 import { getWorkspaceRoot } from '../services/fileService';
 import * as taskService from '../services/taskService';
@@ -25,17 +25,17 @@ async function execCommand(command: string, cwd: string): Promise<{ stdout: stri
   });
 }
 
-export async function getTasksAssignedToAgent(agent: TeamMember): Promise<Task[]> {
+export async function getTasksAssignedToAgent(agent: Employee): Promise<Task[]> {
   const wsRoot = getWorkspaceRoot();
   if (!wsRoot) {return [];}
 
   const dataService = getDataService(wsRoot);
   const tasks = dataService.loadTasks();
   
-  return tasks.filter(t => t.assignee === agent.id || t.assignee === agent.name);
+  return tasks.filter(t => t.agent === agent.id || t.agent === agent.name);
 }
 
-export async function pickTaskForAgent(agent: TeamMember): Promise<Task | undefined> {
+export async function pickTaskForAgent(agent: Employee): Promise<Task | undefined> {
   const tasks = await getTasksAssignedToAgent(agent);
   
   if (tasks.length === 0) {
@@ -115,7 +115,7 @@ async function createPullRequest(title: string, body?: string): Promise<string |
   }
 }
 
-export async function runAgent(agent: TeamMember, task: Task): Promise<AgentRunResult> {
+export async function runAgent(agent: Employee, task: Task): Promise<AgentRunResult> {
   const wsRoot = getWorkspaceRoot();
   if (!wsRoot) {
     return { success: false, branch: '', error: 'No workspace found' };
@@ -173,7 +173,7 @@ export async function runAgent(agent: TeamMember, task: Task): Promise<AgentRunR
   }
 }
 
-export async function runAgentInteractive(agent: TeamMember): Promise<AgentRunResult | undefined> {
+export async function runAgentInteractive(agent: Employee): Promise<AgentRunResult | undefined> {
   const task = await pickTaskForAgent(agent);
   
   if (!task) {

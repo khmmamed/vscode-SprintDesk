@@ -187,26 +187,6 @@
         "title": "SprintDesk: Create Backlog from Repository"
       },
       {
-        "command": "sprintdesk.viewTeam",
-        "title": "SprintDesk: View Team",
-        "icon": "$(account)"
-      },
-      {
-        "command": "sprintdesk.addAgent",
-        "title": "SprintDesk: Add Agent",
-        "icon": "$(robot)"
-      },
-      {
-        "command": "sprintdesk.runAgent",
-        "title": "SprintDesk: Run Agent",
-        "icon": "$(play)"
-      },
-      {
-        "command": "sprintdesk.syncTeamFromGit",
-        "title": "SprintDesk: Sync Team from Git",
-        "icon": "$(git-fetch)"
-      },
-      {
         "command": "sprintdesk.viewHistory",
         "title": "SprintDesk: View History",
         "icon": "$(history)"
@@ -223,7 +203,7 @@
       },
       {
         "command": "sprintdesk.addEmployee",
-        "title": "SprintDesk: Add Employee",
+        "title": "SprintDesk: Add Person",
         "icon": "$(person-add)"
       },
       {
@@ -252,8 +232,8 @@
         "icon": "$(trash)"
       },
       {
-        "command": "sprintdesk.syncWorkforceFromTeam",
-        "title": "SprintDesk: Sync Workforce from Team",
+        "command": "sprintdesk.syncPeopleFromGit",
+        "title": "SprintDesk: Sync People from Git",
         "icon": "$(sync)"
       },
       {
@@ -294,36 +274,8 @@
     "views": {
       "sprintdesk": [
         {
-          "id": "sprintdesk-repositories",
-          "name": "Repositories"
-        },
-        {
-          "id": "sprintdesk-sprints",
-          "name": "Sprints"
-        },
-        {
-          "id": "sprintdesk-backlogs",
-          "name": "Backlogs"
-        },
-        {
-          "id": "sprintdesk-epics",
-          "name": "Epics"
-        },
-        {
-          "id": "sprintdesk-tasks",
-          "name": "Tasks"
-        },
-        {
-          "id": "sprintdesk-team",
-          "name": "Team"
-        },
-        {
-          "id": "sprintdesk-workforce",
-          "name": "Workforce"
-        },
-        {
-          "id": "sprintdesk-history",
-          "name": "History"
+          "id": "sprintdesk-main",
+          "name": "SprintDesk"
         }
       ]
     },
@@ -338,72 +290,57 @@
       "view/title": [
         {
           "command": "sprintdesk.addSprint",
-          "when": "view == sprintdesk-sprints",
+          "when": "view == sprintdesk-main",
           "group": "navigation"
         },
         {
           "command": "sprintdesk.addEpic",
-          "when": "view == sprintdesk-epics",
+          "when": "view == sprintdesk-main",
           "group": "navigation"
         },
         {
           "command": "sprintdesk.addBacklog",
-          "when": "view == sprintdesk-backlogs",
+          "when": "view == sprintdesk-main",
           "group": "navigation"
         },
         {
           "command": "sprintdesk.addTask",
-          "when": "view == sprintdesk-tasks",
-          "group": "navigation@1"
-        },
-        {
-          "command": "sprintdesk.addTask",
-          "when": "view == sprintdesk-repositories",
+          "when": "view == sprintdesk-main",
           "group": "navigation@1"
         },
         {
           "command": "sprintdesk.refresh",
-          "when": "view =~ /^sprintdesk-/",
+          "when": "view == sprintdesk-main",
           "group": "navigation@9"
         },
         {
-          "command": "sprintdesk.syncTeamFromGit",
-          "when": "view == sprintdesk-team",
-          "group": "navigation"
-        },
-        {
-          "command": "sprintdesk.addAgent",
-          "when": "view == sprintdesk-team",
-          "group": "navigation"
-        },
-        {
           "command": "sprintdesk.addEmployee",
-          "when": "view == sprintdesk-workforce",
+          "when": "view == sprintdesk-main",
           "group": "navigation@1"
         },
         {
           "command": "sprintdesk.createTeam",
-          "when": "view == sprintdesk-workforce",
+          "when": "view == sprintdesk-main",
           "group": "navigation@2"
         },
         {
-          "command": "sprintdesk.syncWorkforceFromTeam",
-          "when": "view == sprintdesk-workforce",
+          "command": "sprintdesk.syncPeopleFromGit",
+          "when": "view == sprintdesk-main",
           "group": "navigation@3"
         },
         {
           "command": "sprintdesk.processQueue",
-          "when": "view == sprintdesk-workforce",
+          "when": "view == sprintdesk-main",
           "group": "navigation@4"
         },
         {
           "command": "sprintdesk.openWorkforce",
-          "when": "view == sprintdesk-workforce",
+          "when": "view == sprintdesk-main",
           "group": "navigation@5"
         },
         {
           "command": "sprintdesk.getItemHistory",
-          "when": "view == sprintdesk-history",
+          "when": "view == sprintdesk-main",
           "group": "navigation"
         }
       ],
@@ -422,108 +359,93 @@
       "view/item/context": [
         {
           "command": "sprintdesk.startFeatureFromTask",
-          "when": "view == sprintdesk-sprints && viewItem == sprintTask",
+          "when": "view == sprintdesk-main && viewItem == sprintTask",
           "group": "inline"
         },
         {
           "command": "sprintdesk.openSprintFile",
-          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "when": "view == sprintdesk-main && viewItem == sprint",
           "group": "inline@1"
         },
         {
           "command": "sprintdesk.showSprintCalendar",
-          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "when": "view == sprintdesk-main && viewItem == sprint",
           "group": "inline@2"
         },
         {
           "command": "sprintdesk.addExistingTasksToSprint",
-          "when": "view == sprintdesk-sprints && viewItem == sprint",
+          "when": "view == sprintdesk-main && viewItem == sprint",
           "group": "inline@3"
         },
         {
           "command": "sprintdesk.addExistingTasksToBacklog",
-          "when": "view == sprintdesk-backlogs && viewItem == backlog",
+          "when": "view == sprintdesk-main && viewItem == backlog",
           "group": "inline"
         },
         {
           "command": "sprintdesk.viewTaskPreview",
-          "when": "view == sprintdesk-tasks && viewItem == task",
+          "when": "view == sprintdesk-main && viewItem == task",
           "group": "inline"
         },
         {
           "command": "sprintdesk.editTaskRaw",
-          "when": "view == sprintdesk-tasks && viewItem == task",
+          "when": "view == sprintdesk-main && viewItem == task",
           "group": "inline@1"
         },
         {
           "command": "sprintdesk.recommendAssignee",
-          "when": "view == sprintdesk-tasks && viewItem == task",
+          "when": "view == sprintdesk-main && viewItem == task",
           "group": "inline@2"
         },
         {
           "command": "sprintdesk.createTaskFromRepo",
-          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "when": "view == sprintdesk-main && viewItem == repository",
           "group": "create@1"
         },
         {
           "command": "sprintdesk.createEpicFromRepo",
-          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "when": "view == sprintdesk-main && viewItem == repository",
           "group": "create@2"
         },
         {
           "command": "sprintdesk.createSprintFromRepo",
-          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "when": "view == sprintdesk-main && viewItem == repository",
           "group": "create@3"
         },
         {
           "command": "sprintdesk.createBacklogFromRepo",
-          "when": "view == sprintdesk-repositories && viewItem == repository",
+          "when": "view == sprintdesk-main && viewItem == repository",
           "group": "create@4"
         },
 {
-          "command": "sprintdesk.runAgent",
-          "when": "view == sprintdesk-team",
-          "group": "inline@0"
-        },
-        {
           "command": "sprintdesk.assignToTeam",
-          "when": "view == sprintdesk-workforce && viewItem =~ /^employee/",
+          "when": "view == sprintdesk-main && viewItem =~ /^employee/",
           "group": "inline@1"
         },
         {
           "command": "sprintdesk.createTaskForEmployee",
-          "when": "view == sprintdesk-workforce && viewItem == employeeAgent",
+          "when": "view == sprintdesk-main && viewItem == employeeAgent",
           "group": "inline@0"
         },
         {
           "command": "sprintdesk.setEmployeeStatus",
-          "when": "view == sprintdesk-workforce && viewItem =~ /^employee/",
+          "when": "view == sprintdesk-main && viewItem =~ /^employee/",
           "group": "inline@2"
         },
         {
           "command": "sprintdesk.removeEmployee",
-          "when": "view == sprintdesk-workforce && viewItem =~ /^employee/",
+          "when": "view == sprintdesk-main && viewItem =~ /^employee/",
           "group": "inline@3"
         },
         {
           "command": "sprintdesk.setTeamLead",
-          "when": "view == sprintdesk-workforce && viewItem == workforceTeam",
+          "when": "view == sprintdesk-main && viewItem == workforceTeam",
           "group": "inline@4"
         },
         {
           "command": "sprintdesk.cancelRun",
-          "when": "view == sprintdesk-workforce && viewItem == runItem",
+          "when": "view == sprintdesk-main && viewItem == runItem",
           "group": "inline"
-        },
-        {
-          "command": "sprintdesk.markTaskForReview",
-          "when": "view == sprintdesk-team && viewItem == assignedTask",
-          "group": "inline"
-        },
-        {
-          "command": "sprintdesk.completeTask",
-          "when": "view == sprintdesk-team && viewItem == assignedTask",
-          "group": "inline@1"
         }
       ]
     },

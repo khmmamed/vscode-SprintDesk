@@ -3,7 +3,7 @@ import { EmployeeTeam } from '../types';
 
 export class EmployeeTeamStore extends YAMLStore<EmployeeTeam> {
   constructor(workspaceRoot?: string) {
-    super('workforce', 'teams.yml', 'teams', workspaceRoot);
+    super('people', 'teams.yml', 'teams', workspaceRoot);
   }
 
   findByName(name: string): EmployeeTeam | undefined {

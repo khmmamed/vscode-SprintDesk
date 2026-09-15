@@ -1,5 +1,4 @@
 import * as fileService from '../../services/fileService';
-import * as teamService from '../../services/team/teamService';
 import { getStores } from '../../data/stores';
 import { getDataService, DataService } from '../../data/DataService';
 import { AuditEntry } from '../../data/types';
@@ -43,7 +42,7 @@ export function findBacklog(ds: DataService, backlogId: string) {
 export interface ResolvedAgent {
   id: string;
   name: string;
-  source: 'team' | 'workforce';
+  source: 'people';
   role: 'agent' | 'human';
   status?: string;
 }
@@ -51,27 +50,16 @@ export interface ResolvedAgent {
 export function resolveAgent(agentIdOrName?: string): ResolvedAgent | undefined {
   if (!agentIdOrName) return undefined;
 
-  const workforceEmployee = getStores().employees
+  const workforceEmployee = getStores().people
     .loadAll()
     .find(e => e.id === agentIdOrName || e.name === agentIdOrName);
   if (workforceEmployee) {
     return {
       id: workforceEmployee.id,
       name: workforceEmployee.name,
-      source: 'workforce',
+      source: 'people',
       role: workforceEmployee.role,
       status: workforceEmployee.status
-    };
-  }
-
-  const teamMember = teamService.getAgents().find(a => a.id === agentIdOrName || a.name === agentIdOrName);
-  if (teamMember) {
-    return {
-      id: teamMember.id,
-      name: teamMember.name,
-      source: 'team',
-      role: 'agent',
-      status: undefined
     };
   }
 

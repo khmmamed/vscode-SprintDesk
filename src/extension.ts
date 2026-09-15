@@ -3,7 +3,6 @@ import * as path from "path";
 import * as fs from "fs";
 
 // webview
-import { getWebviewContent } from "./webview/getWebviewContent";
 // commands
 import {
   registerAddSprintCommand,
@@ -45,14 +44,13 @@ import { EpicsTreeDataProvider } from './providers/EpicsTreeDataProvider';
 import { RepositoriesTreeDataProvider } from './providers/RepositoriesTreeDataProvider';
 import { RepositoryStateService } from './services/repositoryState';
 import * as fileService from './services/fileService';
-import { TeamTreeDataProvider, teamTreeDataProvider } from './providers/team/TeamTreeDataProvider';
 import { HistoryTreeDataProvider, historyTreeDataProvider } from './providers/history/HistoryTreeDataProvider';
 import { workforceTreeDataProvider } from './providers/workforce/WorkforceTreeDataProvider';
+import { SprintDeskTreeDataProvider } from './providers/SprintDeskTreeDataProvider';
 // Services
 import { createSprintInteractive, addExistingTasksToSprint, startFeatureFromTask } from './commands/interactive/sprintInteractive';
 import { createEpicInteractive } from './commands/interactive/epicInteractive';
 import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogInteractive } from './commands/interactive/backlogInteractive';
-import * as teamService from './services/team/teamService';
 import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
 import { registerWorkforceControlCenter } from './commands/workforce/openWorkforceControlCenter';
 import * as capabilityService from './services/workforce/capabilityService';
@@ -125,37 +123,6 @@ const createTask = async (repoPath?: string): Promise<void> => {
 
 // existing tasks dir helper moved to services/fileService
 
-const SIDEBAR_VIEW_IDS = [
-  "sprintdesk-sprints",
-  "sprintdesk-backlogs",
-  "sprintdesk-epics",
-  "sprintdesk-tasks"
-];
-
-class SprintDeskSidebarProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly context: vscode.ExtensionContext, private readonly viewId: string) { }
-
-  resolveWebviewView(
-    webviewView: vscode.WebviewView,
-    context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken
-  ) {
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
-        this.context.extensionUri
-      ]
-    };
-    webviewView.webview.html = getWebviewContent(this.context, webviewView.webview);
-    if (this.viewId === 'sprintdesk-epics') {
-      setTimeout(() => {
-        webviewView.webview.postMessage({ type: 'showEpicsTree' });
-      }, 500);
-    }
-  }
-}
-
 export async function activate(context: vscode.ExtensionContext) {
   // Initialize host boundary (VSCode host + synchronous file system)
   setHost(new VSCodeHost());
@@ -173,18 +140,6 @@ export async function activate(context: vscode.ExtensionContext) {
   registerViewProjectStructureCommand(context);
   registerViewEpicsCommand(context);
 
-  const treeViewIds = ['sprintdesk-repositories', 'sprintdesk-epics', 'sprintdesk-tasks', 'sprintdesk-sprints', 'sprintdesk-backlogs'];
-  const webviewIds = SIDEBAR_VIEW_IDS.filter(id => !treeViewIds.includes(id));
-
-  for (const viewId of webviewIds) {
-    context.subscriptions.push(
-      vscode.window.registerWebviewViewProvider(
-        viewId,
-        new SprintDeskSidebarProvider(context, viewId)
-      )
-    );
-  }
-
   const sprintsProvider = new SprintsTreeDataProvider();
   const backlogsProvider = new BacklogsTreeDataProvider();
   const repositoriesProvider = new RepositoriesTreeDataProvider(repoState);
@@ -192,58 +147,28 @@ export async function activate(context: vscode.ExtensionContext) {
   const tasksProvider = new TasksTreeDataProvider();
   const epicsProvider = new EpicsTreeDataProvider();
 
-  const teamProvider = teamTreeDataProvider;
   const historyProvider = historyTreeDataProvider;
   const workforceProvider = workforceTreeDataProvider;
 
-  // Create and register sprints tree view with drag and drop support
-  const sprintsTreeView = vscode.window.createTreeView('sprintdesk-sprints', {
-    treeDataProvider: sprintsProvider,
-    dragAndDropController: sprintsProvider
+  const sprintDeskProvider = new SprintDeskTreeDataProvider({
+    repositories: repositoriesProvider as any,
+    tasks: tasksProvider as any,
+    sprints: sprintsProvider as any,
+    backlogs: backlogsProvider as any,
+    epics: epicsProvider as any,
+    workforce: workforceProvider as any,
+    history: historyProvider as any
   });
-  context.subscriptions.push(sprintsTreeView);
+  context.subscriptions.push(sprintDeskProvider);
 
-  const backlogsTreeView = vscode.window.createTreeView('sprintdesk-backlogs', {
-    treeDataProvider: backlogsProvider,
-    dragAndDropController: backlogsProvider
+  const sprintDeskTreeView = vscode.window.createTreeView('sprintdesk-main', {
+    treeDataProvider: sprintDeskProvider,
+    dragAndDropController: sprintDeskProvider
   });
-  context.subscriptions.push(backlogsTreeView);
-
-  const epicsTreeView = vscode.window.createTreeView('sprintdesk-epics', {
-    treeDataProvider: epicsProvider,
-    dragAndDropController: epicsProvider
-  });
-  context.subscriptions.push(epicsTreeView);
-
-  const tasksTreeView = vscode.window.createTreeView('sprintdesk-tasks', {
-    treeDataProvider: tasksProvider,
-    dragAndDropController: tasksProvider
-  });
-  context.subscriptions.push(tasksTreeView);
-
-const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositories', {
-    treeDataProvider: repositoriesProvider
-  });
-  context.subscriptions.push(repositoriesTreeView);
-
-  const teamTreeView = vscode.window.createTreeView('sprintdesk-team', {
-    treeDataProvider: teamProvider,
-    dragAndDropController: teamProvider
-  });
-  context.subscriptions.push(teamTreeView);
-
-  const workforceTreeView = vscode.window.createTreeView('sprintdesk-workforce', {
-    treeDataProvider: workforceProvider
-  });
-  context.subscriptions.push(workforceTreeView);
-
-  const historyTreeView = vscode.window.createTreeView('sprintdesk-history', {
-    treeDataProvider: historyProvider
-  });
-  context.subscriptions.push(historyTreeView);
+  context.subscriptions.push(sprintDeskTreeView);
 
   // Register delegated commands (one file per command)
-  registerAddTaskCommand(context, { repositoriesTreeView, createTask, tasksProvider, sprintsProvider });
+  registerAddTaskCommand(context, { repositoriesTreeView: sprintDeskTreeView, createTask, tasksProvider, sprintsProvider });
   registerScanProjectStructureCommand(context);
   registerAddSprintCommand(context, { createSprintInteractive });
   registerAddEpicCommand(context, { createEpicInteractive, epicsProvider });
@@ -254,27 +179,18 @@ const repositoriesTreeView = vscode.window.createTreeView('sprintdesk-repositori
   registerAddTaskToEpicCommand(context, { epicsProvider, tasksProvider });
 
   // Register repository commands
-  registerCreateTaskFromRepoCommand(context, { repositoriesTreeView, tasksProvider, sprintsProvider, epicsProvider, backlogsProvider });
-  registerCreateEpicFromRepoCommand(context, { repositoriesTreeView, epicsProvider, tasksProvider, sprintsProvider, backlogsProvider });
-  registerCreateSprintFromRepoCommand(context, { repositoriesTreeView, sprintsProvider, tasksProvider, epicsProvider, backlogsProvider });
-  registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
-registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider, teamProvider, historyProvider, workforceProvider });
+  registerCreateTaskFromRepoCommand(context, { repositoriesTreeView: sprintDeskTreeView, tasksProvider, sprintsProvider, epicsProvider, backlogsProvider });
+  registerCreateEpicFromRepoCommand(context, { repositoriesTreeView: sprintDeskTreeView, epicsProvider, tasksProvider, sprintsProvider, backlogsProvider });
+  registerCreateSprintFromRepoCommand(context, { repositoriesTreeView: sprintDeskTreeView, sprintsProvider, tasksProvider, epicsProvider, backlogsProvider });
+  registerCreateBacklogFromRepoCommand(context, { repositoriesTreeView: sprintDeskTreeView, backlogsProvider, tasksProvider, sprintsProvider, epicsProvider });
+registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositoriesProvider, tasksProvider, epicsProvider, historyProvider, workforceProvider });
   registerStartFeatureFromTaskCommand(context, { startFeatureFromTask });
   registerSetTaskStatusCommand(context);
   registerOpenSprintFileCommand(context);
   registerShowSprintCalendarCommand(context);
 
-  // Team and History commands
+  // History commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('sprintdesk.viewTeam', async () => {
-      teamProvider.refresh();
-    }),
-    vscode.commands.registerCommand('sprintdesk.syncTeamFromGit', async () => {
-      const { syncTeamFromGit } = require('./services/team/teamService');
-      const members = await syncTeamFromGit();
-      vscode.window.showInformationMessage(`Team synced: ${members.length} members`);
-      teamProvider.refresh();
-    }),
     vscode.commands.registerCommand('sprintdesk.viewHistory', async () => {
       historyProvider.refresh();
     }),
@@ -285,26 +201,6 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
         const { getHistoryForItem } = require('./services/history/historyService');
         const history = getHistoryForItem(itemId, itemType);
         vscode.window.showInformationMessage(`Found ${history.internal.length} internal and ${history.git.length} git entries`);
-      }
-    }),
-vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
-      if (item?.member?.role === 'agent') {
-        const { runAgentInteractive } = require('./services/agentRunner');
-        await runAgentInteractive(item.member);
-      } else {
-        const agents = teamService.getAgents();
-        if (agents.length > 0) {
-          const selected = await vscode.window.showQuickPick(
-            agents.map(a => ({ label: a.name, member: a })),
-            { placeHolder: 'Select an agent to run' }
-          );
-          if (selected?.member) {
-            const { runAgentInteractive } = require('./services/agentRunner');
-            await runAgentInteractive(selected.member);
-          }
-        } else {
-          vscode.window.showWarningMessage('No agents found. Add an agent first.');
-        }
       }
     }),
     vscode.commands.registerCommand('sprintdesk.recommendAssignee', async (item: any) => {
@@ -346,72 +242,6 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
       }
       tasksProvider.refresh();
       vscode.window.showInformationMessage(`Recommended ${choice.value.name} for ${task.code || task.title}`);
-    }),
-
-    vscode.commands.registerCommand('sprintdesk.addAgent', async () => {
-      const { addTeamMember, saveAgentRole } = require('./services/team/teamService');
-      
-      const name = await vscode.window.showInputBox({ prompt: 'Enter agent name (e.g., opencode, mohamed)' });
-      if (!name) return;
-
-      const roleDesc = await vscode.window.showInputBox({ 
-        prompt: 'Enter agent role description (e.g., Senior Developer - creates features)',
-        placeHolder: 'Agent role description'
-      });
-      
-      const tool = await vscode.window.showQuickPick(
-        ['opencode', 'ollama', 'claude-code', 'custom'],
-        { placeHolder: 'Select agent tool' }
-      );
-      if (!tool) return;
-
-      let agentConfig: any = { tool };
-      let model: string | undefined;
-      let command: string | undefined;
-      
-      if (tool === 'ollama') {
-        model = await vscode.window.showInputBox({ prompt: 'Enter model name (e.g., llama3, codellama)' });
-      }
-      
-      if (tool === 'custom') {
-        command = await vscode.window.showInputBox({ 
-          prompt: 'Enter custom command (use {task_path}, {task_dir}, {description} as placeholders)'
-        });
-      }
-      
-      if (model) agentConfig.model = model;
-      if (command) agentConfig.command = command;
-
-      const promptTemplate = await vscode.window.showInputBox({
-        prompt: 'Enter prompt template (optional, use {roleFile}, {taskFile}, {taskTitle}, {taskDir})',
-        value: "Read your role from {roleFile} and work on task {taskFile}"
-      });
-
-      try {
-        // Save to team.yml
-        const member = addTeamMember({
-          name,
-          email: `${name}@agent.local`,
-          role: 'agent',
-          agentConfig
-        });
-        
-        // Save role JSON file
-        saveAgentRole({
-          name,
-          role: roleDesc || 'AI Agent',
-          tool: tool as any,
-          workingDir: '',
-          promptTemplate: promptTemplate || '',
-          model,
-          command
-        });
-        
-        teamProvider.refresh();
-        vscode.window.showInformationMessage(`Agent ${name} added! Role file: .SprintDesk/teams/${name}.json`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(`Failed to add agent: ${e.message}`);
-      }
     })
   );
 
@@ -469,10 +299,11 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     })
   );
 
-// When user selects a repository in the repositories tree, switch all providers to that repo
-  repositoriesTreeView.onDidChangeSelection(e => {
+  // Selecting an item from the Repositories section changes the active repository.
+  sprintDeskTreeView.onDidChangeSelection(e => {
     try {
       const sel = (e.selection && e.selection[0]) as any;
+      if (!sel || !['repo', 'category', 'item'].includes(sel.nodeType)) return;
       let selectedPath = sel?.fullPath ?? sel?.resourceUri?.fsPath;
       let repoPath: string | undefined = undefined;
       if (selectedPath) {
@@ -496,7 +327,6 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
         (backlogsProvider as any).setWorkspaceRoot?.(repoPath);
         (epicsProvider as any).setWorkspaceRoot?.(repoPath);
         (sprintsProvider as any).setWorkspaceRoot?.(repoPath);
-        (teamProvider as any).setWorkspaceRoot?.(repoPath);
         (historyProvider as any).setWorkspaceRoot?.(repoPath);
       } else {
         repoState.setActiveRepo(undefined);
@@ -505,7 +335,6 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
         (backlogsProvider as any).setWorkspaceRoot?.(undefined);
         (epicsProvider as any).setWorkspaceRoot?.(undefined);
         (sprintsProvider as any).setWorkspaceRoot?.(undefined);
-        (teamProvider as any).setWorkspaceRoot?.(undefined);
         (historyProvider as any).setWorkspaceRoot?.(undefined);
       }
     } catch (err) {
@@ -529,7 +358,6 @@ vscode.commands.registerCommand('sprintdesk.runAgent', async (item: any) => {
     (backlogsProvider as any).setWorkspaceRoot?.(activeRepo);
     (epicsProvider as any).setWorkspaceRoot?.(activeRepo);
     (sprintsProvider as any).setWorkspaceRoot?.(activeRepo);
-    (teamProvider as any).setWorkspaceRoot?.(activeRepo);
     (historyProvider as any).setWorkspaceRoot?.(activeRepo);
   }
 

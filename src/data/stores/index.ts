@@ -3,7 +3,7 @@ import { getHost } from '../../host';
 import { RunStore } from './RunStore';
 import { EventStore } from './EventStore';
 import { AuditStore } from './AuditStore';
-import { EmployeeStore } from './EmployeeStore';
+import { PeopleStore } from './PeopleStore';
 import { EmployeeTeamStore } from './EmployeeTeamStore';
 import { SkillStore } from './SkillStore';
 import { PolicyStore } from './PolicyStore';
@@ -28,7 +28,9 @@ export interface Stores {
   runs: RunStore;
   events: EventStore;
   audit: AuditStore;
-  employees: EmployeeStore;
+  people: PeopleStore;
+  /** @deprecated Use `people`; retained temporarily for internal compatibility. */
+  employees: PeopleStore;
   teams: EmployeeTeamStore;
   skills: SkillStore;
   policy: PolicyStore;
@@ -62,11 +64,13 @@ function resolveRoot(workspaceRoot?: string): string {
 export function getStores(workspaceRoot?: string): Stores {
   const root = resolveRoot(workspaceRoot);
   if (!activeStores || root !== activeStoresRoot) {
+    const people = new PeopleStore(root);
     activeStores = {
       runs: new RunStore(root),
       events: new EventStore(root),
       audit: new AuditStore(root),
-      employees: new EmployeeStore(root),
+      people,
+      employees: people,
       teams: new EmployeeTeamStore(root),
       skills: new SkillStore(root),
       policy: new PolicyStore(root),

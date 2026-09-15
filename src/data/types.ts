@@ -123,6 +123,7 @@ export interface TaskProposal {
   editedAt?: string;
   editedBy?: string;
   edits?: TaskProposalEdit[];
+  requeuedAt?: string;
 }
 
 export interface Finding {
@@ -173,6 +174,7 @@ export interface Employee {
   id: string;
   name: string;
   role: 'agent' | 'human';
+  email?: string;
   description?: string;
   capabilities?: string[];
   status?: 'idle' | 'busy' | 'offline';

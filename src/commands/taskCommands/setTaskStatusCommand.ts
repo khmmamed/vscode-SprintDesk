@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as taskService from '../../services/taskService';
 import { getWorkspaceRoot } from '../../services/fileService';
+import { getStores } from '../../data/stores';
 
 function execCommand(command: string, cwd: string): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve) => {
@@ -79,9 +80,7 @@ export function registerSetTaskStatusCommand(context: vscode.ExtensionContext) {
       taskService.setTaskStatus(task.id, status as any);
       
       if (status === 'done' && memberId) {
-        const teamService = require('../../services/team/teamService');
-        const teamMember = teamService.getTeamMember(memberId);
-        const memberName = teamMember?.name || 'unknown';
+        const memberName = getStores().people.getById(memberId)?.name || 'unknown';
         
         const developBranch = getDevelopBranch(ws);
         

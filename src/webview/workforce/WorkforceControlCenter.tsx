@@ -204,6 +204,7 @@ interface ProposalDto {
   reason?: string;
   editedAt?: string;
   editCount?: number;
+  requeuedAt?: string;
 }
 
 interface ScheduleDto {
@@ -790,6 +791,9 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
             setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" updated.` : "Proposal updated.");
             setEditingProposal(null);
           }
+          if (payload?.requeued) {
+            setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" requeued to pending.` : "Proposal requeued to pending.");
+          }
           if (payload?.deleted) {
             setTaskAction("Task deleted.");
             setEditingTask(null);
@@ -849,6 +853,12 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const rejectProposal = (proposalId: string): void => {
     setProposalAction("");
     postRequest("WORKFORCE_REJECT_PROPOSAL", { proposalId });
+  };
+
+  const requeueProposal = (proposalId: string): void => {
+    setProposalAction("");
+    setProposalActionError("");
+    postRequest("WORKFORCE_REQUEUE_PROPOSAL", { proposalId });
   };
 
   const startEditProposal = (p: ProposalDto): void => {
@@ -1677,6 +1687,11 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                   {editingProposal?.id !== p.id && (
                     <button style={styles.buttonGhost} onClick={() => startEditProposal(p)}>Edit</button>
                   )}
+                </div>
+              )}
+              {p.status === "rejected" && (
+                <div style={{ marginTop: 8 }}>
+                  <button style={styles.buttonGhost} onClick={() => requeueProposal(p.id)}>Requeue</button>
                 </div>
               )}
               {editingProposal?.id === p.id && (

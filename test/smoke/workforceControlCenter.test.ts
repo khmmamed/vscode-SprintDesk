@@ -2235,6 +2235,138 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal e
   });
 });
 
+describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue rejected proposals)', () => {
+  let ws: TestWorkspace;
+
+  beforeEach(() => {
+    ws = makeWorkspace();
+    taskService.getTaskService(ws.root);
+  });
+
+  afterEach(() => {
+    ws.cleanup();
+  });
+
+  function seedAgent(overrides: Parameters<typeof makeEmployee>[0] = {}) {
+    const employee = makeEmployee(overrides);
+    getStores().employees.add(employee);
+    return employee;
+  }
+
+  function seedFinding(overrides: Partial<Parameters<typeof findingsService.createFinding>[0]> = {}) {
+    return findingsService.createFinding({
+      title: 'Investigate requeue lifecycle',
+      runId: 'run_requeue',
+      agent: 'emp_requeue',
+      severity: 'medium',
+      suggestedTaskType: 'bug',
+      suggestedPriority: 'high',
+      suggestedWorkflow: 'w_fix',
+      ...overrides
+    });
+  }
+
+  function seedPendingProposal(proposedBy?: string) {
+    const finding = seedFinding();
+    return classificationService.createProposal(finding, { title: 'Handle requeue target', type: 'bug', priority: 'high', workflow: 'w_fix' }, proposedBy);
+  }
+
+  function seedRejectedProposal(rejectedBy?: string) {
+    const proposal = seedPendingProposal();
+    if (!proposal) {return undefined;}
+    const rejected = classificationService.rejectProposal(proposal.id, rejectedBy);
+    assert.strictEqual(rejected?.status, 'rejected');
+    return rejected;
+  }
+
+  it('requeues a rejected proposal back to pending, clearing the reason, auditing and keeping the finding as-is', () => {
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Requeue' });
+    const proposal = seedRejectedProposal(lead.id);
+    assert.strictEqual(proposal?.status, 'rejected');
+
+    const findingId = proposal!.findingId земли;
+    const requeued = classificationService.requeueProposal(proposal!.id, lead.id);
+
+    assert.strictEqual(requeued?.status, 'pending');
+    assert.strictEqual(requeued?.reason, undefined, 'reason cleared');
+    assert.ok(requeued?.requeuedAt, 'requeuedAt is set');
+    assert.strictEqual(requeued?.title, 'Handle requeue target', 'classified payload preserved');
+
+    // finding untouched — requeue is a pure proposal transition, not a re-classification
+    const finding = getStores().findings.getById(findingId);
+    assert.strictEqual(finding?.title, 'Investigate requeue lifecycle');
+    assert.strictEqual(finding?.status, 'pending');
+
+    // audit + event, but never a classification (re)pass
+    const audits = getStores().audit.loadAll().filter(a => a.action === 'classification.requeue');
+    assert.strictEqual(audits.length, 1);
+    assert.strictEqual(audits[0].targetId, proposal!.id);
+    assert.strictEqual(getStores().events.findByType('task.proposal.requeued').length, 1);
+    assert.strictEqual(getStores().events.findByType('classification.pass').length, 0);
+  });
+
+  it('is a no-op for non-rejected proposals and returns undefined for a missing id', () => {
+    // pending stays pending
+    const pendingProposal = seedPendingProposal();
+    assert.strictEqual(classificationService.requeueProposal(pendingProposal!.id)?.status, 'pending');
+
+    // applied stays applied
+    const applyLead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Requeue Noop' });
+    const appliedProposal = seedPendingProposal();
+    classificationService.applyProposal(appliedProposal!.id);
+    assert.strictEqual(classificationService.requeueProposal(appliedProposal!.id, applyLead.id)?.status, 'applied');
+
+    // missing id
+    assert.strictEqual(classificationService.requeueProposal('prop_missing_requeue'), undefined);
+  });
+
+  it('enforces classification:review — plain agents throw, lead/reviewer/human/system pass', () => {
+    const plainAgent = seedAgent({ name: 'Requeue Plain' });
+    const rejected = seedRejectedProposal();
+    assert.throws(() => classificationService.requeueProposal(rejected!.id, plainAgent.id), /classification:review/);
+    assert.strictEqual(getStores().proposals.getById(rejected!.id)?.status, 'rejected', 'nothing persisted on denial');
+
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Requeue Permit' });
+    const leadRejected = seedRejectedProposal();
+    assert.strictEqual(classificationService.requeueProposal(leadRejected!.id, lead.id)?.status, 'pending');
+
+    const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Reviewer Requeue' });
+    const reviewerRejected = seedRejectedProposal();
+    assert.strictEqual(classificationService.requeueProposal(reviewerRejected!.id, reviewer.id)?.status, 'pending');
+
+    const human = seedAgent({ role: 'human', teamRole: 'human', name: 'Human Requeue' });
+    const humanRejected = seedRejectedProposal();
+    assert.strictEqual(classificationService.requeueProposal(humanRejected!.id, human.id)?.status, 'pending');
+
+    // system (no actorId) works on a fresh rejected proposal
+    const systemRejected = seedRejectedProposal();
+    assert.strictEqual(classificationService.requeueProposal(systemRejected!.id)?.status, 'pending');
+  });
+
+  it('applies a requeued proposal as-is without re-running classification — payload and finding preserved', () => {
+    const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Requeue Apply' });
+    const finding = seedFinding({ title: 'Requeue then apply' });
+    const proposal = classificationService.createProposal(finding, { title: 'Requeue apply task', type: 'bug', priority: 'high', workflow: 'w_fix' });
+    classificationService.rejectProposal(proposal!.id);
+
+    const requeued = classificationService.requeueProposal(proposal!.id, lead.id);
+    assert.strictEqual(requeued?.status, 'pending');
+
+    const applied = classificationService.applyProposal(requeued!.id, lead.id);
+    assert.strictEqual(applied?.status, 'applied');
+
+    // no fresh classification pass — requeue is a pure status transition
+    assert.strictEqual(getStores().events.findByType('classification.pass').length, 0);
+
+    const tasks = getStores().loadTasks();
+    assert.strictEqual(tasks.length, 1);
+    assert.strictEqual(tasks[0].title, 'Requeue apply task');
+    assert.strictEqual(tasks[0].type, 'bug');
+    assert.strictEqual(tasks[0].priority, 'high');
+    assert.strictEqual(tasks[0].workflow, 'w_fix');
+  });
+});
+
 describe('ollama end-to-end against a local model', () => {
   const enabled = process.env.SPRINTDESK_OLLAMA_E2E === '1';
   const model = process.env.SPRINTDESK_OLLAMA_MODEL || 'gemma4:31b-cloud';

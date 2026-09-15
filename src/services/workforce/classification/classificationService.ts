@@ -269,6 +269,34 @@ export function rejectProposal(proposalIdInput: string, actorId?: string): TaskP
   return getStores().proposals.getById(proposal.id);
 }
 
+export function requeueProposal(proposalIdInput: string, actorId?: string): TaskProposal | undefined {
+  requireEmployeePermission('classification:review', actorId);
+  const proposal = getStores().proposals.getById(proposalIdInput);
+  if (!proposal) {return undefined;}
+  if (proposal.status !== 'rejected') {return proposal;}
+
+  const now = new Date().toISOString();
+  getStores().proposals.update(proposal.id, { status: 'pending', reason: undefined, requeuedAt: now });
+
+  emitEvent('task.proposal.requeued', 'classification', {
+    proposalId: proposal.id,
+    findingId: proposal.findingId,
+    actorId
+  });
+
+  getStores().audit.add({
+    id: `audit_${Date.now()}`,
+    actor: actorId || 'system',
+    action: 'classification.requeue',
+    targetType: 'proposal',
+    targetId: proposal.id,
+    details: { findingId: proposal.findingId },
+    timestamp: now
+  });
+
+  return getStores().proposals.getById(proposal.id);
+}
+
 export interface ProposalEditChanges {
   title?: string;
   type?: string;
