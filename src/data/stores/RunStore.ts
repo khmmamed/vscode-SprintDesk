@@ -3,7 +3,7 @@ import { Run } from '../types';
 
 export class RunStore extends YAMLStore<Run> {
   constructor(workspaceRoot?: string) {
-    super('data', 'runs.yml', 'runs', workspaceRoot);
+    super('database', 'executions.yml', 'runs', workspaceRoot, 'data', 'runs.yml');
   }
 
   findByTaskId(taskId: string): Run[] {

@@ -3,6 +3,10 @@ import { getHost } from '../../host';
 import { RunStore } from './RunStore';
 import { EventStore } from './EventStore';
 import { AuditStore } from './AuditStore';
+import { PlanStore } from './PlanStore';
+import { InputStore } from './InputStore';
+import { CycleStore } from './CycleStore';
+import { CheckpointStore } from './CheckpointStore';
 import { PeopleStore } from './PeopleStore';
 import { EmployeeTeamStore } from './EmployeeTeamStore';
 import { SkillStore } from './SkillStore';
@@ -28,6 +32,10 @@ export interface Stores {
   runs: RunStore;
   events: EventStore;
   audit: AuditStore;
+  plans: PlanStore;
+  inputs: InputStore;
+  cycles: CycleStore;
+  checkpoints: CheckpointStore;
   people: PeopleStore;
   teams: EmployeeTeamStore;
   skills: SkillStore;
@@ -67,7 +75,11 @@ export function getStores(workspaceRoot?: string): Stores {
       runs: new RunStore(root),
       events: new EventStore(root),
       audit: new AuditStore(root),
-people,
+      plans: new PlanStore(root),
+      inputs: new InputStore(root),
+      cycles: new CycleStore(root),
+      checkpoints: new CheckpointStore(root),
+      people,
       teams: new EmployeeTeamStore(root),
       skills: new SkillStore(root),
       policy: new PolicyStore(root),

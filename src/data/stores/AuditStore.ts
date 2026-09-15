@@ -3,7 +3,7 @@ import { AuditEntry } from '../types';
 
 export class AuditStore extends YAMLStore<AuditEntry> {
   constructor(workspaceRoot?: string) {
-    super('data', 'audit.yml', 'entries', workspaceRoot);
+    super('database', 'audit.yml', 'entries', workspaceRoot, 'data');
   }
 
   findByActor(actor: string): AuditEntry[] {

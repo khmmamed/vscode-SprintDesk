@@ -3,7 +3,7 @@ import { EventRecord } from '../types';
 
 export class EventStore extends YAMLStore<EventRecord> {
   constructor(workspaceRoot?: string) {
-    super('data', 'events.yml', 'events', workspaceRoot);
+    super('database', 'events.yml', 'events', workspaceRoot, 'data');
   }
 
   findByType(type: string): EventRecord[] {

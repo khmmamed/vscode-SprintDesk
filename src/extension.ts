@@ -372,7 +372,7 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
     const sdPath = path.join(ws, '.SprintDesk');
 
 // Ensure all directories exist
-    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp', 'people', 'workforce'];
+    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp', 'people', 'workforce', 'database', 'plans', 'inputs'];
     for (const dir of dirs) {
       const fullPath = path.join(sdPath, dir);
       if (!fs.existsSync(fullPath)) {
@@ -387,6 +387,24 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
       if (!fs.existsSync(dataPath)) {
         const key = file.replace('.yml', '');
         fs.writeFileSync(dataPath, `${key}: []`, 'utf8');
+      }
+    }
+
+    // v1.0 Slice A — database/ is the single runtime-state boundary; seed the new
+    // registry files (executions.yml keeps its internal `runs` key)
+    const dbFiles = new Map<string, string>([
+      ['inputs.yml', 'inputs'],
+      ['plans.yml', 'plans'],
+      ['cycles.yml', 'cycles'],
+      ['checkpoints.yml', 'checkpoints'],
+      ['executions.yml', 'runs'],
+      ['events.yml', 'events'],
+      ['audit.yml', 'entries']
+    ]);
+    for (const [file, key] of dbFiles) {
+      const dbPath = path.join(sdPath, 'database', file);
+      if (!fs.existsSync(dbPath)) {
+        fs.writeFileSync(dbPath, `${key}: []`, 'utf8');
       }
     }
 

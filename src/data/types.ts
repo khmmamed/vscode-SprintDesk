@@ -41,6 +41,9 @@ export type TaskWorkStatus =
 export interface Run {
   id: string;
   taskId: string;
+  // v1.0 Slice A — execution identity moving to the Plan (deprecated alongside taskId,
+  // taskId removed in Slice D; the Run key stays `runs` in database/executions.yml)
+  planId?: string;
   agentId?: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   attempts: number;
@@ -779,4 +782,195 @@ export interface ExecutionWindow {
 
 export interface ExecutionWindowsData {
   executionWindows: ExecutionWindow[];
+}
+
+// v1.0 Slice A — Plan-native domain (additive, non-breaking) ------------------
+// `plans/*.md` holds the semantic content (Orchestrator-written); `database/plans.yml`
+// holds only registry state. classification.original is the Orchestrator's seed pass;
+// classification.current/Organization may be corrected by the Organizer.
+
+export type PlanCategory =
+  | 'feature'
+  | 'bug'
+  | 'improvement'
+  | 'refactor'
+  | 'research'
+  | 'documentation'
+  | 'test'
+  | 'maintenance'
+  | 'security'
+  | 'infrastructure'
+  | 'data';
+
+export type PlanUrgency = 'emergency' | 'urgent' | 'normal' | 'low' | 'scheduled';
+
+export type PlanPriority = 'critical' | 'high' | 'medium' | 'low';
+
+export type PlanComplexity = 'low' | 'medium' | 'high';
+
+export type PlanRisk = 'low' | 'medium' | 'high';
+
+export type PlanExecutionMode = 'immediate' | 'async' | 'sync' | 'scheduled' | 'blocked';
+
+// Multi-dimensional classification — category and urgency are deliberately independent
+// (a bug may be `normal`, a feature may be `emergency`).
+export interface PlanClassificationAxis {
+  category: PlanCategory;
+  urgency: PlanUrgency;
+  priority: PlanPriority;
+  complexity: PlanComplexity;
+  risk: PlanRisk;
+  executionMode: PlanExecutionMode;
+}
+
+export interface PlanClassificationClassifier {
+  type: 'agent' | 'human';
+  id: string;
+}
+
+export interface PlanClassificationCurrent extends PlanClassificationAxis {
+  reason?: string;
+  classifiedBy: PlanClassificationClassifier;
+}
+
+export interface PlanClassification {
+  original: PlanClassificationAxis;
+  current?: PlanClassificationCurrent;
+}
+
+export type PlanOrganizationStatus = 'pending' | 'analyzing' | 'organized' | 'blocked' | 'escalated';
+
+export interface PlanOrganization {
+  status: PlanOrganizationStatus;
+  version: number;
+  lastRunAt?: string;
+  lastDecisionAt?: string;
+  decisionReason?: string;
+}
+
+export type PlanScheduleStatus = 'draft' | 'ready' | 'blocked' | 'running' | 'done' | 'failed' | 'cancelled';
+
+export type PlanScheduleMode = 'immediate' | 'scheduled' | 'dependency';
+
+export interface PlanScheduling {
+  status: PlanScheduleStatus;
+  mode: PlanScheduleMode;
+  scheduledAt?: string;
+  dependsOn: string[];
+}
+
+export type PlanExecutionStatus = 'unassigned' | 'assigned' | 'running' | 'completed' | 'failed';
+
+export interface PlanAssignmentReason {
+  capability: string[];
+  availability: string;
+  workload: number;
+}
+
+export interface PlanExecution {
+  status: PlanExecutionStatus;
+  assignedAgent?: string;
+  assignmentReason?: PlanAssignmentReason;
+  runId?: string;
+}
+
+export type PlanValidationDecision = 'passed' | 'failed' | 'revision';
+
+export interface PlanValidation {
+  decision: PlanValidationDecision;
+  errors: string[];
+  artifacts: string[];
+}
+
+export interface PlanLineage {
+  supersedes?: string;
+  supersededBy?: string;
+  planIds?: string[];
+}
+
+export interface PlanSource {
+  inputId: string;
+  checkpointId?: string;
+}
+
+export interface Plan {
+  id: string;
+  file: string;
+  version: number;
+  lineage: PlanLineage;
+  source: PlanSource;
+  organization: PlanOrganization;
+  classification: PlanClassification;
+  scheduling: PlanScheduling;
+  execution: PlanExecution;
+  validation: PlanValidation;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlansData {
+  plans: Plan[];
+}
+
+// v1.0 Slice A — inputs (Basket 1) (additive, non-breaking)
+export type InputStatus = 'new' | 'planned' | 'failed';
+
+export interface InputSource {
+  type: 'human' | 'agent';
+  id?: string;
+  checkpointId?: string;
+}
+
+export interface InputRecord {
+  id: string;
+  file: string;
+  status: InputStatus;
+  source: InputSource;
+  ingestedAt: string;
+  plannedFrom?: string[];
+}
+
+export interface InputsData {
+  inputs: InputRecord[];
+}
+
+// v1.0 Slice A — lifecycle cycles (one CY-#### per continuous lifecycle round)
+export type CycleOutcome = 'open' | 'closed-pass' | 'closed-fail' | 'cancelled';
+
+export interface Cycle {
+  id: string;
+  inputIds: string[];
+  planIds: string[];
+  executionIds: string[];
+  checkpointId?: string;
+  organizationPasses: number;
+  startedAt: string;
+  closedAt?: string;
+  outcome: CycleOutcome;
+}
+
+export interface CyclesData {
+  cycles: Cycle[];
+}
+
+// v1.0 Slice A — checkpoints (Basket 3)
+export type CheckpointStatus = 'ready' | 'deployment-authorizing' | 'deployed' | 'rejected';
+
+export interface CheckpointDeploymentDecision {
+  by: string;
+  at: string;
+  reason?: string;
+}
+
+export interface Checkpoint {
+  id: string;
+  planId: string;
+  runId?: string;
+  artifacts: string[];
+  status: CheckpointStatus;
+  deploymentDecision?: CheckpointDeploymentDecision;
+}
+
+export interface CheckpointsData {
+  checkpoints: Checkpoint[];
 }

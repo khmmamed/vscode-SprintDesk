@@ -19,8 +19,23 @@ export function makeWorkspace(): TestWorkspace {
   fs.mkdirSync(path.join(root, '.SprintDesk', 'data'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'Tasks'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'people'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.SprintDesk', 'database'), { recursive: true });
   for (const key of ['tasks', 'backlogs', 'epics', 'sprints']) {
     fs.writeFileSync(path.join(root, '.SprintDesk', 'data', `${key}.yml`), `${key}: []`, 'utf8');
+  }
+  // v1.0 Slice A — database/ is the single runtime-state boundary; executions.yml
+  // keeps its internal `runs` key
+  const dbFiles: Record<string, string> = {
+    inputs: 'inputs',
+    plans: 'plans',
+    cycles: 'cycles',
+    checkpoints: 'checkpoints',
+    executions: 'runs',
+    events: 'events',
+    audit: 'entries'
+  };
+  for (const [file, key] of Object.entries(dbFiles)) {
+    fs.writeFileSync(path.join(root, '.SprintDesk', 'database', `${file}.yml`), `${key}: []`, 'utf8');
   }
   for (const key of ['humans', 'agents']) {
     fs.writeFileSync(path.join(root, '.SprintDesk', 'people', `${key}.yml`), `${key}: []`, 'utf8');
