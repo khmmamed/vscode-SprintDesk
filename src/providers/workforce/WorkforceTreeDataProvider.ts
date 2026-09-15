@@ -4,6 +4,7 @@ import * as workforceService from '../../services/workforce/workforceService';
 import { getStores } from '../../data/stores';
 import { getDataService } from '../../data/DataService';
 import { getWorkspaceRoot } from '../../services/fileService';
+import { planTitleFor } from '../../services/workforce/plan/planService';
 import type { WorkforceSection } from '../../commands/workforce/openWorkforceControlCenter';
 
 export class WorkforceItem extends vscode.TreeItem {
@@ -81,9 +82,9 @@ function dataService() {
 }
 
 function taskTitleFor(run: Run): string {
-  const ds = dataService();
-  const task = ds ? ds.getTask(run.taskId) : undefined;
-  return task?.title || run.taskId;
+  // v1.0 Slice D — runs execute Plans; the title comes from the Plan artifact.
+  const plan = getStores().plans.getById(run.planId);
+  return planTitleFor(plan) || run.planId;
 }
 
 function runDescription(run: Run): string {

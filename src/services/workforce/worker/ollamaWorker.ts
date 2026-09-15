@@ -20,10 +20,10 @@ function resolveProfile(request: WorkerRequest): EmployeeModelProfile | undefine
   };
 }
 
-function readTaskContent(request: WorkerRequest): string {
-  const taskPath = request.task.path;
-  if (!taskPath) {return '';}
-  const absolute = path.isAbsolute(taskPath) ? taskPath : path.join(request.workspaceRoot, taskPath);
+function readPlanContent(request: WorkerRequest): string {
+  const planPath = request.input.path;
+  if (!planPath) {return '';}
+  const absolute = path.isAbsolute(planPath) ? planPath : path.join(request.workspaceRoot, planPath);
   try {
     return readFileSyncSafe(absolute);
   } catch {
@@ -44,13 +44,13 @@ export function createOllamaWorker(providerOverride?: LLMProvider): WorkerRuntim
         };
       }
 
-      const taskContent = readTaskContent(request);
+      const planContent = readPlanContent(request);
       const messages: ChatMessage[] = [
         {
           role: 'system',
           content: [
             `You are ${request.employee.name}, an AI workforce agent.`,
-            'Execute the assigned task and report the outcome.',
+            'Execute the assigned plan and report the outcome.',
             'End your answer with two sections:',
             'Findings:',
             '- one bullet line per finding',
@@ -61,8 +61,8 @@ export function createOllamaWorker(providerOverride?: LLMProvider): WorkerRuntim
         {
           role: 'user',
           content: [
-            `Task: ${request.task.title}`,
-            taskContent ? `Task description:\n${taskContent.slice(0, MAX_TASK_CHARS)}` : ''
+            `Plan: ${request.input.title}`,
+            planContent ? `Plan description:\n${planContent.slice(0, MAX_TASK_CHARS)}` : ''
           ]
             .filter(Boolean)
             .join('\n\n')

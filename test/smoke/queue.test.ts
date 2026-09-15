@@ -1,7 +1,6 @@
 import { strict as assert } from 'node:assert';
-import { makeEmployee, makeTask, makeRun, makeWorkspace, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
+import { makeEmployee, makePlan, makeRun, makeWorkspace, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
-import { getDataService } from '../../src/data/DataService';
 import * as worker from '../../src/services/workforce/worker/worker';
 import * as queueService from '../../src/services/workforce/queueService';
 
@@ -27,10 +26,10 @@ describe('queueService headless loop', () => {
     ws.cleanup();
   });
 
-  it('runs a queued run to completion: run completed, employee idle, task done', async () => {
+  it('runs a queued run to completion: run completed, employee idle, plan done', async () => {
     const employee = seedSkilledAgent(['typescript', 'vscode-extension', 'apis']);
-    const task = makeTask({ type: 'feature' });
-    makeRun(task.id, employee.id);
+    const plan = makePlan();
+    makeRun(plan.id, employee.id);
 
     const pass = await worker.runQueuePass({ mode: 'noop' });
 
@@ -40,14 +39,14 @@ describe('queueService headless loop', () => {
     const run = getStores().runs.getById(pass.executed[0].runId);
     assert.strictEqual(run?.status, 'completed');
     assert.strictEqual(getStores().people.getById(employee.id)?.status, 'idle');
-    assert.strictEqual(getDataService(ws.root).getTask(task.id)?.workStatus, 'done');
+    assert.strictEqual(getStores().plans.getById(plan.id)?.execution.status, 'completed');
   });
 
   it('does not claim runs for offline employees', async () => {
     const employee = seedSkilledAgent(['typescript', 'vscode-extension', 'apis']);
     getStores().people.update(employee.id, { status: 'offline' });
-    const task = makeTask({ type: 'feature' });
-    makeRun(task.id, employee.id);
+    const plan = makePlan();
+    makeRun(plan.id, employee.id);
 
     const pass = await worker.runQueuePass({ mode: 'noop' });
 
@@ -57,24 +56,26 @@ describe('queueService headless loop', () => {
     assert.strictEqual(getStores().runs.getById(pass.skipped[0].runId)?.status, 'queued');
   });
 
-  it('does not claim a run whose task is already closed', async () => {
+  it('does not claim a run whose plan is already closed', async () => {
     const employee = seedSkilledAgent(['typescript', 'vscode-extension', 'apis']);
-    const task = makeTask({ type: 'feature', status: 'done' });
-    makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const existing = getStores().plans.getById(plan.id)!;
+    getStores().plans.update(plan.id, { execution: { ...existing.execution, status: 'completed' } });
+    makeRun(plan.id, employee.id);
 
     const pass = await worker.runQueuePass({ mode: 'noop' });
 
     assert.strictEqual(pass.executed.length, 0);
-    assert.strictEqual(pass.skipped[0].reason, 'task-closed');
+    assert.strictEqual(pass.skipped[0].reason, 'plan-not-runnable');
   });
 
   it('respects global capacity across passes', async () => {
     queueService.updateQueueSettings({ workerMode: 'noop', maxConcurrentRuns: 1 });
     const employee = seedSkilledAgent(['typescript', 'vscode-extension', 'apis']);
-    const taskA = makeTask({ type: 'feature' });
-    const taskB = makeTask({ type: 'feature' });
-    makeRun(taskA.id, employee.id);
-    makeRun(taskB.id, employee.id);
+    const planA = makePlan();
+    const planB = makePlan();
+    makeRun(planA.id, employee.id);
+    makeRun(planB.id, employee.id);
 
     const first = await worker.runQueuePass({ mode: 'noop' });
     assert.strictEqual(first.executed.length, 1);
@@ -89,8 +90,8 @@ describe('queueService headless loop', () => {
 
   it('executeRun ignores runs that are still queued', async () => {
     const employee = seedSkilledAgent(['typescript', 'vscode-extension', 'apis']);
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
 
     const result = await worker.executeRun(run.id, 'noop');
     assert.strictEqual(result, undefined);
@@ -105,6 +106,6 @@ describe('queueService headless loop', () => {
     assert.strictEqual(direct?.status, 'completed');
     assert.strictEqual(getStores().runs.getById(run.id)?.status, 'completed');
     assert.strictEqual(getStores().people.getById(employee.id)?.status, 'idle');
-    assert.strictEqual(getDataService(ws.root).getTask(task.id)?.workStatus, 'done');
+    assert.strictEqual(getStores().plans.getById(plan.id)?.execution.status, 'completed');
   });
 });

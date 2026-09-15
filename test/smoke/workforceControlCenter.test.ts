@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { makeEmployee, makeTask, makeRun, makeWorkspace, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
+import { makeEmployee, makeTask, makePlan, makeRun, makeWorkspace, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
 import * as queueService from '../../src/services/workforce/queueService';
 import * as findingsService from '../../src/services/workforce/findingsService';
@@ -19,6 +19,7 @@ import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/se
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
 import { setApprovalGate, requestApproval } from '../../src/services/workforce/gates';
 import { runSchedulerPass } from '../../src/services/workforce/scheduler/scheduler';
+import { planTitleFor, materializePlan } from '../../src/services/workforce/plan/planService';
 import { ChatMessage, LLMProvider } from '../../src/services/workforce/llm/types';
 
 describe('queueService.createRun', () => {
@@ -38,68 +39,70 @@ describe('queueService.createRun', () => {
     return employee;
   }
 
-  it('creates a queued run and tags the task', () => {
+  it('creates a queued run and tags the plan', () => {
     const employee = seedAgent();
-    const task = makeTask({ type: 'feature' });
+    const plan = makePlan();
 
-    const run = queueService.createRun(task.id, employee.id);
+    const run = queueService.createRun(plan.id, employee.id);
 
     assert.strictEqual(run.status, 'queued');
-    assert.strictEqual(run.taskId, task.id);
+    assert.strictEqual(run.planId, plan.id);
     assert.strictEqual(run.agentId, employee.id);
     assert.strictEqual(getStores().runs.getById(run.id)?.id, run.id);
   });
 
-  it('falls back to the task agent when no agent is given', () => {
+  it('falls back to the plan-assigned agent when no agent is given', () => {
     const employee = seedAgent({ name: 'Agent Alpha' });
-    const task = makeTask({ type: 'feature', agent: employee.id });
+    const plan = makePlan();
+    getStores().plans.update(plan.id, { execution: { status: 'assigned', assignedAgent: employee.id } });
     getStores().people.add(makeEmployee());
 
-    const run = queueService.createRun(task.id);
+    const run = queueService.createRun(plan.id);
     assert.strictEqual(run.agentId, employee.id);
   });
 
-  it('uses the task agent by code when taskId is a task code', () => {
+  it('resolves a plan by its plan code when the caller only has the code', () => {
     const employee = seedAgent();
-    const task = makeTask({ type: 'feature' });
+    const plan = makePlan();
     getStores().people.add(makeEmployee());
 
-    const run = queueService.createRun(task.code, employee.id);
-    assert.strictEqual(run.taskId, task.id);
+    const run = queueService.createRun(plan.id, employee.id);
+    assert.strictEqual(run.planId, plan.id);
     assert.strictEqual(run.agentId, employee.id);
   });
 
   it('rejects when the agent is not assigned', () => {
-    const task = makeTask({ type: 'feature' });
-    assert.throws(() => queueService.createRun(task.id, 'emp_missing'), /No agent assigned/);
+    const plan = makePlan();
+    assert.throws(() => queueService.createRun(plan.id, 'emp_missing'), /No agent assigned/);
   });
 
   it('rejects offline agents', () => {
     const employee = seedAgent({ status: 'offline' });
-    const task = makeTask({ type: 'feature' });
+    const plan = makePlan();
 
-    assert.throws(() => queueService.createRun(task.id, employee.id), /is offline/);
+    assert.throws(() => queueService.createRun(plan.id, employee.id), /is offline/);
     assert.strictEqual(getStores().runs.loadAll().length, 0);
   });
 
   it('rejects agents without run:create permission', () => {
     const human = seedAgent({ role: 'human', teamRole: 'observer' });
-    const task = makeTask({ type: 'feature' });
+    const plan = makePlan();
 
-    assert.throws(() => queueService.createRun(task.id, human.id), /run:create/);
+    assert.throws(() => queueService.createRun(plan.id, human.id), /run:create/);
   });
 
   it('runs once end-to-end through the queue', async () => {
     const employee = seedAgent({ agentConfig: makeAgentConfig() });
-    const task = makeTask({ type: 'feature' });
+    const plan = makePlan();
 
-    const run = queueService.createRun(task.id, employee.id);
+    const run = queueService.createRun(plan.id, employee.id);
     const started = queueService.startRun(run.id);
     assert.strictEqual(started?.status, 'running');
 
     const result = await getWorkerRuntime('noop').run({
       run,
-      task,
+      plan,
+      input: { title: '', description: '', path: '' },
       employee,
       agentConfig: employee.agentConfig!,
       workspaceRoot: ws.root
@@ -144,8 +147,8 @@ describe('summarizeRunOutput / finishRun', () => {
   it('stores the summary on the run via finishRun', () => {
     const employee = makeEmployee();
     getStores().people.add(employee);
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
 
     const started = queueService.startRun(run.id);
     assert.strictEqual(started?.status, 'running');
@@ -174,11 +177,12 @@ describe('ollama worker', () => {
 
   function seededRequest(overrides: Partial<WorkerRequest> = {}): WorkerRequest {
     const employee = makeEmployee({ name: 'Morocco News Agent' });
-    const task = makeTask({ title: 'Research Moroccan election news', type: 'feature' });
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
     return {
       run,
-      task,
+      plan,
+      input: { title: 'Research Moroccan election news', description: '', path: '' },
       employee,
       agentConfig: makeAgentConfig({ tool: 'ollama', model: 'llama3' }),
       workspaceRoot: ws.root,
@@ -253,9 +257,9 @@ describe('run lifecycle controls (control-center checklist)', () => {
   }
 
   function queuedRun(employeeId: string) {
-    const task = makeTask({ type: 'feature' });
-    const run = queueService.createRun(task.id, employeeId);
-    return { task, run };
+    const plan = makePlan();
+    const run = queueService.createRun(plan.id, employeeId);
+    return { plan, run };
   }
 
   it('cancels a queued run and no-ops on a second cancel', () => {
@@ -385,8 +389,8 @@ describe('findings (first-class workforce objects, v0.11)', () => {
 
   it('materializes pending findings attributed to the run and agent', () => {
     const employee = seedAgent({ name: 'Morocco News Agent' });
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- a\n- b\nErrors:\n0' });
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id, { result: 'Findings:\n- a\n- b\nErrors:\n0' });
 
     const created = findingsService.materializeFindings(run.id);
     assert.strictEqual(created.length, 2);
@@ -396,13 +400,13 @@ describe('findings (first-class workforce objects, v0.11)', () => {
     assert.ok(stored.every(f => f.status === 'pending'));
     assert.ok(stored.every(f => f.source.runId === run.id));
     assert.ok(stored.every(f => f.agent === employee.id && f.agentName === 'Morocco News Agent'));
-    assert.ok(stored.every(f => f.taskId === task.id));
+    assert.ok(stored.every(f => f.planId === plan.id));
   });
 
   it('does not duplicate findings when re-materializing with reordered bullets', () => {
     const employee = seedAgent();
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- alpha\n- beta\n- gamma\nErrors:\n0' });
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id, { result: 'Findings:\n- alpha\n- beta\n- gamma\nErrors:\n0' });
 
     findingsService.materializeFindings(run.id);
     assert.strictEqual(findingsService.allFindings().length, 3);
@@ -414,8 +418,8 @@ describe('findings (first-class workforce objects, v0.11)', () => {
 
   it('materializes findings when a run finishes through finishRun', () => {
     const employee = seedAgent({ agentConfig: makeAgentConfig() });
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
 
     queueService.startRun(run.id);
     queueService.finishRun(run.id, { status: 'completed', result: 'Findings:\n- verified claim\nErrors:\n0' });
@@ -432,8 +436,8 @@ describe('findings (first-class workforce objects, v0.11)', () => {
 
   it('approves and rejects pending findings and emits finding.resolved only once', () => {
     const employee = seedAgent();
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- a\nErrors:\n0' });
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id, { result: 'Findings:\n- a\nErrors:\n0' });
 
     const [finding] = findingsService.materializeFindings(run.id);
     assert.strictEqual(finding.status, 'pending');
@@ -451,8 +455,8 @@ describe('findings (first-class workforce objects, v0.11)', () => {
   it('blocks approval decisions for actors without approval:review permission', () => {
     const observer = seedAgent({ role: 'human', teamRole: 'observer' });
     const employee = seedAgent();
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id, { result: 'Findings:\n- a\nErrors:\n0' });
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id, { result: 'Findings:\n- a\nErrors:\n0' });
     const [finding] = findingsService.materializeFindings(run.id);
 
     assert.throws(() => findingsService.updateStatus(finding.id, 'approved', observer.id), /approval:review/);
@@ -484,8 +488,8 @@ describe('agent validation & review (v0.11)', () => {
 
   function materializeOne(result = 'Findings:\n- a claim\nErrors:\n0') {
     const employee = seedAgent();
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, employee.id, { result });
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id, { result });
     return findingsService.materializeFindings(run.id)[0];
   }
 
@@ -751,11 +755,11 @@ describe('event rules (async automation, v0.11)', () => {
   it('matches with a key-only payload condition and an empty matcher', () => {
     const wf = makeWorkflow('wf-any', 'Any');
     const keyRule = eventRulesService.createEventRule({
-      name: 'has-task',
-      matcher: { eventType: 'run.finished', payloadKey: 'taskId' },
+      name: 'has-plan',
+      matcher: { eventType: 'run.finished', payloadKey: 'planId' },
       workflowId: wf.id
     });
-    assert.strictEqual(eventRulesService.ruleMatches(keyRule, makeEvent('run.finished', 'worker', { taskId: 'task_1' })), true);
+    assert.strictEqual(eventRulesService.ruleMatches(keyRule, makeEvent('run.finished', 'worker', { planId: 'plan_1' })), true);
     assert.strictEqual(eventRulesService.ruleMatches(keyRule, makeEvent('run.finished', 'worker', { other: 1 })), false);
 
     const anyRule = eventRulesService.createEventRule({ name: 'any', matcher: {}, workflowId: wf.id });
@@ -777,7 +781,7 @@ describe('event rules (async automation, v0.11)', () => {
     assert.strictEqual(results[0].matched, true);
     assert.strictEqual(results[0].triggered, true);
     assert.strictEqual(results[0].status, 'completed');
-    assert.strictEqual(results[0].createdTaskIds?.length, 1);
+    assert.strictEqual(results[0].createdPlanIds?.length, 1);
 
     const stored = getStores().eventRules.getById(rule.id);
     assert.strictEqual(stored?.runCount, 1);
@@ -785,8 +789,8 @@ describe('event rules (async automation, v0.11)', () => {
     assert.ok(stored?.lastTriggeredAt);
     assert.strictEqual(stored?.recentTriggers[0]?.eventId, event.id);
     assert.strictEqual(stored?.recentTriggers[0]?.status, 'completed');
-    assert.strictEqual(stored?.recentTriggers[0]?.createdTaskIds?.length, 1);
-    assert.strictEqual(getDataService().loadTasks().length, 1);
+    assert.strictEqual(stored?.recentTriggers[0]?.createdPlanIds?.length, 1);
+    assert.strictEqual(getStores().plans.count(), 1);
     assert.strictEqual(getStores().runs.loadAll().length, 1);
     assert.strictEqual(getStores().events.findByType('eventrule.fired').length, 1);
   });
@@ -799,7 +803,7 @@ describe('event rules (async automation, v0.11)', () => {
 
     assert.strictEqual(results[0]?.skipReason, 'non-matching');
     assert.strictEqual(getStores().eventRules.getById(rule.id)?.runCount, 0);
-    assert.strictEqual(getDataService().loadTasks().length, 0);
+    assert.strictEqual(getStores().plans.count(), 0);
   });
 
   it('ignores disabled rules', async () => {
@@ -832,7 +836,7 @@ describe('event rules (async automation, v0.11)', () => {
     const wf = makeWorkflow('wf-loopguard', 'Loop Guard');
     eventRulesService.createEventRule({ name: 'Queue watcher', matcher: { eventType: 'run.queued' }, workflowId: wf.id });
 
-    const results = await eventRulesService.processEventRules(makeEvent('run.queued', 'worker', { taskId: 'task_x' }));
+    const results = await eventRulesService.processEventRules(makeEvent('run.queued', 'worker', { planId: 'plan_x' }));
 
     assert.strictEqual(getStores().eventRules.loadAll()[0]?.runCount, 1);
     assert.strictEqual(getStores().runs.loadAll().length, 1);
@@ -933,25 +937,25 @@ describe('operational execution & queue visibility (v0.11)', () => {
 
   it('lists runs and filters by status', () => {
     const agent = seedAgent();
-    const task = makeTask({ type: 'feature' });
+    const plan = makePlan();
 
-    const run = queueService.createRun(task.id, agent.id);
+    const run = queueService.createRun(plan.id, agent.id);
     queueService.startRun(run.id);
     queueService.finishRun(run.id, { status: 'completed', result: 'done\nErrors:\n0' });
-    queueService.createRun(task.id, agent.id);
+    queueService.createRun(plan.id, agent.id);
 
     assert.strictEqual(getRunsByFilter('all').length, 2);
     assert.strictEqual(getRunsByFilter('queued').length, 1);
     assert.strictEqual(getRunsByFilter('running').length, 0);
     assert.strictEqual(getRunsByFilter('completed').length, 1);
     assert.strictEqual(getRunsByFilter('all')[0].status, 'queued');
-    assert.strictEqual(getRunsByFilter('all')[0].taskId, task.id);
+    assert.strictEqual(getRunsByFilter('all')[0].planId, plan.id);
   });
 
   it('classifies queued runs in retry backoff as retrying', () => {
     const agent = seedAgent();
-    const task = makeTask();
-    makeRun(task.id, agent.id, { status: 'queued', availableAt: new Date(Date.now() + 60000).toISOString() });
+    const plan = makePlan();
+    makeRun(plan.id, agent.id, { status: 'queued', availableAt: new Date(Date.now() + 60000).toISOString() });
 
     assert.strictEqual(getRunsByFilter('retrying').length, 1);
     assert.strictEqual(getRunsByFilter('queued').length, 0);
@@ -963,8 +967,8 @@ describe('operational execution & queue visibility (v0.11)', () => {
 
   it('processes the queue to claim queued runs', () => {
     const agent = seedAgent();
-    const task = makeTask();
-    const run = queueService.createRun(task.id, agent.id);
+    const plan = makePlan();
+    const run = queueService.createRun(plan.id, agent.id);
 
     const result = queueService.processQueue({ dryRun: false });
     assert.strictEqual(result.claims.length, 1);
@@ -980,13 +984,13 @@ describe('operational execution & queue visibility (v0.11)', () => {
   it('builds a queue snapshot with run counts and worker occupancy', () => {
     const alpha = seedAgent({ name: 'Alpha' });
     const beta = seedAgent({ name: 'Beta' });
-    const task = makeTask();
+    const plan = makePlan();
 
-    const r1 = queueService.createRun(task.id, alpha.id);
+    const r1 = queueService.createRun(plan.id, alpha.id);
     queueService.startRun(r1.id);
-    queueService.createRun(task.id, alpha.id);
+    queueService.createRun(plan.id, alpha.id);
 
-    const r3 = queueService.createRun(task.id, beta.id);
+    const r3 = queueService.createRun(plan.id, beta.id);
     queueService.startRun(r3.id);
     queueService.finishRun(r3.id, { status: 'failed', error: 'boom', classification: 'exit-nonzero' });
 
@@ -999,10 +1003,10 @@ describe('operational execution & queue visibility (v0.11)', () => {
     assert.strictEqual(snap.workerMode, queueService.getQueueSettings().workerMode);
   });
 
-  it('reports run detail with task, agent, duration and linked findings', () => {
+  it('reports run detail with plan, agent, duration and linked findings', () => {
     const agent = seedAgent({ name: 'News Bot', agentConfig: makeAgentConfig() });
-    const task = makeTask({ type: 'feature' });
-    const run = makeRun(task.id, agent.id, {
+    const plan = makePlan();
+    const run = makeRun(plan.id, agent.id, {
       status: 'running',
       startedAt: new Date(Date.now() - 5000).toISOString()
     });
@@ -1010,8 +1014,7 @@ describe('operational execution & queue visibility (v0.11)', () => {
     queueService.finishRun(run.id, { status: 'completed', result: 'Findings:\n- claim one\n- claim two\nErrors:\n0' });
 
     const detail = runDetail(getStores().runs.getById(run.id)!);
-    assert.strictEqual(detail.task?.title, task.title);
-    assert.strictEqual(detail.task?.code, task.code);
+    assert.strictEqual(detail.plan?.id, plan.id);
     assert.strictEqual(detail.employee?.id, agent.id);
     assert.ok(detail.durationMs !== undefined && detail.durationMs >= 4900);
     assert.strictEqual(detail.findings.length, 2);
@@ -1021,8 +1024,8 @@ describe('operational execution & queue visibility (v0.11)', () => {
 
   it('reports the run → finding → validation chain', () => {
     const agent = seedAgent();
-    const task = makeTask();
-    const run = makeRun(task.id, agent.id, { status: 'running', startedAt: new Date().toISOString() });
+    const plan = makePlan();
+    const run = makeRun(plan.id, agent.id, { status: 'running', startedAt: new Date().toISOString() });
     queueService.finishRun(run.id, { status: 'completed', result: 'Findings:\n- risky claim\nErrors:\n0' });
 
     const reviewer = seedAgent({ role: 'agent', teamRole: 'reviewer', name: 'Reviewer' });
@@ -1040,9 +1043,9 @@ describe('operational execution & queue visibility (v0.11)', () => {
 
   it('reports the run → workflow → event rule trigger chain', () => {
     const agent = seedAgent();
-    const task = makeTask();
-    getDataService(ws.root).updateTask(task.id, { source: 'workflow', workflow: 'triage-wf' });
-    const run = makeRun(task.id, agent.id, { status: 'queued' });
+    const plan = makePlan();
+    getStores().plans.update(plan.id, { source: { inputId: 'synthetic:workflow:triage-wf' } });
+    const run = makeRun(plan.id, agent.id, { status: 'queued' });
     getStores().eventRules.add({
       id: 'rule_1',
       name: 'Triage merged PRs',
@@ -1058,7 +1061,7 @@ describe('operational execution & queue visibility (v0.11)', () => {
           workflowId: 'wf_triage',
           status: 'completed',
           createdAt: new Date().toISOString(),
-          createdTaskIds: [task.id]
+          createdPlanIds: [plan.id]
         }
       ],
       createdAt: new Date().toISOString(),
@@ -1066,26 +1069,25 @@ describe('operational execution & queue visibility (v0.11)', () => {
     });
 
     const detail = runDetail(run);
-    assert.strictEqual(detail.task?.source, 'workflow');
-    assert.strictEqual(detail.task?.workflow, 'triage-wf');
+    assert.strictEqual(detail.plan?.source.inputId, 'synthetic:workflow:triage-wf');
     assert.strictEqual(detail.trigger?.ruleName, 'Triage merged PRs');
     assert.strictEqual(detail.trigger?.eventType, 'pull_request.merged');
   });
 
   it('handles retry and cancel via queue operations with permission checks', () => {
     const agent = seedAgent();
-    const task = makeTask();
-    const failed = queueService.createRun(task.id, agent.id);
+    const plan = makePlan();
+    const failed = queueService.createRun(plan.id, agent.id);
     queueService.startRun(failed.id);
     queueService.finishRun(failed.id, { status: 'failed', error: 'boom', classification: 'exit-nonzero' });
 
     const observer = seedAgent({ role: 'human', teamRole: 'observer', name: 'Observer' });
-    const pending = queueService.createRun(task.id, agent.id);
+    const pending = queueService.createRun(plan.id, agent.id);
     assert.throws(() => queueService.cancelRun(pending.id, observer.id), /run:cancel/);
     queueService.cancelRun(pending.id, agent.id);
     assert.strictEqual(getStores().runs.getById(pending.id)?.status, 'cancelled');
 
-    const retried = queueService.createRun(failed.taskId, failed.agentId);
+    const retried = queueService.createRun(failed.planId, failed.agentId);
     assert.strictEqual(retried.status, 'queued');
     assert.strictEqual(retried.attempts, 3);
     assert.strictEqual(getRunsByFilter('cancelled').length, 1);
@@ -1093,8 +1095,8 @@ describe('operational execution & queue visibility (v0.11)', () => {
 
   it('reflects run state changes across snapshots and Control Center counters', () => {
     const agent = seedAgent();
-    const task = makeTask();
-    const run = queueService.createRun(task.id, agent.id);
+    const plan = makePlan();
+    const run = queueService.createRun(plan.id, agent.id);
 
     assert.strictEqual(getQueueSnapshot().runs.queued, 1);
     queueService.startRun(run.id);
@@ -1178,7 +1180,7 @@ describe('execution windows — synchronous work (v0.11)', () => {
     assert.throws(() => executionWindowService.createExecutionWindow({ name: 'Empty', workflowIds: [] }), /workflow/);
   });
 
-  it('starts a window: plans tasks + runs and assigns them to a selected agent', async () => {
+  it('starts a window: plans runs and assigns them to a selected agent', async () => {
     const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
     const wf = seedWorkflow({ name: 'Research Flow' });
     const window = executionWindowService.createExecutionWindow({ name: 'Session 1', workflowIds: [wf.id], agentIds: [agent.id] });
@@ -1186,17 +1188,16 @@ describe('execution windows — synchronous work (v0.11)', () => {
     const started = await executionWindowService.startExecutionWindow(window.id);
     assert.strictEqual(started.status, 'running');
     assert.ok(started.startedAt);
-    assert.strictEqual(started.taskIds.length, 1);
+    assert.strictEqual(started.planIds.length, 1);
     assert.strictEqual(started.runIds.length, 1);
 
     const run = getStores().runs.getById(started.runIds[0])!;
     assert.strictEqual(run.agentId, agent.id);
     assert.strictEqual(run.status, 'queued');
 
-    const task = getDataService(ws.root).getTask(started.taskIds[0])!;
-    assert.strictEqual(task.agent, agent.id);
-    assert.strictEqual(task.source, 'workflow');
-    assert.strictEqual(task.workflow, 'Research Flow');
+    const plan = getStores().plans.getById(started.planIds[0])!;
+    assert.strictEqual(plan.execution.assignedAgent, agent.id);
+    assert.strictEqual(plan.source.inputId, `synthetic:workflow:${wf.id}`);
   });
 
   it("skips agents without run:create permission when assigning", async () => {
@@ -1403,7 +1404,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
     );
   });
 
-  it('routes a lifecycle event through an event rule into a task and a queued run', async () => {
+  it('routes a lifecycle event through an event rule into a plan and a queued run', async () => {
     seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
     const wf = seedWorkflow({ name: 'News Briefing' });
     const rule = eventRulesService.createEventRule({
@@ -1416,15 +1417,15 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
 
     assert.strictEqual(results[0]?.triggered, true);
     assert.strictEqual(results[0]?.status, 'completed');
-    assert.strictEqual(results[0]?.createdTaskIds?.length, 1);
-    assert.strictEqual(getDataService().loadTasks().length, 1);
+    assert.strictEqual(results[0]?.createdPlanIds?.length, 1);
+    assert.strictEqual(getStores().plans.count(), 1);
     assert.strictEqual(getStores().runs.loadAll().length, 1);
 
     const run = getStores().runs.loadAll()[0];
     assert.strictEqual(run.status, 'queued');
-    const task = getDataService().getTask(run.taskId)!;
-    assert.strictEqual(task.source, 'workflow');
-    assert.strictEqual(task.workflow, 'News Briefing');
+    const plan = getStores().plans.getById(run.planId)!;
+    assert.strictEqual(plan.source.inputId, `synthetic:workflow:${wf.id}`);
+    assert.strictEqual(planTitleFor(plan, ws.root), 'Research {topic}');
     assert.strictEqual(getStores().eventRules.getById(rule.id)?.runCount, 1);
 
     const fired = getActivitySummary().recentEvents.find(e => e.type === 'eventrule.fired');
@@ -1456,8 +1457,8 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
 
     const run = getStores().runs.getById(result.fired[0].runId!)!;
     assert.strictEqual(run.status, 'queued');
-    const task = getDataService().getTask(result.fired[0].taskId!)!;
-    assert.strictEqual(task.source, 'scheduler');
+    const plan = getStores().plans.getById(result.fired[0].planId!)!;
+    assert.strictEqual(plan.source.inputId, 'synthetic:schedule:sched-slice8');
     assert.strictEqual(getStores().schedules.getById('sched-slice8')?.runCount, 1);
     assert.strictEqual(getStores().events.findByType('schedule.fired').length, 1);
 
@@ -2385,16 +2386,26 @@ describe('ollama end-to-end against a local model', () => {
     ws.cleanup();
   });
 
-  it('runs a real task through createRun → startRun → executeRun → finishRun', async function () {
+  it('runs a real plan through createRun → startRun → executeRun → finishRun', async function () {
     this.timeout(180000);
     const employee = makeEmployee({
       name: 'Morocco News Agent',
       modelProfile: { name: 'Morocco News Agent', provider: 'ollama', model, baseUrl: 'http://localhost:11434' }
     });
     getStores().people.add(employee);
-    const task = makeTask({ title: 'Research Moroccan election news and summarize the key parties and dates', type: 'feature' });
+    const plan = materializePlan(
+      {
+        sourceInputId: 'ollama:e2e',
+        title: 'Research Moroccan election news and summarize the key parties and dates',
+        description: 'Use the web to research current Moroccan political news.',
+        category: 'feature',
+        priority: 'medium',
+        executionMode: 'immediate'
+      },
+      { workspaceRoot: ws.root }
+    );
 
-    const run = queueService.createRun(task.id, employee.id);
+    const run = queueService.createRun(plan.id, employee.id);
     const started = queueService.startRun(run.id);
     assert.strictEqual(started?.status, 'running');
 

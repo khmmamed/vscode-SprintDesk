@@ -26,11 +26,11 @@ type ExecWindowStatus = "planned" | "running" | "completed" | "cancelled";
 
 interface RunDto {
   id: string;
-  taskId: string;
-  taskTitle: string;
-  taskCode: string;
-  taskSource?: string;
-  taskWorkflow?: string;
+  // v1.0 Slice D — runs execute Plans (planId/planTitle/planCode).
+  planId: string;
+  planTitle: string;
+  planCode: string;
+  planSource?: string;
   trigger?: { ruleId: string; ruleName: string; eventType: string };
   agentName: string;
   agentId?: string;
@@ -108,7 +108,7 @@ interface ExecutionWindowDto {
   maxConcurrentRuns?: number;
   runCount: number;
   runs: { queued: number; running: number; completed: number; failed: number; cancelled: number };
-  taskCount: number;
+  planCount: number;
   findings: { total: number; pendingAgentReview: number; pendingHumanReview: number; approved: number; rejected: number };
   completionSummary?: { runsCompleted: number; runsFailed: number; runsCancelled: number; findings: number; errors: number };
 }
@@ -125,7 +125,7 @@ interface EventRuleTriggerDto {
   eventType: string;
   status: RuleTriggerStatus;
   createdAt: string;
-  createdTaskIds?: string[];
+  createdPlanIds?: string[];
   error?: string;
 }
 
@@ -168,6 +168,7 @@ interface ActivityEventDto {
   label: string;
   links: {
     runId?: string;
+    planId?: string;
     taskId?: string;
     workflowId?: string;
     ruleId?: string;
@@ -765,7 +766,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           }
           if (payload?.retried) setQueueResult(`Run ${payload.run?.id} queued for retry.`);
           if (payload?.cancelled) {
-            const name = payload?.run?.taskTitle || payload?.runId;
+            const name = payload?.run?.planTitle || payload?.runId;
             setRunAction(name ? `Run ${name} cancelled.` : "Run cancelled.");
           }
           if (payload?.window) {
@@ -928,6 +929,12 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const openTask = (taskId: string): void => {
     setTaskFocus(taskId);
     setTab("tasks");
+  };
+
+  const openPlan = (planId: string): void => {
+    const run = runs.find(r => r.planId === planId);
+    setRunFocus(run ? run.id : null);
+    setTab("runs");
   };
 
   const openEmployee = (employeeId: string): void => {
@@ -1447,8 +1454,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
             return (
               <div key={run.id} style={runFocus === run.id ? styles.cardFocused : styles.card}>
                 <div style={styles.row}>
-                  <span style={styles.name}>{run.taskTitle}</span>
-                  <span style={styles.muted}>{run.taskCode}</span>
+                  <span style={styles.name}>{run.planTitle}</span>
+                  <span style={styles.muted}>{run.planCode}</span>
                   <span style={{ ...styles.statusChip, color: statusColor(run.status) }}>
                     {isRetrying(run) ? "retrying" : run.status}
                   </span>
@@ -1492,13 +1499,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                   <div>
                     <div style={styles.detail}>
                       <div>
-                        <span style={styles.muted}>Task: </span><button style={styles.link} onClick={() => openTask(run.taskId)}>{run.taskCode} — {run.taskTitle}</button>
+                        <span style={styles.muted}>Plan: </span><span>{run.planCode} — {run.planTitle}</span>
                       </div>
-                      {run.taskWorkflow && (
-                        <div>
-                          <span style={styles.muted}>Workflow: </span><button style={styles.link} onClick={() => openWorkflow(run.taskWorkflow!)}>{run.taskWorkflow}</button>
-                        </div>
-                      )}
                       {run.trigger && (
                         <div>
                           <span style={styles.muted}>Trigger: </span>
@@ -1899,8 +1901,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                     <div key={trigger.eventId} style={styles.row}>
                       <span style={{ ...styles.statusChip, color: trigger.status === "failed" ? "#e53935" : "#4caf50" }}>{trigger.status}</span>
                       <span style={styles.muted}>{trigger.eventType}</span>
-                      {trigger.createdTaskIds && trigger.createdTaskIds.length > 0 && (
-                        <span style={styles.muted}>· created {trigger.createdTaskIds.length} task{trigger.createdTaskIds.length === 1 ? "" : "s"}</span>
+                      {trigger.createdPlanIds && trigger.createdPlanIds.length > 0 && (
+                        <span style={styles.muted}>· created {trigger.createdPlanIds.length} plan{trigger.createdPlanIds.length === 1 ? "" : "s"}</span>
                       )}
                       {trigger.error && <span style={styles.error}>{trigger.error}</span>}
                       <span style={styles.muted}>· {formatTime(trigger.createdAt)}</span>
@@ -2018,7 +2020,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                   <div>
                     <span style={styles.muted}>Workflows: </span>{win.workflowNames.join(", ") || "—"}
                     <span style={styles.muted}> · Agents: </span>{win.agentNames.join(", ") || "any registered agent"}
-                    <span style={styles.muted}> · Tasks: </span>{win.taskCount}
+                    <span style={styles.muted}> · Plans: </span>{win.planCount}
                   </div>
                   <div>
                     <span style={styles.muted}>Runs — queued {win.runs.queued} · running {win.runs.running} · completed {win.runs.completed} · failed {win.runs.failed} · cancelled {win.runs.cancelled}</span>
@@ -2042,7 +2044,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                       <span style={styles.muted}>Runs: </span>
                       {runs.filter(r => r.windowId === win.id).map(r => (
                         <button key={r.id} style={styles.link} onClick={() => openRun(r.id)}>
-                          {r.taskCode} · {r.status}
+                          {r.planCode} · {r.status}
                         </button>
                       ))}
                     </div>
@@ -2070,6 +2072,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
               <div style={{ marginTop: 6 }}>
                 {ev.links.runId && <button style={styles.link} onClick={() => openRun(ev.links.runId!)}>run</button>}
                 {ev.links.findingId && <button style={styles.link} onClick={() => openFinding(ev.links.findingId!)}>finding</button>}
+                {ev.links.planId && <button style={styles.link} onClick={() => openPlan(ev.links.planId!)}>plan</button>}
                 {ev.links.taskId && <button style={styles.link} onClick={() => openTask(ev.links.taskId!)}>task</button>}
                 {ev.links.workflowId && <button style={styles.link} onClick={() => openWorkflow(ev.links.workflowId!)}>workflow</button>}
                 {ev.links.ruleId && <button style={styles.link} onClick={() => openRule(ev.links.ruleId!)}>rule</button>}

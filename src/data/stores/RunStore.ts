@@ -6,8 +6,8 @@ export class RunStore extends YAMLStore<Run> {
     super('database', 'executions.yml', 'runs', workspaceRoot, 'data', 'runs.yml');
   }
 
-  findByTaskId(taskId: string): Run[] {
-    return this.loadAll().filter(r => r.taskId === taskId);
+  findByPlanId(planId: string): Run[] {
+    return this.loadAll().filter(r => r.planId === planId);
   }
 
   findByAgentId(agentId: string): Run[] {

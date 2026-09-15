@@ -103,7 +103,7 @@ export function buildStandup(ws: string): string {
     lines.push(`- No active runs (${runs.length} total)`);
   } else {
     for (const r of activeRuns.slice(0, 20)) {
-      lines.push(`- Run \`${r.id}\` → task \`${r.taskId}\` — ${r.status} — ${r.agentId || 'no agent'}`);
+      lines.push(`- Run \`${r.id}\` → plan \`${r.planId}\` — ${r.status} — ${r.agentId || 'no agent'}`);
     }
   }
   lines.push('');

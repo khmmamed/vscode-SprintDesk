@@ -421,23 +421,23 @@ export const TASK_WORK_TOOLS = [
 export const RUN_TOOLS = [
   {
     name: 'sprintdesk_runsCreate',
-    description: 'Create a new run record for a task (queued; no autonomous execution)',
+    description: 'Create a new run record for a plan (queued; no autonomous execution)',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
+        planId: { type: 'string', description: 'Plan ID or code' },
         agentId: { type: 'string', description: 'Optional agent to assign' },
       },
-      required: ['taskId'],
+      required: ['planId'],
     },
   },
   {
     name: 'sprintdesk_runsList',
-    description: 'List run records, optionally filtered by taskId or status',
+    description: 'List run records, optionally filtered by planId or status',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        taskId: { type: 'string', description: 'Task ID to filter by' },
+        planId: { type: 'string', description: 'Plan ID to filter by' },
         status: { type: 'string', enum: ['queued', 'running', 'completed', 'failed', 'cancelled'] },
         limit: { type: 'number', description: 'Max runs to return' },
       },

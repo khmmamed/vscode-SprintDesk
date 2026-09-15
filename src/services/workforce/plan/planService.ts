@@ -2,8 +2,18 @@ import * as path from 'path';
 import matter from 'gray-matter';
 import { getDataService } from '../../../data/DataService';
 import { getHost, getFileSystem } from '../../../host';
-import { getStores } from '../../../data/stores';
-import { Plan, PlanLineage } from '../../../data/types';
+import { getStores, Stores } from '../../../data/stores';
+import {
+  Plan,
+  PlanCategory,
+  PlanClassificationAxis,
+  PlanComplexity,
+  PlanExecutionMode,
+  PlanLineage,
+  PlanPriority,
+  PlanRisk,
+  PlanUrgency
+} from '../../../data/types';
 
 export interface PlanMdSections {
   objective: string;
@@ -55,9 +65,108 @@ export function resolvePlanFile(plan: Pick<Plan, 'id' | 'file'>): string {
   return plan.file ? plan.file : `plans/${plan.id}.md`;
 }
 
+// Human-facing plan title: the md Objective section of the authoritative artifact,
+// falling back to the plan id when the file is missing or has no Objective.
+export function planTitleFor(plan: Plan | undefined, workspaceRoot?: string): string | undefined {
+  if (!plan) {return undefined;}
+  const root = resolveRoot(workspaceRoot);
+  const file = root ? path.join(root, '.SprintDesk', resolvePlanFile(plan)) : '';
+  if (file && getFileSystem().exists(file)) {
+    const md = readPlanMd(file);
+    return md.sections.objective || plan.id;
+  }
+  return plan.id;
+}
+
 // Allocate the next sequential PLAN-#### against the persisted registry.
 export function generatePlanId(workspaceRoot?: string): string {
   return getStores(workspaceRoot).plans.nextId();
+}
+
+// v1.0 Slice D — internal (non-Orchestrator) plan materialization used by the
+// queue's plan producers (scheduler, workflow engine, control center). Writes the
+// plan artifact and seeds classification.original like the Orchestrator, but the
+// plan is immediately runnable (scheduling ready / execution unassigned) and is
+// NOT routed through the Orchestrator lifecycle (no inputs record, no cycle).
+const DEFAULT_PLAN_AXIS: PlanClassificationAxis = {
+  category: 'feature',
+  urgency: 'normal',
+  priority: 'medium',
+  complexity: 'medium',
+  risk: 'medium',
+  executionMode: 'immediate'
+};
+
+export interface MaterializePlanInput {
+  sourceInputId: string;
+  title: string;
+  description?: string;
+  category?: PlanCategory;
+  urgency?: PlanUrgency;
+  priority?: PlanPriority;
+  complexity?: PlanComplexity;
+  risk?: PlanRisk;
+  executionMode?: PlanExecutionMode;
+}
+
+// Maps the legacy task-kind vocabulary (Task.type / ScheduleTaskTemplate.type /
+// WorkflowTaskStep.taskType) onto the Plan classification axis.
+export type LegacyTaskKind = 'feature' | 'bug' | 'chore' | 'doc' | 'test';
+
+export function legacyTaskKindToPlanCategory(kind: LegacyTaskKind): PlanCategory {
+  switch (kind) {
+    case 'feature': return 'feature';
+    case 'bug': return 'bug';
+    case 'chore': return 'maintenance';
+    case 'doc': return 'documentation';
+    case 'test': return 'test';
+  }
+}
+
+export function materializePlan(
+  input: MaterializePlanInput,
+  opts: { workspaceRoot?: string; stores?: Stores } = {}
+): Plan {
+  const stores = opts.stores || getStores(opts.workspaceRoot);
+  const now = new Date().toISOString();
+  const id = stores.plans.nextId();
+  const plan: Plan = {
+    id,
+    file: `plans/${id}.md`,
+    version: 1,
+    lineage: {},
+    source: { inputId: input.sourceInputId },
+    organization: { status: 'pending', version: 0 },
+    classification: {
+      original: {
+        ...DEFAULT_PLAN_AXIS,
+        ...(input.category ? { category: input.category } : {}),
+        ...(input.urgency ? { urgency: input.urgency } : {}),
+        ...(input.priority ? { priority: input.priority } : {}),
+        ...(input.complexity ? { complexity: input.complexity } : {}),
+        ...(input.risk ? { risk: input.risk } : {}),
+        ...(input.executionMode ? { executionMode: input.executionMode } : {})
+      }
+    },
+    scheduling: { status: 'ready', mode: 'immediate', dependsOn: [] },
+    execution: { status: 'unassigned' },
+    validation: { decision: 'passed', errors: [], artifacts: [] },
+    createdAt: now,
+    updatedAt: now
+  };
+  stores.plans.add(plan);
+  const root = opts.workspaceRoot || resolveRoot();
+  writePlanMd(
+    plan,
+    {
+      objective: input.title,
+      implementation: input.description || '',
+      acceptanceCriteria: '',
+      constraints: ''
+    },
+    root
+  );
+  return plan;
 }
 
 // Orchestrator content path only — the .md body is written from source content and

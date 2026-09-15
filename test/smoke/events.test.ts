@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { makeWorkspace, makeTask, makeRun, makeEmployee, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
+import { makeWorkspace, makePlan, makeRun, makeEmployee, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
 import { emitEvent } from '../../src/services/workforce/events';
 import { startRun, finishRun, cancelRun, processQueue } from '../../src/services/workforce/queueService';
@@ -31,8 +31,8 @@ describe('workforce events + observability', () => {
   it('startRun emits run.started', () => {
     const employee = makeEmployee({ status: 'idle' });
     getStores().people.add(employee);
-    const task = makeTask({});
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
 
     startRun(run.id);
 
@@ -46,8 +46,8 @@ describe('workforce events + observability', () => {
   it('finishRun emits run.finished with status', () => {
     const employee = makeEmployee({});
     getStores().people.add(employee);
-    const task = makeTask({});
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
 
     startRun(run.id);
     finishRun(run.id, { status: 'failed', error: 'boom' });
@@ -61,8 +61,8 @@ describe('workforce events + observability', () => {
   it('cancelRun emits run.cancelled', () => {
     const employee = makeEmployee({ teamRole: 'lead' });
     getStores().people.add(employee);
-    const task = makeTask({});
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
 
     cancelRun(run.id, employee.id);
 
@@ -72,13 +72,13 @@ describe('workforce events + observability', () => {
   });
 
   it('processQueue emits queue.skip with a reason', () => {
-    const run = makeRun('ghost-task', 'ghost-agent');
+    const run = makeRun('ghost-plan', 'ghost-agent');
     processQueue({ dryRun: false, limit: 1 });
 
     const skip = getStores().events.latest(10).find(e => e.type === 'queue.skip');
     assert.ok(skip);
     assert.strictEqual(skip.payload.runId, run.id);
-    assert.strictEqual(skip.payload.reason, 'task-not-found');
+    assert.strictEqual(skip.payload.reason, 'plan-not-found');
   });
 
   it('updateEmployee emits employee.status only on actual status change', () => {
@@ -103,8 +103,8 @@ describe('workforce events + observability', () => {
     getStores().people.add(employee);
     const human = makeEmployee({ status: 'offline', role: 'human' });
     getStores().people.add(human);
-    makeTask({});
-    const run = makeRun(makeTask({}).id, employee.id);
+    makePlan();
+    const run = makeRun(makePlan().id, employee.id);
     startRun(run.id);
 
     const summary = getActivitySummary(10);
@@ -112,7 +112,7 @@ describe('workforce events + observability', () => {
     assert.strictEqual(summary.employees.busy, 1);
     assert.strictEqual(summary.employees.offline, 1);
     assert.strictEqual(summary.runs.running, 1);
-    assert.strictEqual(summary.tasks.total, 2);
+    assert.strictEqual(summary.plans.total, 2);
     assert.ok(summary.recentEvents.some(e => e.type === 'run.started'));
     assert.ok(summary.queue.maxConcurrentRuns >= 1);
   });
@@ -130,8 +130,8 @@ describe('workforce events + observability', () => {
   it('executeRun finishes a running run as failed when agent config is missing', async () => {
     const agent = makeEmployee({ status: 'idle', agentConfig: undefined });
     getStores().people.add(agent);
-    const task = makeTask({});
-    const run = makeRun(task.id, agent.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, agent.id);
     startRun(run.id);
 
     const result = await executeRun(run.id, 'noop');

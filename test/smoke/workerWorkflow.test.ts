@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { makeWorkspace, makeTask, makeRun, makeEmployee, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
+import { makeWorkspace, makePlan, makeRun, makeEmployee, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
 import { updateQueueSettings } from '../../src/services/workforce/queueService';
 import { startRun, finishRun, requeueRun, processQueue } from '../../src/services/workforce/queueService';
@@ -37,8 +37,8 @@ describe('C4 workflow: retries, timeout, classification', () => {
   }
 
   function startRunFor(agentId: string): string {
-    const task = makeTask({});
-    const run = makeRun(task.id, agentId);
+    const plan = makePlan();
+    const run = makeRun(plan.id, agentId);
     startRun(run.id);
     return run.id;
   }

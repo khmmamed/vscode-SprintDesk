@@ -1,6 +1,6 @@
 import {
+  Plan,
   Run,
-  Task,
   WorkflowConditionStep,
   WorkflowDefinition,
   WorkflowLoopStep,
@@ -12,10 +12,10 @@ import {
 } from '../../../data/types';
 import { DataService, getDataService } from '../../../data/DataService';
 import { getStores, Stores } from '../../../data/stores';
-import { getTaskService } from '../../taskService';
 import { emitEvent } from '../events';
 import { callServerTool } from '../mcp/client';
 import { evaluateCondition, interpolate, validateWorkflow } from './dsl';
+import { legacyTaskKindToPlanCategory, materializePlan } from '../plan/planService';
 
 export interface WorkflowContext {
   workflowId: string;
@@ -56,10 +56,10 @@ function taskTitle(step: WorkflowTaskStep, context: WorkflowContext): string {
   return typeof interpolated === 'string' ? interpolated : step.title;
 }
 
-function createWorkflowRun(stores: Stores, now: Date, context: WorkflowContext, task: Task): Run {
+function createWorkflowRun(stores: Stores, now: Date, context: WorkflowContext, plan: Plan): Run {
   const run: Run = {
-    id: `run_wf_${context.workflowId}_${task.id}_${now.getTime()}`,
-    taskId: task.id,
+    id: `run_wf_${context.workflowId}_${plan.id}_${now.getTime()}`,
+    planId: plan.id,
     status: 'queued',
     attempts: 1,
     createdAt: now.toISOString(),
@@ -68,13 +68,15 @@ function createWorkflowRun(stores: Stores, now: Date, context: WorkflowContext, 
   stores.runs.add(run);
   emitEvent('run.queued', 'workflow', {
     runId: run.id,
-    taskId: task.id,
+    planId: plan.id,
     workflowId: context.workflowId,
     workflowName: context.workflowName
   });
   return run;
 }
 
+// v1.0 Slice D — `task` steps materialize runnable Plans (the queue's execution
+// unit) with provenance `synthetic:workflow:<id>`; step outputs carry planId.
 function executeTaskStep(
   step: WorkflowTaskStep,
   context: WorkflowContext,
@@ -84,24 +86,19 @@ function executeTaskStep(
 ): WorkflowStepResult {
   const title = taskTitle(step, context);
   try {
-    const task = getTaskService(dataService.getWorkspaceRoot()).createTask({
-      title,
-      type: step.taskType,
-      priority: step.priority,
-      backlog: step.backlog
-    });
+    const plan = materializePlan(
+      {
+        sourceInputId: `synthetic:workflow:${context.workflowId}`,
+        title,
+        description: context.workflowName,
+        category: legacyTaskKindToPlanCategory(step.taskType),
+        priority: step.priority
+      },
+      { stores }
+    );
 
-    dataService.updateTask(task.id, {
-      source: 'workflow',
-      workflow: context.workflowName,
-      ...(step.requiredSkills && step.requiredSkills.length > 0
-        ? { requiredSkills: step.requiredSkills }
-        : {}),
-      updatedAt: now.toISOString()
-    });
-
-    const run = createWorkflowRun(stores, now, context, task);
-    return completed(step.id, { taskId: task.id, runId: run.id, backlog: !!step.backlog });
+    const run = createWorkflowRun(stores, now, context, plan);
+    return completed(step.id, { planId: plan.id, runId: run.id, backlog: !!step.backlog });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return failed(step.id, `task step '${step.id}' failed: ${message}`);

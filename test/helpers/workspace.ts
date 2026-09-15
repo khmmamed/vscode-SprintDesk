@@ -4,7 +4,8 @@ import * as path from 'path';
 import { setWorkspaceRootOverride } from '../../src/services/fileService';
 import { getStores } from '../../src/data/stores';
 import { getDataService } from '../../src/data/DataService';
-import { AgentConfig, Employee, Run, Task } from '../../src/data/types';
+import { AgentConfig, Employee, Plan, Run, Task } from '../../src/data/types';
+import { materializePlan } from '../../src/services/workforce/plan/planService';
 
 let currentRoot = '';
 let sequence = 0;
@@ -109,11 +110,27 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
   return task;
 }
 
-export function makeRun(taskId: string, agentId: string, overrides: Partial<Run> = {}): Run {
+// v1.0 Slice D — tests build runnable-by-default Plans (the queue's execution unit).
+export function makePlan(overrides: Partial<Plan> = {}): Plan {
+  const plan = materializePlan(
+    {
+      sourceInputId: 'test:fixture',
+      title: `Plan ${sequence + 1}`,
+      description: 'Fixture plan description',
+      category: 'feature',
+      priority: 'medium',
+      executionMode: 'immediate'
+    },
+    { workspaceRoot: currentWorkspaceRoot() }
+  );
+  return { ...plan, ...overrides };
+}
+
+export function makeRun(planId: string, agentId: string, overrides: Partial<Run> = {}): Run {
   const now = new Date().toISOString();
   const run: Run = {
     id: nextId('run'),
-    taskId,
+    planId,
     agentId,
     status: 'queued',
     attempts: 1,

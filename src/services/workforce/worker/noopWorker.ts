@@ -7,9 +7,9 @@ export function createNoopWorker(): WorkerRuntime {
     async run(request: WorkerRequest): Promise<WorkerResult> {
       const { command, args } = buildAgentCommand(
         request.agentConfig,
-        request.task.path || '',
-        request.task.title,
-        request.task.title,
+        request.input.path || '',
+        request.input.title,
+        request.input.title,
         request.employee.name
       );
       const invocation = command ? [command, ...args].join(' ') : '(no tool configured)';

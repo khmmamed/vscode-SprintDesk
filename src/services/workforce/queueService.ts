@@ -1,7 +1,5 @@
-import * as fileService from '../fileService';
-import { getDataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
-import { AuditEntry, Employee, QueueSettings, Run, RunSummary, Task } from '../../data/types';
+import { AuditEntry, Employee, Plan, QueueSettings, Run, RunSummary } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
 import * as findingsService from './findingsService';
 import { updateEmployee } from './workforceService';
@@ -9,8 +7,8 @@ import { emitEvent } from './events';
 import { gateMode, requestApproval } from './gates';
 
 export type QueueSkipReason =
-  | 'task-not-found'
-  | 'task-closed'
+  | 'plan-not-found'
+  | 'plan-not-runnable'
   | 'employee-not-found'
   | 'employee-offline'
   | 'no-permission'
@@ -27,7 +25,7 @@ export interface QueueSkip {
 
 export interface QueueClaim {
   run: Run;
-  task: Task;
+  plan: Plan;
   employee: Employee;
 }
 
@@ -116,13 +114,23 @@ export function summarizeRunOutput(output?: string, error?: string, failed = fal
   return { findings, errors };
 }
 
-function dataService() {
-  return getDataService(fileService.getWorkspaceRoot());
-}
-
 function employeeById(id?: string): Employee | undefined {
   if (!id) {return undefined;}
   return getStores().people.getById(id);
+}
+
+function planById(id: string): Plan | undefined {
+  return getStores().plans.getById(id);
+}
+
+// A plan is queued-runnable unless scheduling is terminal (done/failed/cancelled/blocked)
+// or execution has already completed/failed. Draft/ready plans with queued runs claim.
+function isQueueRunnablePlan(plan: Plan): boolean {
+  if (plan.execution.status === 'completed' || plan.execution.status === 'failed') {
+    return false;
+  }
+  const status = plan.scheduling.status;
+  return status !== 'done' && status !== 'failed' && status !== 'cancelled' && status !== 'blocked';
 }
 
 function runningRuns(): Run[] {
@@ -164,12 +172,13 @@ export function startRun(runId: string, opts?: { bypassGate?: boolean }): Run | 
       type: 'run-execution',
       reason: 'Run execution requires manual approval',
       requesterId: run.agentId,
-      target: `run ${run.id} for task ${run.taskId}`,
+      target: `run ${run.id} for plan ${run.planId}`,
       pending: { op: 'start-run', runId: run.id, agentId: run.agentId || '' }
     });
     return undefined;
   }
 
+  const plan = planById(run.planId);
   const now = new Date().toISOString();
   getStores().runs.update(runId, {
     status: 'running',
@@ -178,51 +187,49 @@ export function startRun(runId: string, opts?: { bypassGate?: boolean }): Run | 
     updatedAt: now
   });
 
+  if (plan) {
+    getStores().plans.update(plan.id, {
+      execution: { ...plan.execution, status: 'running', runId: run.id },
+      updatedAt: now
+    });
+  }
+
   const employee = employeeById(run.agentId);
   if (employee) {
     updateEmployee(employee.id, { status: 'busy' });
   }
 
-  const ds = dataService();
-  const task = ds.getTask(run.taskId);
-  if (task) {
-    const { agentId } = run;
-    ds.updateTask(task.id, {
-      workStatus: 'in-progress',
-      ...(agentId ? { agent: agentId } : {})
-    });
-  }
-
   recordAudit({
     actor: 'queue',
     action: 'run.start',
-    targetType: 'task',
-    targetId: run.taskId,
-    details: { runId: run.id, agentId: run.agentId, taskCode: task?.code }
+    targetType: 'plan',
+    targetId: run.planId,
+    details: { runId: run.id, agentId: run.agentId, planCode: plan?.id }
   });
 
   emitEvent('run.started', 'queue', {
     runId: run.id,
-    taskId: run.taskId,
-    taskCode: task?.code,
+    planId: run.planId,
+    planCode: plan?.id,
     agentId: run.agentId
   });
 
   return getStores().runs.getById(runId);
 }
 
-export function createRun(taskId: string, agentIdOrName?: string, opts?: { actor?: string }): Run {
-  const ds = dataService();
-  const task = ds.getTask(taskId) || ds.loadTasks().find(t => t.code === taskId);
-  if (!task) {throw new Error(`Task not found: ${taskId}`);}
+export function createRun(planId: string, agentIdOrName?: string, opts?: { actor?: string }): Run {
+  const plan = getStores().plans.getById(planId);
+  if (!plan) {throw new Error(`Plan not found: ${planId}`);}
 
   const employees = getStores().people.loadAll();
   const byIdOrName = (id?: string): Employee | undefined =>
     id ? employees.find(e => e.id === id || e.name === id) : undefined;
 
-  const agent = byIdOrName(agentIdOrName) || (task.agent ? byIdOrName(task.agent) : undefined);
+  const agent =
+    byIdOrName(agentIdOrName) ||
+    (plan.execution.assignedAgent ? byIdOrName(plan.execution.assignedAgent) : undefined);
   if (!agent) {
-    throw new Error(`No agent assigned to task ${task.code}. Assign an agent first via sprintdesk_tasksAssign.`);
+    throw new Error(`No agent assigned to plan ${plan.id}. Assign an agent first.`);
   }
 
   const gate = requireEmployeePermission('run:create', agent.id);
@@ -239,23 +246,31 @@ export function createRun(taskId: string, agentIdOrName?: string, opts?: { actor
   const now = new Date().toISOString();
   const run: Run = {
     id: `run_${Date.now()}`,
-    taskId: task.id,
+    planId: plan.id,
     agentId: agent.id,
     status: 'queued',
-    attempts: (task.attempts || 0) + 1,
+    attempts: getStores().runs.findByPlanId(plan.id).length + 1,
     createdAt: now,
     updatedAt: now
   };
 
   getStores().runs.add(run);
-  ds.updateTask(task.id, { runId: run.id, attempts: run.attempts, agent: agent.id });
+  getStores().plans.update(plan.id, {
+    execution: {
+      ...plan.execution,
+      status: 'assigned',
+      assignedAgent: agent.id,
+      runId: run.id
+    },
+    updatedAt: now
+  });
 
   recordAudit({
     actor: opts?.actor || 'queue',
     action: 'run.create',
-    targetType: 'task',
-    targetId: task.id,
-    details: { runId: run.id, agentId: agent.id, agentName: agent.name, taskCode: task.code }
+    targetType: 'plan',
+    targetId: plan.id,
+    details: { runId: run.id, agentId: agent.id, agentName: agent.name, planCode: plan.id }
   });
 
   return run;
@@ -277,36 +292,36 @@ export function finishRun(runId: string, outcome: RunOutcome): Run | undefined {
     updatedAt: now
   });
 
+  const plan = planById(run.planId);
+  if (plan) {
+    getStores().plans.update(plan.id, {
+      execution: { ...plan.execution, status: completed ? 'completed' : 'failed' },
+      updatedAt: now
+    });
+  }
+
   const employee = employeeById(run.agentId);
   if (employee) {
     updateEmployee(employee.id, { status: 'idle' });
   }
 
-  const ds = dataService();
-  const task = ds.getTask(run.taskId);
-  if (task) {
-    ds.updateTask(task.id, {
-      workStatus: completed ? 'done' : 'blocked'
-    });
-  }
-
   recordAudit({
     actor: 'queue',
     action: 'run.finish',
-    targetType: 'task',
-    targetId: run.taskId,
+    targetType: 'plan',
+    targetId: run.planId,
     details: {
       runId: run.id,
       agentId: run.agentId,
       status: outcome.status,
-      taskCode: task?.code
+      planCode: plan?.id
     }
   });
 
   emitEvent('run.finished', 'queue', {
     runId: run.id,
-    taskId: run.taskId,
-    taskCode: task?.code,
+    planId: run.planId,
+    planCode: plan?.id,
     agentId: run.agentId,
     status: outcome.status,
     ...(outcome.classification ? { classification: outcome.classification } : {})
@@ -349,14 +364,14 @@ export function requeueRun(runId: string, opts?: { classification?: RunFailureCl
   recordAudit({
     actor: 'queue',
     action: 'run.retry',
-    targetType: 'task',
-    targetId: run.taskId,
+    targetType: 'plan',
+    targetId: run.planId,
     details: { runId, agentId: run.agentId, attempts: run.attempts + 1 }
   });
 
   emitEvent('run.retried', 'queue', {
     runId,
-    taskId: run.taskId,
+    planId: run.planId,
     agentId: run.agentId,
     attempts: run.attempts + 1
   });
@@ -389,17 +404,26 @@ export function cancelRun(runId: string, actorId?: string): Run | undefined {
     }
   }
 
+  const plan = planById(run.planId);
+  if (plan) {
+    getStores().plans.update(plan.id, {
+      execution: { ...plan.execution, status: 'unassigned', runId: undefined },
+      updatedAt: now
+    });
+  }
+
   recordAudit({
     actor: 'queue',
     action: 'run.cancel',
-    targetType: 'task',
-    targetId: run.taskId,
-    details: { runId: run.id, agentId: run.agentId }
+    targetType: 'plan',
+    targetId: run.planId,
+    details: { runId: run.id, agentId: run.agentId, planCode: plan?.id }
   });
 
   emitEvent('run.cancelled', 'queue', {
     runId: run.id,
-    taskId: run.taskId,
+    planId: run.planId,
+    planCode: plan?.id,
     agentId: run.agentId
   });
 
@@ -414,7 +438,6 @@ export function processQueue(options: QueueProcessOptions = {}): QueueProcessRes
       ? settings.maxConcurrentRuns
       : Math.min(options.limit, settings.maxConcurrentRuns);
 
-  const ds = dataService();
   const activeRunning = runningRuns();
   const baselineRunning = activeRunning.length;
   const claimsBudget = Math.max(0, available - baselineRunning);
@@ -432,7 +455,7 @@ export function processQueue(options: QueueProcessOptions = {}): QueueProcessRes
       skipped.push({ runId: run.id, reason, detail });
       emitEvent('queue.skip', 'queue', {
         runId: run.id,
-        taskId: run.taskId,
+        planId: run.planId,
         reason,
         ...(detail ? { detail } : {})
       });
@@ -443,13 +466,13 @@ export function processQueue(options: QueueProcessOptions = {}): QueueProcessRes
       continue;
     }
 
-    const task = ds.getTask(run.taskId);
-    if (!task) {
-      skip('task-not-found');
+    const plan = planById(run.planId);
+    if (!plan) {
+      skip('plan-not-found');
       continue;
     }
-    if (task.status === 'done' || task.status === 'cancelled') {
-      skip('task-closed', task.status);
+    if (!isQueueRunnablePlan(plan)) {
+      skip('plan-not-runnable', `scheduling=${plan.scheduling.status} execution=${plan.execution.status}`);
       continue;
     }
 
@@ -484,7 +507,7 @@ export function processQueue(options: QueueProcessOptions = {}): QueueProcessRes
       continue;
     }
 
-    claims.push({ run, task, employee });
+    claims.push({ run, plan, employee });
     claimedEmployees.add(employee.id);
 
     if (!dryRun) {

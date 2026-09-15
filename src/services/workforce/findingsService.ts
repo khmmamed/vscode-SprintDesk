@@ -1,5 +1,5 @@
 import { getStores } from '../../data/stores';
-import { Employee, Finding, FindingAgentReview, FindingRecommendation, FindingSeverity, FindingStatus, Run, Task } from '../../data/types';
+import { Employee, Finding, FindingAgentReview, FindingRecommendation, FindingSeverity, FindingStatus, Run } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
 import { emitEvent } from './events';
 
@@ -57,13 +57,16 @@ export interface CreateFindingInput {
   runId: string;
   agent: string;
   agentName?: string;
+  // v1.0 Slice D — run-produced findings link to the executed Plan.
+  planId?: string;
+  // Legacy classification link (task proposals), retained until Slice H/I.
   taskId?: string;
   severity?: FindingSeverity;
   confidence?: number;
   category?: string;
-  suggestedTaskType?: Task['type'];
+  suggestedTaskType?: Finding['suggestedTaskType'];
   suggestedWorkflow?: string;
-  suggestedPriority?: Task['priority'];
+  suggestedPriority?: Finding['suggestedPriority'];
   evidence?: string;
   sourceType?: string;
 }
@@ -83,6 +86,7 @@ export function createFinding(input: CreateFindingInput): Finding {
     agentValidationState: 'requested',
     agentValidationRequestedAt: now,
     ...(input.taskId ? { taskId: input.taskId } : {}),
+    ...(input.planId ? { planId: input.planId } : {}),
     ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
     ...(input.category ? { category: input.category } : {}),
     ...(input.suggestedTaskType ? { suggestedTaskType: input.suggestedTaskType } : {}),
@@ -97,6 +101,7 @@ export function createFinding(input: CreateFindingInput): Finding {
     emitEvent('finding.created', 'findings', {
       findingId: finding.id,
       runId: input.runId,
+      planId: input.planId,
       taskId: input.taskId,
       agentId: input.agent,
       severity: finding.severity,
@@ -105,6 +110,7 @@ export function createFinding(input: CreateFindingInput): Finding {
     emitEvent('finding.validation.requested', 'findings', {
       findingId: finding.id,
       runId: input.runId,
+      planId: input.planId,
       taskId: input.taskId,
       severity: finding.severity
     });
@@ -126,7 +132,7 @@ export function materializeFindings(runId: string): Finding[] {
     runId: run.id,
     agent: employee?.id || run.agentId || 'unknown',
     agentName: employee?.name,
-    taskId: run.taskId,
+    planId: run.planId,
     evidence: b.title,
     sourceType: 'run-output'
   }));

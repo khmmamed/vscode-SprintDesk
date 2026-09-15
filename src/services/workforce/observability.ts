@@ -1,8 +1,7 @@
-import * as fileService from '../fileService';
-import { getDataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
-import { EventRecord, Employee, ExecutionWindow, Finding, Run, QueueSettings, Task, WorkerMode } from '../../data/types';
+import { EventRecord, Employee, ExecutionWindow, Finding, Plan, Run, QueueSettings, WorkerMode } from '../../data/types';
 import { getQueueSettings } from './queueService';
+import { planTitleFor } from './plan/planService';
 
 export interface RunCounts {
   queued: number;
@@ -25,7 +24,8 @@ export interface ActivitySummary {
   asOf: string;
   employees: EmployeeCounts;
   runs: RunCounts;
-  tasks: { total: number; active: number; done: number };
+  // v1.0 Slice D — activity is Plan-tracked (execution.status), not Task-tracked.
+  plans: { total: number; active: number; done: number };
   queue: QueueSettings;
   recentEvents: EventRecord[];
 }
@@ -54,17 +54,18 @@ export interface RunTriggerReport {
 
 export interface RunDetailReport {
   run: Run;
-  task?: Task;
+  plan?: Plan;
+  planTitle?: string;
   employee?: Employee;
   trigger?: RunTriggerReport;
   findings: Finding[];
   durationMs?: number;
 }
 
-function findTriggerForTask(taskId: string): RunTriggerReport | undefined {
+function findTriggerForPlan(planId: string): RunTriggerReport | undefined {
   for (const rule of getStores().eventRules.loadAll()) {
     for (const trigger of rule.recentTriggers || []) {
-      if ((trigger.createdTaskIds || []).includes(taskId)) {
+      if ((trigger.createdPlanIds || []).includes(planId)) {
         return { ruleId: rule.id, ruleName: rule.name, eventType: trigger.eventType };
       }
     }
@@ -73,10 +74,9 @@ function findTriggerForTask(taskId: string): RunTriggerReport | undefined {
 }
 
 export function runDetail(run: Run): RunDetailReport {
-  const root = fileService.getWorkspaceRoot();
-  const task = root && run.taskId ? getDataService(root).getTask(run.taskId) : undefined;
+  const plan = getStores().plans.getById(run.planId);
   const employee = run.agentId ? getStores().people.getById(run.agentId) : undefined;
-  const trigger = task ? findTriggerForTask(task.id) : undefined;
+  const trigger = plan ? findTriggerForPlan(plan.id) : undefined;
   const findings = getStores()
     .findings.byRunId(run.id)
     .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
@@ -84,7 +84,7 @@ export function runDetail(run: Run): RunDetailReport {
     run.startedAt && run.finishedAt
       ? new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
       : undefined;
-  return { run, task, employee, trigger, findings, durationMs };
+  return { run, plan, planTitle: planTitleFor(plan), employee, trigger, findings, durationMs };
 }
 
 export interface QueueSnapshot {
@@ -155,7 +155,8 @@ export interface ExecutionWindowReport {
   agentNames: string[];
   runCount: number;
   runs: RunCounts;
-  taskCount: number;
+  // v1.0 Slice D — windows drive Plans (planCount), not Tasks.
+  planCount: number;
   findings: { total: number; pendingAgentReview: number; pendingHumanReview: number; approved: number; rejected: number };
   completionSummary?: ExecutionWindow['completionSummary'];
 }
@@ -191,7 +192,7 @@ export function getExecutionWindowReport(window: ExecutionWindow): ExecutionWind
       failed: runs.filter(r => r.status === 'failed').length,
       cancelled: runs.filter(r => r.status === 'cancelled').length
     },
-    taskCount: window.taskIds.length,
+    planCount: window.planIds.length,
     findings: {
       total: findings.length,
       pendingAgentReview: findings.filter(f => f.status === 'pending' && !f.agentReview).length,
@@ -204,18 +205,17 @@ export function getExecutionWindowReport(window: ExecutionWindow): ExecutionWind
 }
 
 export function getActivitySummary(recentEventLimit = 20): ActivitySummary {
-  const root = fileService.getWorkspaceRoot();
   const stores = getStores();
-  const tasks = root ? getDataService(root).loadTasks() : [];
+  const plans = stores.plans.loadAll();
 
   return {
     asOf: new Date().toISOString(),
     employees: countEmployees(stores.people.loadAll()),
     runs: countRuns(stores.runs.loadAll()),
-    tasks: {
-      total: tasks.length,
-      active: tasks.filter(t => t.workStatus === 'in-progress' && t.status !== 'done' && t.status !== 'cancelled').length,
-      done: tasks.filter(t => t.status === 'done').length
+    plans: {
+      total: plans.length,
+      active: plans.filter(p => p.execution.status === 'running').length,
+      done: plans.filter(p => p.execution.status === 'completed').length
     },
     queue: getQueueSettings(),
     recentEvents: stores.events.latest(recentEventLimit)

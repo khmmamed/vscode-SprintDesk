@@ -1,8 +1,8 @@
 import { getDataService, DataService } from '../../../data/DataService';
 import { getStores, Stores } from '../../../data/stores';
-import { getTaskService } from '../../taskService';
 import { emitEvent } from '../events';
-import { AutonomyLevel, Run, ScheduleRecord, Task } from '../../../data/types';
+import { AutonomyLevel, Plan, PlanPriority, Run, ScheduleRecord } from '../../../data/types';
+import { legacyTaskKindToPlanCategory, materializePlan } from '../plan/planService';
 import { CronExpression, CronParseError, matchesCron, parseCron } from './cronParser';
 import { runClassificationPass, ClassificationPassResult } from '../classification/classificationService';
 
@@ -28,8 +28,9 @@ export interface ScheduleFiredResult {
   occurrenceKey: string;
   mode: ScheduleFireMode;
   autonomyLevel: AutonomyLevel;
-  taskId?: string;
-  taskCode?: string;
+  // v1.0 Slice D — schedules materialize Plans (planId/planCode), not Tasks.
+  planId?: string;
+  planCode?: string;
   runId?: string;
   classification?: ClassificationPassResult;
 }
@@ -161,37 +162,37 @@ export function evaluateSchedule(schedule: ScheduleRecord, now: Date): ScheduleE
   return { fire: true, occurrence: result.occurrence!, schedule };
 }
 
-function createQueuedRun(stores: Stores, taskId: string, now: Date): Run {
+function createQueuedRun(stores: Stores, planId: string, now: Date): Run {
   const run: Run = {
-    id: `run_sched_${taskId}_${now.getTime()}`,
-    taskId,
+    id: `run_sched_${planId}_${now.getTime()}`,
+    planId,
     status: 'queued',
     attempts: 1,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString()
   };
   stores.runs.add(run);
-  emitEvent('run.queued', 'scheduler', { runId: run.id, taskId });
+  emitEvent('run.queued', 'scheduler', { runId: run.id, planId });
   return run;
 }
 
-function buildAndAddTask(dataService: DataService, schedule: ScheduleRecord, now: Date): Task | undefined {
+type ScheduleTaskType = 'feature' | 'bug' | 'chore' | 'doc' | 'test';
+
+// Materializes a ScheduleTaskTemplate into a runnable Plan (the queue's execution unit),
+// its source stamped `synthetic:schedule:<id>` so provenance stays intact.
+function materializeSchedulePlan(stores: Stores, schedule: ScheduleRecord, now: Date): Plan | undefined {
   const template = schedule.taskTemplate;
   if (!template) {return undefined;}
-  const task = getTaskService(dataService.getWorkspaceRoot()).createTask({
-    title: template.title || template.name,
-    type: template.type,
-    priority: template.priority,
-    backlog: template.backlog,
-    epic: template.epicName || null
-  });
-  dataService.updateTask(task.id, {
-    source: 'scheduler',
-    workflow: schedule.name,
-    createdAt: task.createdAt || now.toISOString(),
-    updatedAt: now.toISOString()
-  });
-  return task;
+  return materializePlan(
+    {
+      sourceInputId: `synthetic:schedule:${schedule.id}`,
+      title: template.title || template.name,
+      description: template.name,
+      category: legacyTaskKindToPlanCategory(template.type as ScheduleTaskType),
+      priority: template.priority as PlanPriority
+    },
+    { stores }
+  );
 }
 
 function updateScheduleState(
@@ -284,12 +285,12 @@ export async function runSchedulerPass(options: SchedulerPassOptions = {}): Prom
       continue;
     }
 
-    const task = buildAndAddTask(dataService, schedule, now);
-    if (!task) {
+    const plan = materializeSchedulePlan(stores, schedule, now);
+    if (!plan) {
       skipped.push({ scheduleId: schedule.id, reason: 'invalid-interval' });
       continue;
     }
-    const run = createQueuedRun(stores, task.id, now);
+    const run = createQueuedRun(stores, plan.id, now);
     updateScheduleState(stores, schedule, occurrenceKey, now, true);
 
     fired.push({
@@ -298,14 +299,14 @@ export async function runSchedulerPass(options: SchedulerPassOptions = {}): Prom
       occurrenceKey,
       mode: 'execute',
       autonomyLevel: schedule.autonomyLevel,
-      taskId: task.id,
-      taskCode: task.code,
+      planId: plan.id,
+      planCode: plan.id,
       runId: run.id
     });
     emitEvent('schedule.fired', 'scheduler', {
       scheduleId: schedule.id,
       occurrenceKey,
-      taskId: task.id,
+      planId: plan.id,
       runId: run.id
     });
   }

@@ -15,6 +15,7 @@ import {
 } from '../../src/data/types';
 import { executeWorkflow } from '../../src/services/workforce/workflow/engine';
 import { validateWorkflow } from '../../src/services/workforce/workflow/dsl';
+import { planTitleFor } from '../../src/services/workforce/plan/planService';
 
 function taskStep(id: string, title: string, overrides: Partial<WorkflowTaskStep> = {}): WorkflowTaskStep {
   return { id, type: 'task', title, taskType: 'chore', priority: 'low', backlog: 'features', ...overrides };
@@ -124,7 +125,7 @@ describe('C7 workflow DSL', () => {
     );
   });
 
-  it('task steps create tasks and queued runs and persist workflow metadata', async () => {
+  it('task steps create runnable plans and queued runs and persist workflow metadata', async () => {
     const def = workflow('wf-basic', [taskStep('one', 'First Task'), taskStep('two', 'Second Task')]);
 
     const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
@@ -133,17 +134,16 @@ describe('C7 workflow DSL', () => {
     assert.strictEqual(result.stepResults.length, 2);
     assert.ok(result.stepResults.every(s => s.status === 'completed'));
 
-    const tasks = getDataService(ws.root).loadTasks();
-    assert.strictEqual(tasks.length, 2);
-    for (const task of tasks) {
-      assert.strictEqual(task.source, 'workflow');
-      assert.strictEqual(task.workflow, 'Workflow wf-basic');
-      assert.match(task.code, /^SPD-\d+$/);
-    }
+    const plans = getStores(ws.root).plans.loadAll();
+    assert.strictEqual(plans.length, 2);
+    assert.ok(plans.every(p => p.source.inputId === 'synthetic:workflow:wf-basic'));
+    assert.deepStrictEqual(plans.map(p => planTitleFor(p, ws.root)), ['First Task', 'Second Task']);
+    assert.ok(plans.every(p => p.scheduling.status === 'ready' && p.execution.status === 'unassigned'));
 
     const runs = getStores(ws.root).runs.loadAll();
     assert.strictEqual(runs.length, 2);
     assert.ok(runs.every(r => r.status === 'queued'));
+    assert.deepStrictEqual(runs.map(r => r.planId), plans.map(p => p.id));
   });
 
   it('executes steps in definition order', async () => {
@@ -157,7 +157,7 @@ describe('C7 workflow DSL', () => {
 
     assert.deepStrictEqual(result.stepResults.map(s => s.stepId), ['a', 'b', 'c']);
     assert.deepStrictEqual(
-      getDataService(ws.root).loadTasks().map(t => t.title),
+      getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)),
       ['Alpha', 'Beta', 'Gamma']
     );
   });
@@ -197,7 +197,7 @@ describe('C7 workflow DSL', () => {
     assert.strictEqual(loop.status, 'completed');
     assert.strictEqual(loop.outputs.iterations, 3);
     assert.deepStrictEqual(
-      getDataService(ws.root).loadTasks().map(t => t.title),
+      getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)),
       ['Batch Item 0', 'Batch Item 1', 'Batch Item 2']
     );
   });
@@ -233,7 +233,7 @@ describe('C7 workflow DSL', () => {
     assert.strictEqual(result.status, 'completed');
     assert.strictEqual(result.stepResults[1].outputs.branch, 'then');
     assert.deepStrictEqual(
-      getDataService(ws.root).loadTasks().map(t => t.title),
+      getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)),
       ['Prep Task', 'Then Task']
     );
   });
@@ -260,7 +260,7 @@ describe('C7 workflow DSL', () => {
     assert.strictEqual(result.stepResults[1].status, 'completed');
     assert.strictEqual(result.stepResults[1].outputs.branch, 'else');
     assert.deepStrictEqual(
-      getDataService(ws.root).loadTasks().map(t => t.title),
+      getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)),
       ['Fallback Task']
     );
   });
@@ -269,13 +269,13 @@ describe('C7 workflow DSL', () => {
     const always = workflow('wf-always', [conditionStep('c', { type: 'always' }, [taskStep('a', 'Always Task')])]);
     const alwaysResult = await executeWorkflow(always, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
     assert.strictEqual(alwaysResult.status, 'completed');
-    assert.deepStrictEqual(getDataService(ws.root).loadTasks().map(t => t.title), ['Always Task']);
+    assert.deepStrictEqual(getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)), ['Always Task']);
 
     const never = workflow('wf-never', [conditionStep('c', { type: 'never' }, [taskStep('a', 'Never Task')])]);
     const neverResult = await executeWorkflow(never, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
     assert.strictEqual(neverResult.status, 'completed');
     assert.strictEqual(neverResult.stepResults[0].status, 'skipped');
-    assert.strictEqual(getDataService(ws.root).loadTasks().length, 1);
+    assert.strictEqual(getStores(ws.root).plans.loadAll().length, 1);
   });
 
   it('tool steps are denied by the MCP capability gate', async () => {
@@ -333,7 +333,7 @@ describe('C7 workflow DSL', () => {
       assert.strictEqual(toolResult.outputs.isError, false);
       assert.strictEqual(result.stepResults[1].outputs.branch, 'then');
       assert.deepStrictEqual(
-        getDataService(ws.root).loadTasks().map(t => t.title),
+        getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)),
         ['Task After Tool']
       );
     } finally {

@@ -20,7 +20,8 @@ export interface RuleTriggerResult {
   workflowId: string;
   workflowName?: string;
   status?: EventRuleTrigger['status'];
-  createdTaskIds?: string[];
+  // v1.0 Slice D — event-rule workflows materialize Plans (createdPlanIds).
+  createdPlanIds?: string[];
   skipReason?: RuleSkipReason;
   error?: string;
 }
@@ -207,7 +208,7 @@ function recordTrigger(
   rule: EventRule,
   event: EventRecord,
   status: EventRuleTrigger['status'],
-  createdTaskIds: string[],
+  createdPlanIds: string[],
   workflowName?: string,
   error?: string
 ): void {
@@ -218,7 +219,7 @@ function recordTrigger(
     workflowId: rule.workflowId,
     status,
     createdAt: now,
-    ...(createdTaskIds.length > 0 ? { createdTaskIds } : {}),
+    ...(createdPlanIds.length > 0 ? { createdPlanIds } : {}),
     ...(error ? { error } : {})
   };
 
@@ -237,17 +238,17 @@ function recordTrigger(
     eventType: event.type,
     workflowId: rule.workflowId,
     status,
-    ...(createdTaskIds.length > 0 ? { createdTaskIds } : {}),
+    ...(createdPlanIds.length > 0 ? { createdPlanIds } : {}),
     ...(error ? { error } : {})
   });
 }
 
-function collectTaskIds(result: { stepResults: Array<{ outputs: Record<string, unknown> }> }): string[] {
+function collectPlanIds(result: { stepResults: Array<{ outputs: Record<string, unknown> }> }): string[] {
   const ids: string[] = [];
   for (const step of result.stepResults) {
-    const taskId = step.outputs?.taskId;
-    if (typeof taskId === 'string' && taskId && !ids.includes(taskId)) {
-      ids.push(taskId);
+    const planId = step.outputs?.planId;
+    if (typeof planId === 'string' && planId && !ids.includes(planId)) {
+      ids.push(planId);
     }
   }
   return ids;
@@ -308,8 +309,8 @@ export async function processEventRules(event: EventRecord, options: ProcessEven
       }
 
       const runResult = await executeWorkflow(workflow, { stores, dataService });
-      const createdTaskIds = collectTaskIds(runResult);
-      recordTrigger(stores, rule, event, runResult.status, createdTaskIds, workflow.name, runResult.error);
+      const createdPlanIds = collectPlanIds(runResult);
+      recordTrigger(stores, rule, event, runResult.status, createdPlanIds, workflow.name, runResult.error);
 
       emitEvent('eventrule.fired', 'eventrule', {
         ruleId: rule.id,
@@ -318,7 +319,7 @@ export async function processEventRules(event: EventRecord, options: ProcessEven
         eventType: event.type,
         workflowId: workflow.id,
         status: runResult.status,
-        ...(createdTaskIds.length > 0 ? { createdTaskIds } : {}),
+        ...(createdPlanIds.length > 0 ? { createdPlanIds } : {}),
         ...(runResult.error ? { error: runResult.error } : {})
       });
 
@@ -327,7 +328,7 @@ export async function processEventRules(event: EventRecord, options: ProcessEven
         matched: true,
         triggered: true,
         status: runResult.status,
-        createdTaskIds,
+        createdPlanIds,
         error: runResult.error,
         workflowName: workflow.name
       });

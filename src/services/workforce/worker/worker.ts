@@ -1,21 +1,49 @@
+import * as path from 'path';
 import { getWorkspaceRoot } from '../../fileService';
-import { getDataService } from '../../../data/DataService';
+import { getFileSystem } from '../../../host';
 import { getStores } from '../../../data/stores';
-import { AgentConfig, Employee, EmployeeModelProfile, Run, Task, WorkerMode } from '../../../data/types';
+import { AgentConfig, Employee, EmployeeModelProfile, Plan, Run, WorkerMode } from '../../../data/types';
 import { finishRun, getQueueSettings, processQueue, requeueRun, QueueClaim, QueueSkip } from '../queueService';
+import { readPlanMd, resolvePlanFile } from '../plan/planService';
 import { createHeadlessWorker } from './headlessWorker';
 import { createNoopWorker } from './noopWorker';
 import { createOllamaWorker } from './ollamaWorker';
 import { createTerminalWorker } from './terminalWorker';
 
+// v1.0 Slice D — a run executes a Plan's artifact (plans/<id>.md). The runtime works
+// against `input` (title/description/path); `plan` carries registry state for reference.
+export interface PlanExecutionInput {
+  title: string;
+  description: string;
+  path: string;
+}
+
 export interface WorkerRequest {
   run: Run;
-  task: Task;
+  plan: Plan;
+  input: PlanExecutionInput;
   employee: Employee;
   agentConfig?: AgentConfig;
   workspaceRoot: string;
   timeoutMs?: number;
   modelProfile?: EmployeeModelProfile;
+}
+
+// Resolves execution content from the plan artifact. The artifact is authoritative;
+// falls back to the plan id when the .md is unreadable (e.g. noop fixtures).
+function planExecutionContent(plan: Plan, workspaceRoot: string): { title: string; description: string } {
+  try {
+    const file = path.join(workspaceRoot, '.SprintDesk', resolvePlanFile(plan));
+    if (getFileSystem().exists(file)) {
+      const { sections } = readPlanMd(file);
+      const title = sections.objective || plan.id;
+      const description = sections.implementation || sections.objective;
+      return { title, description };
+    }
+  } catch {
+    // fall through to id-based fallback
+  }
+  return { title: plan.id, description: '' };
 }
 
 export interface WorkerResult {
@@ -62,9 +90,8 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
   const run = getStores().runs.getById(runId);
   if (!run || run.status !== 'running') {return undefined;}
 
-  const ds = getDataService(wsRoot);
-  const task = ds.getTask(run.taskId);
-  if (!task) {return undefined;}
+  const plan = getStores().plans.getById(run.planId);
+  if (!plan) {return undefined;}
 
   const employee = getStores().people.getById(run.agentId || '');
   if (!employee) {return undefined;}
@@ -75,10 +102,16 @@ export async function executeRun(runId: string, mode?: WorkerMode): Promise<Work
     return { status: 'failed', error: runnable.error, classification: 'invalid-config' };
   }
 
+  const content = planExecutionContent(plan, wsRoot);
   const runtime = getWorkerRuntime(mode);
   const result = await runtime.run({
     run,
-    task,
+    plan,
+    input: {
+      title: content.title,
+      description: content.description,
+      path: path.join(wsRoot, '.SprintDesk', resolvePlanFile(plan))
+    },
     employee,
     agentConfig: employee.agentConfig,
     workspaceRoot: wsRoot,

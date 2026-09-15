@@ -8,7 +8,8 @@ async function handle_sprintdesk_runsCreate(args: any): Promise<HandlerResult> {
   if (!ds) return res('No workspace found', true);
 
   try {
-    const run = queueService.createRun(args.taskId, args.agentId, { actor: 'mcp' });
+    // v1.0 Slice D — createRun is Plan-scoped (planId replaces taskId).
+    const run = queueService.createRun(args.planId, args.agentId, { actor: 'mcp' });
     return res(JSON.stringify(run, null, 2));
   } catch (e: any) {
     return res(e.message, true);
@@ -18,8 +19,8 @@ async function handle_sprintdesk_runsCreate(args: any): Promise<HandlerResult> {
 async function handle_sprintdesk_runsList(args: any): Promise<HandlerResult> {
   const runs = getStores().runs.loadAll();
 
-  if (args.taskId) {
-    return res(JSON.stringify(runs.filter(r => r.taskId === args.taskId).slice(0, args.limit), null, 2));
+  if (args.planId) {
+    return res(JSON.stringify(runs.filter(r => r.planId === args.planId).slice(0, args.limit), null, 2));
   }
 
   if (args.status) {

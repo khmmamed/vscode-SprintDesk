@@ -32,21 +32,21 @@ function handle_sprintdesk_queueGet(args: any): HandlerResult {
         capacity,
         queued: queued.map(r => ({
           runId: r.id,
-          taskId: r.taskId,
+          planId: r.planId,
           agentId: r.agentId,
           attempts: r.attempts,
           createdAt: r.createdAt
         })),
         running: running.map(r => ({
           runId: r.id,
-          taskId: r.taskId,
+          planId: r.planId,
           agentId: r.agentId,
           attempts: r.attempts,
           startedAt: r.startedAt
         })),
         nextClaims: dry.claims.map(c => ({
           runId: c.run.id,
-          taskCode: c.task.code,
+          planCode: c.plan.id,
           agentId: c.employee.id,
           agentName: c.employee.name
         })),
@@ -82,7 +82,7 @@ async function handle_sprintdesk_queueProcess(args: any): Promise<HandlerResult>
       {
         claims: result.claims.map(c => ({
           runId: c.run.id,
-          taskCode: c.task.code,
+          planCode: c.plan.id,
           agentId: c.employee.id,
           agentName: c.employee.name
         })),

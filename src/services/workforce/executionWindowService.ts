@@ -67,7 +67,7 @@ export function createExecutionWindow(input: CreateExecutionWindowInput): Execut
     workerMode: input.workerMode,
     maxConcurrentRuns: input.maxConcurrentRuns,
     scheduledStartAt: input.scheduledStartAt,
-    taskIds: [],
+    planIds: [],
     runIds: [],
     createdBy: input.createdBy,
     createdAt: now,
@@ -79,21 +79,20 @@ export function createExecutionWindow(input: CreateExecutionWindowInput): Execut
   return window;
 }
 
-function collectTasksFromWorkflow(taskIds: string[], results: { stepResults: { outputs: Record<string, unknown> }[] }): string[] {
+// v1.0 Slice D — workflow task steps emit Plans (outputs.planId), which become the
+// window's queued units.
+function collectPlansFromWorkflow(planIds: string[], results: { stepResults: { outputs: Record<string, unknown> }[] }): string[] {
   for (const step of results.stepResults) {
-    if (typeof step.outputs?.taskId === 'string' && !taskIds.includes(step.outputs.taskId)) {
-      taskIds.push(step.outputs.taskId);
+    if (typeof step.outputs?.planId === 'string' && !planIds.includes(step.outputs.planId)) {
+      planIds.push(step.outputs.planId);
     }
   }
-  return taskIds;
+  return planIds;
 }
 
-function runForTask(taskId: string): string | undefined {
+function runForPlan(planId: string): string | undefined {
   const stores = getStores();
-  const ds = getDataService();
-  const task = ds.getTask(taskId);
-  if (task?.runId) {return task.runId;}
-  return stores.runs.findByTaskId(taskId).map(r => r.id).pop();
+  return stores.runs.findByPlanId(planId).map(r => r.id).pop();
 }
 
 function assignAgents(window: ExecutionWindow, runIds: string[]): void {
@@ -112,9 +111,13 @@ function assignAgents(window: ExecutionWindow, runIds: string[]): void {
   unassigned.forEach((run, index) => {
     const agent = pool[index % pool.length];
     stores.runs.update(run.id, { agentId: agent.id, updatedAt: nowIso() });
-    const ds = getDataService();
-    const task = ds.getTask(run.taskId);
-    if (task) {ds.updateTask(task.id, { agent: agent.id });}
+    const plan = stores.plans.getById(run.planId);
+    if (plan) {
+      stores.plans.update(plan.id, {
+        execution: { ...plan.execution, status: 'assigned', assignedAgent: agent.id },
+        updatedAt: nowIso()
+      });
+    }
   });
 }
 
@@ -200,17 +203,17 @@ export async function startExecutionWindow(windowId: string, actorId?: string): 
 
   const ds = getDataService();
   const runIds: string[] = [];
-  const taskIds: string[] = [];
+  const planIds: string[] = [];
 
   for (const workflowId of window.workflowIds) {
     const workflow = stores.workflows.getById(workflowId);
     if (!workflow || !workflow.enabled) {continue;}
     const result = await executeWorkflow(workflow, { stores, dataService: ds });
-    collectTasksFromWorkflow(taskIds, result);
+    collectPlansFromWorkflow(planIds, result);
   }
 
-  for (const taskId of taskIds) {
-    const runId = runForTask(taskId);
+  for (const planId of planIds) {
+    const runId = runForPlan(planId);
     if (runId && !runIds.includes(runId)) {runIds.push(runId);}
   }
 
@@ -220,7 +223,7 @@ export async function startExecutionWindow(windowId: string, actorId?: string): 
   stores.executionWindows.update(window.id, {
     status: 'running',
     startedAt: now,
-    taskIds: [...window.taskIds, ...taskIds],
+    planIds: [...window.planIds, ...planIds],
     runIds: [...window.runIds, ...runIds],
     updatedAt: now
   });

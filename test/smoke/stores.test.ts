@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { makeWorkspace, makeEmployee, makeRun, makeTask, nextId, TestWorkspace } from '../helpers/workspace';
+import { makeWorkspace, makeEmployee, makeRun, makePlan, nextId, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
 import { DEFAULT_QUEUE_SETTINGS } from '../../src/data/types';
 import { AuditStore } from '../../src/data/stores/AuditStore';
@@ -35,15 +35,15 @@ describe('YAML stores', () => {
     const stores = getStores(ws.root);
     const employee = makeEmployee();
     stores.people.add(employee);
-    const task = makeTask();
-    const run = makeRun(task.id, employee.id);
+    const plan = makePlan();
+    const run = makeRun(plan.id, employee.id);
 
     stores.runs.update(run.id, { status: 'running' });
     assert.strictEqual(stores.runs.getById(run.id)?.status, 'running');
 
     stores.runs.update(run.id, { status: 'completed', finishedAt: new Date().toISOString() });
     assert.strictEqual(stores.runs.getById(run.id)?.status, 'completed');
-    assert.strictEqual(stores.runs.findByTaskId(task.id).length, 1);
+    assert.strictEqual(stores.runs.findByPlanId(plan.id).length, 1);
     assert.strictEqual(stores.runs.findByAgentId(employee.id).length, 1);
   });
 

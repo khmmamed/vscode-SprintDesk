@@ -42,7 +42,7 @@ export async function buildQueuePass(ws: string, argv: string[] = []): Promise<a
   return {
     workspace: ws,
     workerMode: mode,
-    claims: pass.claims.map(c => ({ runId: c.run.id, taskCode: c.task.code, agentName: c.employee.name })),
+    claims: pass.claims.map(c => ({ runId: c.run.id, planCode: c.plan.id, agentName: c.employee.name })),
     skipped: pass.skipped,
     executed: pass.executed.map(e => ({
       runId: e.runId,

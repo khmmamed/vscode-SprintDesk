@@ -40,10 +40,9 @@ export type TaskWorkStatus =
 
 export interface Run {
   id: string;
-  taskId: string;
-  // v1.0 Slice A — execution identity moving to the Plan (deprecated alongside taskId,
-  // taskId removed in Slice D; the Run key stays `runs` in database/executions.yml)
-  planId?: string;
+  // v1.0 Slice D — the Plan is the execution identity (taskId removed); the Run key
+  // stays `runs` in database/executions.yml.
+  planId: string;
   agentId?: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   attempts: number;
@@ -144,7 +143,10 @@ export interface Finding {
   suggestedWorkflow?: string;
   suggestedPriority?: Task['priority'];
   status: FindingStatus;
+  // v1.0 Slice D — findings produced by a run link to the executed Plan (planId).
+  // taskId remains for the legacy classification link (task proposals), removed Slice H/I.
   taskId?: string;
+  planId?: string;
   resolvedAt?: string;
   decisionBy?: string;
 
@@ -631,7 +633,8 @@ export interface EventRuleTrigger {
   workflowId: string;
   status: EventRuleTriggerStatus;
   createdAt: string;
-  createdTaskIds?: string[];
+  // v1.0 Slice D — event-rule workflows materialize Plans (planId links), not Tasks.
+  createdPlanIds?: string[];
   error?: string;
 }
 
@@ -775,7 +778,8 @@ export interface ExecutionWindow {
   scheduledStartAt?: string;
   startedAt?: string;
   finishedAt?: string;
-  taskIds: string[];
+  // v1.0 Slice D — execution windows drive Plans through the queue (planIds), not Tasks.
+  planIds: string[];
   runIds: string[];
   createdBy?: string;
   createdAt: string;

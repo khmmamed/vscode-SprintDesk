@@ -204,14 +204,14 @@ describe('v1.0.0 Slice A — plan domain, stores & storage layout', () => {
     fs.mkdirSync(path.join(ws.root, '.SprintDesk', 'data'), { recursive: true });
     fs.writeFileSync(
       path.join(ws.root, '.SprintDesk', 'data', 'runs.yml'),
-      `runs:\n- id: run_legacy_1\n  taskId: task_1\n  agentId: ${employee.id}\n  status: queued\n  attempts: 1\n  createdAt: ${now}\n  updatedAt: ${now}\n`,
+      `runs:\n- id: run_legacy_1\n  planId: PLAN-000001\n  agentId: ${employee.id}\n  status: queued\n  attempts: 1\n  createdAt: ${now}\n  updatedAt: ${now}\n`,
       'utf8'
     );
 
     const reloaded = getStores(ws.root).runs;
     const legacy: Run | undefined = reloaded.getById('run_legacy_1');
     assert.ok(legacy);
-    assert.strictEqual(legacy.taskId, 'task_1');
+    assert.strictEqual(legacy.planId, 'PLAN-000001');
 
     // The first write moves state to database/executions.yml (internal key `runs`).
     reloaded.update('run_legacy_1', { status: 'running' });

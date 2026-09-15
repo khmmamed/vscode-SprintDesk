@@ -8,6 +8,7 @@ import * as classificationService from '../../services/workforce/classification/
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
 import { getActivitySummary, runDetail, getQueueSnapshot, getExecutionWindowReport } from '../../services/workforce/observability';
+import { legacyTaskKindToPlanCategory, materializePlan, planTitleFor } from '../../services/workforce/plan/planService';
 import * as findingsService from '../../services/workforce/findingsService';
 import * as workforceService from '../../services/workforce/workforceService';
 import * as eventRulesService from '../../services/workforce/eventRulesService';
@@ -32,11 +33,11 @@ export type WorkforceSection =
 
 export interface RunDto {
   id: string;
-  taskId: string;
-  taskTitle: string;
-  taskCode: string;
-  taskSource?: string;
-  taskWorkflow?: string;
+  // v1.0 Slice D — runs execute Plans (planId/planTitle/planCode).
+  planId: string;
+  planTitle: string;
+  planCode: string;
+  planSource?: string;
   trigger?: { ruleId: string; ruleName: string; eventType: string };
   agentName: string;
   agentId?: string;
@@ -117,7 +118,7 @@ export interface EventRuleDto {
     eventType: string;
     status: 'completed' | 'failed';
     createdAt: string;
-    createdTaskIds?: string[];
+    createdPlanIds?: string[];
     error?: string;
   }>;
 }
@@ -147,7 +148,7 @@ export interface ExecutionWindowDto {
   maxConcurrentRuns?: number;
   runCount: number;
   runs: { queued: number; running: number; completed: number; failed: number; cancelled: number };
-  taskCount: number;
+  planCount: number;
   findings: { total: number; pendingAgentReview: number; pendingHumanReview: number; approved: number; rejected: number };
   completionSummary?: ExecutionWindow['completionSummary'];
 }
@@ -160,6 +161,7 @@ export interface ActivityEventDto {
   label: string;
   links: {
     runId?: string;
+    planId?: string;
     taskId?: string;
     workflowId?: string;
     ruleId?: string;
@@ -240,16 +242,15 @@ function dataService() {
 
 function getRunDto(run: Run): RunDto {
   const detail = runDetail(run);
-  const task = detail.task;
+  const plan = detail.plan;
   const employee = detail.employee;
   const windowForRun = getStores().executionWindows.loadAll().find(w => w.runIds.includes(run.id));
   return {
     id: run.id,
-    taskId: run.taskId,
-    taskTitle: task?.title || run.taskId,
-    taskCode: task?.code || '',
-    taskSource: task?.source,
-    taskWorkflow: task?.workflow,
+    planId: run.planId,
+    planTitle: planTitleFor(plan) || run.planId,
+    planCode: plan?.id || run.planId,
+    planSource: plan?.source?.inputId,
     trigger: detail.trigger,
     agentName: employee?.name || run.agentId || '',
     agentId: run.agentId,
@@ -373,7 +374,7 @@ function eventRuleDtos(): EventRuleDto[] {
       eventType: t.eventType,
       status: t.status,
       createdAt: t.createdAt,
-      createdTaskIds: t.createdTaskIds,
+      createdPlanIds: t.createdPlanIds,
       error: t.error
     }))
   }));
@@ -409,7 +410,7 @@ function executionWindowDtos(): ExecutionWindowDto[] {
       maxConcurrentRuns: w.maxConcurrentRuns,
       runCount: r.runCount,
       runs: r.runs,
-      taskCount: r.taskCount,
+      planCount: r.planCount,
       findings: r.findings,
       completionSummary: r.completionSummary
     };
@@ -452,9 +453,11 @@ function pickStr(value: unknown): string | undefined {
 
 function eventLink(event: EventRecord): ActivityEventDto['links'] {
   const p = event.payload || {};
+  const firstPlan = Array.isArray(p.createdPlanIds) && typeof p.createdPlanIds[0] === 'string' ? p.createdPlanIds[0] : undefined;
   const firstTask = Array.isArray(p.createdTaskIds) && typeof p.createdTaskIds[0] === 'string' ? p.createdTaskIds[0] : undefined;
   return {
     runId: pickStr(p.runId),
+    planId: pickStr(p.planId) || firstPlan,
     taskId: pickStr(p.taskId) || firstTask,
     workflowId: pickStr(p.workflowId),
     ruleId: pickStr(p.ruleId),
@@ -622,24 +625,25 @@ async function handleCreateTask(message: any, panelRef: vscode.WebviewPanel): Pr
 
   try {
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'SprintDesk: creating task and queueing run…' },
+      { location: vscode.ProgressLocation.Notification, title: 'SprintDesk: creating plan and queueing run…' },
       async () => {
-        const task = await taskService.createTask(ws, {
-          title: String(title).trim(),
-          type: payload?.type || 'feature',
-          status: payload?.status || 'waiting',
-          priority: payload?.priority || 'medium',
-          backlog: payload?.backlog || undefined,
-          epic: payload?.epic || null
-        });
+        // v1.0 Slice D — the Control Center's "create task" flow materializes a
+        // runnable Plan (the queue's execution unit) and queues a Run against it.
+        const plan = materializePlan(
+          {
+            sourceInputId: 'manual:control-center',
+            title: String(title).trim(),
+            description: payload?.description,
+            category: legacyTaskKindToPlanCategory(payload?.type || 'feature'),
+            priority: payload?.priority || 'medium',
+            executionMode: 'immediate'
+          },
+          { workspaceRoot: ws }
+        );
 
-        if (agentId) {
-          taskService.updateTask(task.id, { agent: agentId });
-        }
-
-        const run = queueService.createRun(task.id, agentId);
+        const run = queueService.createRun(plan.id, agentId);
         outcome.runId = run.id;
-        outcome.taskId = task.id;
+        outcome.planId = plan.id;
         pushRun(panelRef, run);
         workforceTreeDataProvider.refresh();
 
@@ -951,7 +955,7 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         const existing = runId ? getStores().runs.getById(runId) : undefined;
         if (existing && ['failed', 'cancelled', 'completed'].includes(existing.status)) {
           try {
-            const created = queueService.createRun(existing.taskId, existing.agentId, { actor: 'control-center' });
+            const created = queueService.createRun(existing.planId, existing.agentId, { actor: 'control-center' });
             pushRun(newPanel, created);
             postResponse(newPanel, message?.requestId, { retried: true, run: getRunDto(created) });
           } catch (error) {
