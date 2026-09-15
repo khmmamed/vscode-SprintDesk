@@ -111,6 +111,20 @@ export function updateEmployee(
       from: existing.status || 'idle',
       to: updates.status
     });
+    // v1.0 Slice E — agent lifecycle triggers mirror the generic status event.
+    if (updates.status === 'idle') {
+      emitEvent('agent.idle', 'workforce', {
+        employeeId,
+        name: existing.name,
+        from: existing.status || 'idle'
+      });
+    } else if (updates.status === 'offline') {
+      emitEvent('agent.offline', 'workforce', {
+        employeeId,
+        name: existing.name,
+        from: existing.status || 'idle'
+      });
+    }
   }
   return stores.people.getById(employeeId);
 }

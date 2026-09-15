@@ -331,6 +331,25 @@ export function finishRun(runId: string, outcome: RunOutcome): Run | undefined {
     findingsService.materializeFindings(run.id);
   }
 
+  // v1.0 Slice E — execution-outcome events (completion/failure) mirror the
+  // run.finished signal for consumers that do not want to parse run status.
+  if (completed) {
+    emitEvent('execution.completed', 'queue', {
+      runId: run.id,
+      planId: run.planId,
+      planCode: plan?.id,
+      agentId: run.agentId
+    });
+  } else {
+    emitEvent('plan.failed', 'queue', {
+      runId: run.id,
+      planId: run.planId,
+      planCode: plan?.id,
+      agentId: run.agentId,
+      ...(outcome.classification ? { classification: outcome.classification } : {})
+    });
+  }
+
   return getStores().runs.getById(runId);
 }
 
