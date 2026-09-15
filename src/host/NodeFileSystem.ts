@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { IFileSystem } from './IFileSystem';
+import { IFileSystem, FileStat } from './IFileSystem';
 
 export class NodeFileSystem implements IFileSystem {
   readFile(filePath: string): string {
@@ -24,5 +24,10 @@ export class NodeFileSystem implements IFileSystem {
 
   list(dirPath: string): string[] {
     return fs.readdirSync(dirPath);
+  }
+
+  stat(filePath: string): FileStat {
+    const s = fs.statSync(filePath);
+    return { mtimeMs: s.mtimeMs, size: s.size };
   }
 }

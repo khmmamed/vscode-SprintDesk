@@ -318,6 +318,8 @@ export interface QueueSettings {
   maxRunRetries: number;
   retryBackoffMs: number;
   maxProposalsPerPass?: number;
+  // v1.0 Slice B — Orchestrator pass bound (default 5)
+  maxPlansPerPass?: number;
   approvalGates: ApprovalGates;
 }
 
@@ -332,6 +334,7 @@ export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
   maxRunRetries: 1,
   retryBackoffMs: 30000,
   maxProposalsPerPass: 5,
+  maxPlansPerPass: 5,
   approvalGates: { ...DEFAULT_APPROVAL_GATES }
 };
 
@@ -928,6 +931,8 @@ export interface InputRecord {
   source: InputSource;
   ingestedAt: string;
   plannedFrom?: string[];
+  // v1.0 Slice B — content fingerprint used for discovery dedup (name + hash)
+  contentHash?: string;
 }
 
 export interface InputsData {
