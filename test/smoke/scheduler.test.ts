@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
-import { makeWorkspace, TestWorkspace } from '../helpers/workspace';
+import { makeWorkspace, makeEmployee, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
 import { getDataService } from '../../src/data/DataService';
-import { ScheduleRecord } from '../../src/data/types';
+import { Employee, ScheduleRecord } from '../../src/data/types';
 import { CronParseError, matchesCron, parseCron } from '../../src/services/workforce/scheduler/cronParser';
 import {
   occurrenceKeyForSchedule,
@@ -11,6 +11,8 @@ import {
   evaluateIntervalSchedule
 } from '../../src/services/workforce/scheduler/scheduler';
 import { planTitleFor } from '../../src/services/workforce/plan/planService';
+import { createPlan } from '../../src/services/workforce/orchestrator';
+import { installDispatcher } from '../../src/services/workforce/plan/dispatcher';
 import { setApprovalGate } from '../../src/services/workforce/gates';
 import { startRun } from '../../src/services/workforce/queueService';
 
@@ -116,12 +118,11 @@ describe('C6 deterministic scheduler', () => {
       enabled: true,
       kind: 'cron',
       autonomyLevel: 2,
-      taskTemplate: {
+      planTemplate: {
         name: `Task ${id}`,
         title: `Scheduled task ${id}`,
-        type: 'chore',
-        priority: 'low',
-        backlog: 'features'
+        category: 'maintenance',
+        priority: 'low'
       },
       cron: '30 9 * * *',
       runCount: 0,
@@ -133,10 +134,36 @@ describe('C6 deterministic scheduler', () => {
     return schedule;
   }
 
+  // maintenance category → chore task-type → DEFAULT_TYPE_SKILLS['chore'] = ['planning']
+  function seedPlanningAgent(name = 'Pat'): Employee {
+    const employee = makeEmployee({
+      role: 'agent',
+      name,
+      status: 'idle',
+      skills: [{ name: 'planning', level: 3 }],
+      capabilities: ['planning']
+    });
+    getStores(ws.root).people.add(employee);
+    return employee;
+  }
+
+  function seedPendingPlan(title: string) {
+    return createPlan(
+      'IN-000001',
+      {
+        title,
+        objective: `Ship ${title}`,
+        implementation: `Implement ${title}`,
+        classification: { category: 'maintenance', priority: 'low' }
+      },
+      { workspaceRoot: ws.root }
+    );
+  }
+
   const at = (minute: number, hour: number): Date => new Date(2026, 0, 15, hour, minute, 0, 0);
 
-  it('creates a plan and a queued run for a matching cron schedule', async () => {
-    makeSchedule('cron-exact', { cron: '30 9 * * *', taskTemplate: { name: 'Nightly', title: 'Nightly check', type: 'chore', priority: 'low', backlog: 'features' } });
+  it('materializes a pending plan for a matching cron schedule without creating runs', async () => {
+    makeSchedule('cron-exact', { cron: '30 9 * * *', planTemplate: { name: 'Nightly', title: 'Nightly check', category: 'maintenance', priority: 'low' } });
 
     const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
 
@@ -146,7 +173,6 @@ describe('C6 deterministic scheduler', () => {
     assert.strictEqual(fired.scheduleId, 'cron-exact');
     assert.ok(fired.planId, 'plan should be created');
     assert.match(fired.planCode || '', /^PLAN-\d{6}$/);
-    assert.ok(fired.runId);
 
     const plan = getStores(ws.root).plans.getById(fired.planId!);
     assert.ok(plan, 'created plan should be readable');
@@ -154,10 +180,11 @@ describe('C6 deterministic scheduler', () => {
     assert.strictEqual(plan!.classification.original.category, 'maintenance');
     assert.strictEqual(plan!.classification.original.priority, 'low');
     assert.strictEqual(plan!.source.inputId, 'synthetic:schedule:cron-exact');
+    assert.strictEqual(plan!.organization.status, 'pending');
+    assert.strictEqual(plan!.execution.status, 'unassigned');
 
-    const run = getStores(ws.root).runs.getById(fired.runId!);
-    assert.strictEqual(run!.status, 'queued');
-    assert.strictEqual(run!.attempts, 1);
+    // Boundary: the scheduler never creates runs — only the Organizer/Dispatcher path does.
+    assert.strictEqual(getStores(ws.root).runs.count(), 0);
 
     const stored = getStores(ws.root).schedules.getById('cron-exact');
     assert.strictEqual(stored!.runCount, 1);
@@ -325,7 +352,7 @@ describe('C6 deterministic scheduler', () => {
     assert.strictEqual(aut1.runCount, 0);
   });
 
-  it('executes at autonomy levels 2 and 3', async () => {
+  it('materializes plans at autonomy levels 2 and 3 (never runs)', async () => {
     makeSchedule('aut-2', { autonomyLevel: 2, cron: '* * * * *' });
     makeSchedule('aut-3', { autonomyLevel: 3, cron: '* * * * *' });
 
@@ -334,7 +361,7 @@ describe('C6 deterministic scheduler', () => {
     assert.strictEqual(result.fired.filter(f => f.mode === 'execute').length, 2);
     assert.deepStrictEqual(result.fired.map(f => f.scheduleId).sort(), ['aut-2', 'aut-3']);
     assert.strictEqual(getStores(ws.root).plans.count(), 2);
-    assert.strictEqual(getStores(ws.root).runs.count(), 2);
+    assert.strictEqual(getStores(ws.root).runs.count(), 0);
   });
 
   it('evaluates schedules in deterministic (id-sorted) order', async () => {
@@ -350,35 +377,87 @@ describe('C6 deterministic scheduler', () => {
     );
   });
 
-  it('never directly executes a run: runs stay queued and only scheduler/queue events are emitted', async () => {
+  it('never directly creates or starts runs: only schedule events are emitted', async () => {
     makeSchedule('never-exec', { cron: '30 9 * * *' });
 
     const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
 
-    const run = getStores(ws.root).runs.getById(result.fired[0].runId!)!;
-    assert.strictEqual(run.status, 'queued');
-    assert.strictEqual(run.startedAt, undefined);
-    assert.strictEqual(run.finishedAt, undefined);
+    assert.ok(result.fired[0].planId);
+    assert.strictEqual(getStores(ws.root).runs.count(), 0);
 
     const eventTypes = getStores(ws.root).events.loadAll().map(e => e.type);
     assert.ok(eventTypes.includes('schedule.fired'));
-    assert.ok(eventTypes.includes('run.queued'));
+    assert.ok(!eventTypes.includes('run.queued'), 'scheduler must not queue runs');
     assert.ok(!eventTypes.includes('run.started'), 'scheduler must not start runs');
   });
 
-  it('keeps approval-sensitive work gated: a manual run-execution gate holds scheduler-created runs', async () => {
-    makeSchedule('approval-gate', { cron: '30 9 * * *' });
+  it('organize schedules fire a capped Organizer pass and record the occurrence', async () => {
+    seedPlanningAgent('Gamal');
+    const p1 = seedPendingPlan('one');
+    seedPendingPlan('two');
+    seedPendingPlan('three');
+    makeSchedule('org-cap', { cron: '30 9 * * *', action: 'organize' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
-    const runId = result.fired[0].runId!;
-    assert.strictEqual(getStores(ws.root).runs.getById(runId)!.status, 'queued');
+    const capped = await runSchedulerPass({
+      stores: getStores(ws.root),
+      dataService: getDataService(ws.root),
+      now: at(30, 9),
+      organizerCap: 1
+    });
 
-    setApprovalGate('run-execution', 'manual');
-    const started = startRun(runId);
-    assert.strictEqual(started, undefined, 'manual gate should block starting the run');
+    assert.strictEqual(capped.fired.length, 1);
+    assert.deepStrictEqual(capped.fired[0].organizer, { examined: 1, changed: 1, planIds: [p1.id] });
 
-    const pending = getStores(ws.root).approvals.loadAll().filter(a => a.type === 'run-execution' && a.status === 'pending');
-    assert.ok(pending.length >= 1, 'a pending run-execution approval should be requested');
-    assert.strictEqual(getStores(ws.root).runs.getById(runId)!.status, 'queued');
+    const organized = getStores(ws.root).plans
+      .loadAll()
+      .filter(p => p.organization.status === 'organized')
+      .map(p => p.id);
+    assert.deepStrictEqual(organized, [p1.id], 'cap 1 must leave the remaining plans pending');
+
+    const stored = getStores(ws.root).schedules.getById('org-cap')!;
+    assert.strictEqual(stored.runCount, 1);
+    assert.ok(stored.lastRunAt);
+  });
+
+  it('an organize pass that changes nothing fires nothing but still records the occurrence', async () => {
+    seedPlanningAgent('Gamal');
+    makeSchedule('org-nochange', { kind: 'interval', intervalMs: 60_000, action: 'organize' });
+
+    const first = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 9) });
+
+    assert.strictEqual(first.fired.length, 0);
+    assert.strictEqual(getStores(ws.root).events.findByType('schedule.fired').length, 0);
+    const stored = getStores(ws.root).schedules.getById('org-nochange')!;
+    assert.ok(stored.lastRunAt, 'the occurrence is recorded even when nothing fires');
+    assert.strictEqual(stored.runCount, 0, 'a no-change pass is not counted as a fire');
+  });
+
+  it('keeps approval-sensitive work gated through the plan → organize → dispatcher pipeline', async () => {
+    seedPlanningAgent('Gamal');
+    const dispose = installDispatcher();
+    try {
+      makeSchedule('pipe-a-plan', {
+        cron: '30 9 * * *',
+        planTemplate: { name: 'Maintenance', title: 'Maintenance sweep', category: 'maintenance', priority: 'low' }
+      });
+      makeSchedule('pipe-b-organize', { cron: '30 9 * * *', action: 'organize' });
+
+      const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+      assert.strictEqual(result.fired.length, 2);
+
+      const runs = getStores(ws.root).runs.loadAll();
+      assert.strictEqual(runs.length, 1, 'the organizer decision must enqueue exactly one run');
+      assert.strictEqual(runs[0].status, 'queued');
+
+      setApprovalGate('run-execution', 'manual');
+      const started = startRun(runs[0].id);
+      assert.strictEqual(started, undefined, 'manual gate should block starting the run');
+
+      const pending = getStores(ws.root).approvals.loadAll().filter(a => a.type === 'run-execution' && a.status === 'pending');
+      assert.ok(pending.length >= 1, 'a pending run-execution approval should be requested');
+      assert.strictEqual(getStores(ws.root).runs.getById(runs[0].id)!.status, 'queued');
+    } finally {
+      dispose();
+    }
   });
 });

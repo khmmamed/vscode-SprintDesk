@@ -1,8 +1,9 @@
 import { getDataService, DataService } from '../../../data/DataService';
 import { getStores, Stores } from '../../../data/stores';
 import { emitEvent } from '../events';
-import { AutonomyLevel, Plan, PlanPriority, Run, ScheduleRecord } from '../../../data/types';
-import { legacyTaskKindToPlanCategory, materializePlan } from '../plan/planService';
+import { AutonomyLevel, Plan, ScheduleRecord } from '../../../data/types';
+import { materializePlan } from '../plan/planService';
+import { runOrganizerPass } from '../plan/organizer';
 import { CronExpression, CronParseError, matchesCron, parseCron } from './cronParser';
 import { runClassificationPass, ClassificationPassResult } from '../classification/classificationService';
 
@@ -31,8 +32,15 @@ export interface ScheduleFiredResult {
   // v1.0 Slice D — schedules materialize Plans (planId/planCode), not Tasks.
   planId?: string;
   planCode?: string;
-  runId?: string;
+  // v1.0 Slice F — organize schedules fire an Organizer pass instead of a run.
+  organizer?: ScheduleOrganizeFire;
   classification?: ClassificationPassResult;
+}
+
+export interface ScheduleOrganizeFire {
+  examined: number;
+  changed: number;
+  planIds: string[];
 }
 
 export interface ScheduleSkippedResult {
@@ -50,6 +58,8 @@ export interface SchedulerPassOptions {
   dataService?: DataService;
   stores?: Stores;
   now?: Date;
+  // Upper bound organizer passes apply per fire (defaults to queue settings maxPlansPerPass).
+  organizerCap?: number;
 }
 
 interface ScheduleEvaluation {
@@ -162,34 +172,20 @@ export function evaluateSchedule(schedule: ScheduleRecord, now: Date): ScheduleE
   return { fire: true, occurrence: result.occurrence!, schedule };
 }
 
-function createQueuedRun(stores: Stores, planId: string, now: Date): Run {
-  const run: Run = {
-    id: `run_sched_${planId}_${now.getTime()}`,
-    planId,
-    status: 'queued',
-    attempts: 1,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString()
-  };
-  stores.runs.add(run);
-  emitEvent('run.queued', 'scheduler', { runId: run.id, planId });
-  return run;
-}
-
-type ScheduleTaskType = 'feature' | 'bug' | 'chore' | 'doc' | 'test';
-
-// Materializes a ScheduleTaskTemplate into a runnable Plan (the queue's execution unit),
-// its source stamped `synthetic:schedule:<id>` so provenance stays intact.
-function materializeSchedulePlan(stores: Stores, schedule: ScheduleRecord, now: Date): Plan | undefined {
-  const template = schedule.taskTemplate;
-  if (!template) {return undefined;}
+// v1.0 boundary: the scheduler never creates work itself. Plan schedules materialize
+// a pending Plan; only the Organizer → Dispatcher → Queue path enqueues Runs.
+function materializeSchedulePlan(stores: Stores, schedule: ScheduleRecord): Plan | undefined {
+  const template = schedule.planTemplate;
+  if (!template) {
+    return undefined;
+  }
   return materializePlan(
     {
       sourceInputId: `synthetic:schedule:${schedule.id}`,
-      title: template.title || template.name,
-      description: template.name,
-      category: legacyTaskKindToPlanCategory(template.type as ScheduleTaskType),
-      priority: template.priority as PlanPriority
+      title: template.title || template.objective || template.name,
+      description: template.implementation || template.title || template.name,
+      category: template.category,
+      priority: template.priority
     },
     { stores }
   );
@@ -259,12 +255,18 @@ export async function runSchedulerPass(options: SchedulerPassOptions = {}): Prom
     }
 
     const occurrenceKey = occurrenceKeyForSchedule(schedule.id, result.occurrence!);
-    if (occurrenceKey === schedule.lastOccurrenceKey) {
+    // Occurrence dedup matters for cron (catch-up re-evaluates the same minute).
+    // Interval schedules gate on lastRunAt, and their occurrence is `now`, so a
+    // minute-truncated key would wrongly suppress sub-minute (and same-minute)
+    // intervals — skip the dedup guard for them.
+    if (schedule.kind === 'cron' && occurrenceKey === schedule.lastOccurrenceKey) {
       skipped.push({ scheduleId: schedule.id, reason: 'duplicate-occurrence' });
       continue;
     }
 
-    if ((schedule.action ?? 'task') === 'classify') {
+    const action = schedule.action ?? 'plan';
+
+    if (action === 'classify') {
       // Fires the existing classification pipeline (deterministic → LLM), which
       // itself honors maxProposalsPerPass, the task-proposal gate, dedup, and cap.
       const classification = await runClassificationPass();
@@ -285,12 +287,44 @@ export async function runSchedulerPass(options: SchedulerPassOptions = {}): Prom
       continue;
     }
 
-    const plan = materializeSchedulePlan(stores, schedule, now);
+    if (action === 'organize') {
+      // Reconcile driver: fire a capped Organizer pass to organize/assign all ready
+      // pending plans. A no-change pass fires nothing; the occurrence is still recorded.
+      const organizer = runOrganizerPass({
+        cap: options.organizerCap ?? stores.queue.getSettings().maxPlansPerPass ?? 5
+      });
+      const changed = organizer.changed > 0;
+      updateScheduleState(stores, schedule, occurrenceKey, now, changed);
+      if (!changed) {
+        continue;
+      }
+      fired.push({
+        scheduleId: schedule.id,
+        name: schedule.name,
+        occurrenceKey,
+        mode: 'execute',
+        autonomyLevel: schedule.autonomyLevel,
+        organizer: {
+          examined: organizer.examined,
+          changed: organizer.changed,
+          planIds: organizer.changes.map(c => c.planId)
+        }
+      });
+      emitEvent('schedule.fired', 'scheduler', {
+        scheduleId: schedule.id,
+        occurrenceKey,
+        organizer: { examined: organizer.examined, changed: organizer.changed }
+      });
+      continue;
+    }
+
+    // 'plan' (default): materialize a pending Plan. Execution happens later through
+    // the Organizer → Dispatcher → Queue path, never directly from the scheduler.
+    const plan = materializeSchedulePlan(stores, schedule);
     if (!plan) {
       skipped.push({ scheduleId: schedule.id, reason: 'invalid-interval' });
       continue;
     }
-    const run = createQueuedRun(stores, plan.id, now);
     updateScheduleState(stores, schedule, occurrenceKey, now, true);
 
     fired.push({
@@ -300,14 +334,12 @@ export async function runSchedulerPass(options: SchedulerPassOptions = {}): Prom
       mode: 'execute',
       autonomyLevel: schedule.autonomyLevel,
       planId: plan.id,
-      planCode: plan.id,
-      runId: run.id
+      planCode: plan.id
     });
     emitEvent('schedule.fired', 'scheduler', {
       scheduleId: schedule.id,
       occurrenceKey,
-      planId: plan.id,
-      runId: run.id
+      planId: plan.id
     });
   }
 

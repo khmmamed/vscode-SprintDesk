@@ -425,6 +425,8 @@ export interface OrganizeOptions {
   workspaceRoot?: string;
   classifierId?: string;
   planIds?: string[];
+  // Upper bound on the number of non-terminal plans examined per pass.
+  cap?: number;
 }
 
 export interface OrganizeResult {
@@ -439,9 +441,11 @@ export function runOrganizerPass(opts: OrganizeOptions = {}): OrganizeResult {
   const classifierId = opts.classifierId || ORGANIZER_CLASSIFIER_ID;
   const now = new Date().toISOString();
   const selector = opts.planIds ? new Set(opts.planIds) : undefined;
+  const cap = opts.cap;
   const plans = stores.plans.loadAll().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const changes: PlanPassChange[] = [];
   const fileSystem = getFileSystem();
+  let examinedCount = 0;
 
   for (const plan of plans) {
     if (isTerminal(plan)) {
@@ -450,6 +454,10 @@ export function runOrganizerPass(opts: OrganizeOptions = {}): OrganizeResult {
     if (selector && !selector.has(plan.id)) {
       continue;
     }
+    if (cap !== undefined && examinedCount >= cap) {
+      break;
+    }
+    examinedCount += 1;
     const file: string = path.join(root, '.SprintDesk', resolvePlanFile(plan));
     const semantics: PlanSemantics = fileSystem.exists(file)
       ? analyzeContent(readPlanMd(file).sections)
@@ -469,7 +477,7 @@ export function runOrganizerPass(opts: OrganizeOptions = {}): OrganizeResult {
   }
 
   const passEvents = stores.events.loadAll().filter(e => e.type === 'organizer.pass.completed').length;
-  const examined = plans.filter(p => !isTerminal(p) && (!selector || selector.has(p.id))).length;
+  const examined = examinedCount;
   emitEvent('organizer.pass.completed', EVENT_SOURCE, {
     pass: passEvents + 1,
     examined,

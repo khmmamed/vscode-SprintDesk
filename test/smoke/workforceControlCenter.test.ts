@@ -19,6 +19,8 @@ import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/se
 import { WorkerRequest } from '../../src/services/workforce/worker/worker';
 import { setApprovalGate, requestApproval } from '../../src/services/workforce/gates';
 import { runSchedulerPass } from '../../src/services/workforce/scheduler/scheduler';
+import { installDispatcher } from '../../src/services/workforce/plan/dispatcher';
+import { runOrganizerPass } from '../../src/services/workforce/plan/organizer';
 import { planTitleFor, materializePlan } from '../../src/services/workforce/plan/planService';
 import { ChatMessage, LLMProvider } from '../../src/services/workforce/llm/types';
 
@@ -1434,7 +1436,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
   });
 
   it('routes a time-based schedule into a queued run (autonomy 2 = execute)', async () => {
-    seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
+    seedAgent({ name: 'Alpha', skills: [{ name: 'planning', level: 3 }], capabilities: ['planning'], agentConfig: makeAgentConfig() });
     const now = new Date(2026, 0, 15, 9, 0, 0);
     const schedule: ScheduleRecord = {
       id: 'sched-slice8',
@@ -1442,7 +1444,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
       enabled: true,
       kind: 'interval',
       autonomyLevel: 2,
-      taskTemplate: { name: 'Brief', title: 'Morning brief check', type: 'chore', priority: 'low', backlog: 'features' },
+      planTemplate: { name: 'Brief', title: 'Morning brief check', category: 'maintenance', priority: 'low' },
       intervalMs: 60_000,
       runCount: 0,
       createdAt: new Date().toISOString(),
@@ -1454,11 +1456,21 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
     assert.strictEqual(result.fired.length, 1);
     assert.strictEqual(result.fired[0].mode, 'execute');
     assert.strictEqual(result.fired[0].scheduleId, 'sched-slice8');
+    assert.ok(result.fired[0].planId, 'the schedule materializes a pending Plan');
+    assert.strictEqual(getStores().runs.loadAll().length, 0, 'the scheduler never creates runs directly');
 
-    const run = getStores().runs.getById(result.fired[0].runId!)!;
-    assert.strictEqual(run.status, 'queued');
+    // v1.0 boundary: the Organizer → Dispatcher path is what enqueues the run.
+    const dispose = installDispatcher();
+    const organized = runOrganizerPass({ workspaceRoot: ws.root });
+    assert.ok(organized.changed > 0);
+    dispose();
+
     const plan = getStores().plans.getById(result.fired[0].planId!)!;
     assert.strictEqual(plan.source.inputId, 'synthetic:schedule:sched-slice8');
+    assert.strictEqual(plan.execution.status, 'assigned');
+    const run = getStores().runs.loadAll()[0];
+    assert.strictEqual(run.status, 'queued');
+    assert.strictEqual(run.planId, plan.id);
     assert.strictEqual(getStores().schedules.getById('sched-slice8')?.runCount, 1);
     assert.strictEqual(getStores().events.findByType('schedule.fired').length, 1);
 
@@ -1984,7 +1996,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     ws.cleanup();
   });
 
-  function seedSchedule(action: 'task' | 'classify', overrides: Partial<ScheduleRecord> = {}) {
+  function seedSchedule(action: 'plan' | 'classify', overrides: Partial<ScheduleRecord> = {}) {
     const schedule: ScheduleRecord = {
       id: 'sched-classify-f',
       name: 'Daily Classification',

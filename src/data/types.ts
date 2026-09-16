@@ -568,15 +568,15 @@ export type AutonomyLevel = 0 | 1 | 2 | 3;
 export type ScheduleKind = 'cron' | 'interval';
 
 // v0.12 scheduled classification: a schedule can fire a classification pass instead of a task+run (additive)
-export type ScheduleAction = 'task' | 'classify';
+export type ScheduleAction = 'plan' | 'classify' | 'organize';
 
-export interface ScheduleTaskTemplate {
+export interface SchedulePlanTemplate {
   name: string;
   title?: string;
-  type: Task['type'];
-  priority: Task['priority'];
-  backlog?: string;
-  epicName?: string;
+  objective?: string;
+  implementation?: string;
+  category: PlanCategory;
+  priority: PlanPriority;
 }
 
 export interface ScheduleRecord {
@@ -585,10 +585,11 @@ export interface ScheduleRecord {
   enabled: boolean;
   kind: ScheduleKind;
   autonomyLevel: AutonomyLevel;
-  // task schedules (default) materialize taskTemplate into a task + queued run;
-  // classify schedules replay the deterministic → LLM classification pass instead.
+  // plan schedules (default) materialize planTemplate into a pending Plan; classify
+  // schedules replay the deterministic → LLM classification pass instead; organize
+  // schedules fire an Organizer pass to assign and dispatch readiness work.
   action?: ScheduleAction;
-  taskTemplate?: ScheduleTaskTemplate;
+  planTemplate?: SchedulePlanTemplate;
 
   // cron schedules (kind === 'cron') - 5-field deterministic expression
   cron?: string;

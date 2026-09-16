@@ -54,6 +54,8 @@ import { addTaskToBacklogInteractive, addExistingTasksToBacklog, createBacklogIn
 import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
 import { registerWorkforceControlCenter } from './commands/workforce/openWorkforceControlCenter';
 import * as capabilityService from './services/workforce/capabilityService';
+import { installDispatcher } from './services/workforce/plan/dispatcher';
+import { startScheduler } from './services/workforce/scheduler/organizerEngine';
 // Tasks - import and create wrapper for API compatibility
 import { createTask as createTaskService } from "./services/taskService";
 // Host boundary
@@ -248,6 +250,15 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
   // Workforce commands
   registerWorkforceCommands(context, workforceProvider);
   registerWorkforceControlCenter(context);
+
+  // v1.0 Slice F — organize engine wiring. The Dispatcher translates Organizer
+  // decisions into queue work; the scheduler driver honors queueSettings.enabled /
+  // pollIntervalMs and installs event-path organizer triggers. Both are inert until
+  // the user opts in (queueSettings.enabled defaults to false).
+  const disposeDispatcher = installDispatcher();
+  const schedulerDriver = startScheduler();
+  context.subscriptions.push({ dispose: disposeDispatcher });
+  context.subscriptions.push({ dispose: () => schedulerDriver.stop() });
 
 // Settings commands
   registerOpenSettingsCommand(context);

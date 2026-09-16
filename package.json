@@ -38,7 +38,8 @@
     "test:headless": "npm run test",
     "mcp": "rimraf out && tsc -p . --outDir out --noEmit false && node out/mcp/stdioServer.js",
     "standup": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/standup.js",
-    "worker": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/worker.js"
+    "worker": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/worker.js",
+    "scheduler": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/scheduler.js"
   },
   "contributes": {
     "keybindings": [
