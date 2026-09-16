@@ -15,8 +15,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:sprintdesk.viewProjects"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "scripts": {
@@ -42,110 +41,7 @@
     "scheduler": "rimraf out && tsc -p . --outDir out --noEmit false && node out/cli/scheduler.js"
   },
   "contributes": {
-    "keybindings": [
-      {
-        "command": "sprintdesk.addTask",
-        "key": "ctrl+shift+t",
-        "mac": "cmd+shift+t",
-        "when": "workspaceHasSprintDesk"
-      },
-      {
-        "command": "sprintdesk.addQuickly",
-        "key": "ctrl+shift+q",
-        "mac": "cmd+shift+q",
-        "when": "workspaceHasSprintDesk"
-      }
-    ],
     "commands": [
-      {
-        "command": "sprintdesk.addTask",
-        "title": "SprintDesk: Add Task",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.viewTasks",
-        "title": "SprintDesk: View Tasks"
-      },
-      {
-        "command": "sprintdesk.viewTaskPreview",
-        "title": "SprintDesk: Preview Task",
-        "icon": "$(eye)"
-      },
-      {
-        "command": "sprintdesk.editTaskRaw",
-        "title": "SprintDesk: Edit Task (Raw)",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "sprintdesk.addMultipleTasks",
-        "title": "SprintDesk: Add Multiple Tasks"
-      },
-      {
-        "command": "sprintdesk.addQuickly",
-        "title": "SprintDesk: Add Quickly"
-      },
-      {
-        "command": "vscode-react-webview-starter.openWebview",
-        "title": "React Webview: Open webview"
-      },
-      {
-        "command": "sprintdesk.viewBacklogs",
-        "title": "SprintDesk: View Backlogs"
-      },
-      {
-        "command": "sprintdesk.viewEpics",
-        "title": "SprintDesk: View Epics"
-      },
-      {
-        "command": "sprintdesk.startFeatureFromTask",
-        "title": "SprintDesk: Start Feature from Task",
-        "icon": "$(git-branch)"
-      },
-      {
-        "command": "sprintdesk.markTaskForReview",
-        "title": "SprintDesk: Mark Task for Review",
-        "icon": "$(eye)"
-      },
-{
-      "command": "sprintdesk.completeTask",
-      "title": "SprintDesk: Complete Task",
-      "icon": "$(check)"
-    },
-    {
-      "command": "sprintdesk.setTaskStatus",
-      "title": "SprintDesk: Set Task Status",
-      "icon": "$(list-selection)"
-    },
-      {
-        "command": "sprintdesk.openSprintFile",
-        "title": "SprintDesk: Open Sprint File",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "sprintdesk.showSprintCalendar",
-        "title": "SprintDesk: Show Sprint Calendar",
-        "icon": "$(calendar)"
-      },
-      {
-        "command": "sprintdesk.addSprint",
-        "title": "SprintDesk: Add Sprint",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.addEpic",
-        "title": "SprintDesk: Add Epic",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.addBacklog",
-        "title": "SprintDesk: Add Backlog",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.addTaskToBacklog",
-        "title": "SprintDesk: Add Task to Backlog",
-        "icon": "$(add)"
-      },
       {
         "command": "sprintdesk.refresh",
         "title": "SprintDesk: Refresh",
@@ -155,47 +51,6 @@
         "command": "sprintdesk.startMcp",
         "title": "SprintDesk: Start MCP Server",
         "icon": "$(server)"
-      },
-      {
-        "command": "sprintdesk.addExistingTasksToSprint",
-        "title": "SprintDesk: Add Tasks to Sprint",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.addExistingTasksToBacklog",
-        "title": "SprintDesk: Add Tasks to Backlog",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.viewProjects",
-        "title": "SprintDesk: Projects",
-        "icon": "$(folder)"
-      },
-      {
-        "command": "sprintdesk.createTaskFromRepo",
-        "title": "SprintDesk: Create Task from Repository"
-      },
-      {
-        "command": "sprintdesk.createEpicFromRepo",
-        "title": "SprintDesk: Create Epic from Repository"
-      },
-      {
-        "command": "sprintdesk.createSprintFromRepo",
-        "title": "SprintDesk: Create Sprint from Repository"
-      },
-      {
-        "command": "sprintdesk.createBacklogFromRepo",
-        "title": "SprintDesk: Create Backlog from Repository"
-      },
-      {
-        "command": "sprintdesk.viewHistory",
-        "title": "SprintDesk: View History",
-        "icon": "$(history)"
-      },
-      {
-        "command": "sprintdesk.getItemHistory",
-        "title": "SprintDesk: Get Item History",
-        "icon": "$(clock)"
       },
       {
         "command": "sprintdesk.viewWorkforce",
@@ -238,11 +93,6 @@
         "icon": "$(sync)"
       },
       {
-        "command": "sprintdesk.recommendAssignee",
-        "title": "SprintDesk: Recommend Assignee",
-        "icon": "$(sparkle)"
-      },
-      {
         "command": "sprintdesk.processQueue",
         "title": "SprintDesk: Process Queue",
         "icon": "$(play)"
@@ -281,34 +131,7 @@
       ]
     },
     "menus": {
-      "commandPalette": [
-        {
-          "command": "sprintdesk.addTask",
-          "title": "SprintDesk: Create New Task",
-          "when": "workspaceHasSprintDesk"
-        }
-      ],
       "view/title": [
-        {
-          "command": "sprintdesk.addSprint",
-          "when": "view == sprintdesk-main",
-          "group": "navigation"
-        },
-        {
-          "command": "sprintdesk.addEpic",
-          "when": "view == sprintdesk-main",
-          "group": "navigation"
-        },
-        {
-          "command": "sprintdesk.addBacklog",
-          "when": "view == sprintdesk-main",
-          "group": "navigation"
-        },
-        {
-          "command": "sprintdesk.addTask",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@1"
-        },
         {
           "command": "sprintdesk.refresh",
           "when": "view == sprintdesk-main",
@@ -338,87 +161,10 @@
           "command": "sprintdesk.openWorkforce",
           "when": "view == sprintdesk-main",
           "group": "navigation@5"
-        },
-        {
-          "command": "sprintdesk.getItemHistory",
-          "when": "view == sprintdesk-main",
-          "group": "navigation"
-        }
-      ],
-      "editor/context": [
-        {
-          "command": "sprintdesk.addQuickly",
-          "group": "sprintdesk@1",
-          "when": "workspaceHasSprintDesk"
-        },
-        {
-          "command": "sprintdesk.addTask",
-          "group": "sprintdesk@2",
-          "when": "workspaceHasSprintDesk"
         }
       ],
       "view/item/context": [
         {
-          "command": "sprintdesk.startFeatureFromTask",
-          "when": "view == sprintdesk-main && viewItem == sprintTask",
-          "group": "inline"
-        },
-        {
-          "command": "sprintdesk.openSprintFile",
-          "when": "view == sprintdesk-main && viewItem == sprint",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.showSprintCalendar",
-          "when": "view == sprintdesk-main && viewItem == sprint",
-          "group": "inline@2"
-        },
-        {
-          "command": "sprintdesk.addExistingTasksToSprint",
-          "when": "view == sprintdesk-main && viewItem == sprint",
-          "group": "inline@3"
-        },
-        {
-          "command": "sprintdesk.addExistingTasksToBacklog",
-          "when": "view == sprintdesk-main && viewItem == backlog",
-          "group": "inline"
-        },
-        {
-          "command": "sprintdesk.viewTaskPreview",
-          "when": "view == sprintdesk-main && viewItem == task",
-          "group": "inline"
-        },
-        {
-          "command": "sprintdesk.editTaskRaw",
-          "when": "view == sprintdesk-main && viewItem == task",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.recommendAssignee",
-          "when": "view == sprintdesk-main && viewItem == task",
-          "group": "inline@2"
-        },
-        {
-          "command": "sprintdesk.createTaskFromRepo",
-          "when": "view == sprintdesk-main && viewItem == repository",
-          "group": "create@1"
-        },
-        {
-          "command": "sprintdesk.createEpicFromRepo",
-          "when": "view == sprintdesk-main && viewItem == repository",
-          "group": "create@2"
-        },
-        {
-          "command": "sprintdesk.createSprintFromRepo",
-          "when": "view == sprintdesk-main && viewItem == repository",
-          "group": "create@3"
-        },
-        {
-          "command": "sprintdesk.createBacklogFromRepo",
-          "when": "view == sprintdesk-main && viewItem == repository",
-          "group": "create@4"
-        },
-{
           "command": "sprintdesk.assignToTeam",
           "when": "view == sprintdesk-main && viewItem =~ /^employee/",
           "group": "inline@1"

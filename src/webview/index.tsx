@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot } from 'react-dom/client';
-import { App } from "./App";
+import WorkforceControlCenter from "./workforce/WorkforceControlCenter";
 
 declare const acquireVsCodeApi: <T = unknown>() => {
   getState: () => T;
@@ -11,7 +11,7 @@ declare const acquireVsCodeApi: <T = unknown>() => {
 const elm = document.querySelector("#root");
 if (elm) {
   const root = createRoot(elm);
-  root.render(<App />);
+  root.render(<WorkforceControlCenter />);
 }
 
 // Webpack HMR

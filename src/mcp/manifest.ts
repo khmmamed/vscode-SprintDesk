@@ -1,12 +1,6 @@
 import { SERVER_INFO } from './core';
 import {
-  TASK_TOOLS,
-  EPIC_TOOLS,
-  SPRINT_TOOLS,
-  BACKLOG_TOOLS,
-  MOVE_TOOLS,
   AGENT_TOOLS,
-  TASK_WORK_TOOLS,
   RUN_TOOLS,
   QUEUE_TOOLS,
   EVENT_TOOLS,
@@ -16,6 +10,11 @@ import {
   HISTORY_TOOLS,
   MCP_TOOLS,
   APPROVAL_TOOLS,
+  INPUT_TOOLS,
+  PLAN_TOOLS,
+  CHECKPOINT_TOOLS,
+  CYCLE_TOOLS,
+  ORGANIZER_TOOLS,
   ALL_TOOLS
 } from './tools';
 
@@ -25,13 +24,7 @@ interface McpManifestToolGroup {
 }
 
 const TOOL_GROUPS: McpManifestToolGroup[] = [
-  { group: 'task', tools: TASK_TOOLS },
-  { group: 'epic', tools: EPIC_TOOLS },
-  { group: 'sprint', tools: SPRINT_TOOLS },
-  { group: 'backlog', tools: BACKLOG_TOOLS },
-  { group: 'move', tools: MOVE_TOOLS },
   { group: 'agent', tools: AGENT_TOOLS },
-  { group: 'workflow', tools: TASK_WORK_TOOLS },
   { group: 'run', tools: RUN_TOOLS },
   { group: 'queue', tools: QUEUE_TOOLS },
   { group: 'event', tools: EVENT_TOOLS },
@@ -40,14 +33,19 @@ const TOOL_GROUPS: McpManifestToolGroup[] = [
   { group: 'workforce', tools: WORKFORCE_TOOLS },
   { group: 'history', tools: HISTORY_TOOLS },
   { group: 'mcp', tools: MCP_TOOLS },
-  { group: 'approvals', tools: APPROVAL_TOOLS }
+  { group: 'approvals', tools: APPROVAL_TOOLS },
+  { group: 'input', tools: INPUT_TOOLS },
+  { group: 'plan', tools: PLAN_TOOLS },
+  { group: 'checkpoint', tools: CHECKPOINT_TOOLS },
+  { group: 'cycle', tools: CYCLE_TOOLS },
+  { group: 'organizer', tools: ORGANIZER_TOOLS }
 ];
 
 export function buildMcpManifest(): Record<string, unknown> {
   return {
     name: SERVER_INFO.name,
     version: SERVER_INFO.version,
-    description: 'MCP server for SprintDesk controlled autonomous workforce - exposes task, run, queue, event, workflow, provider, MCP, approval and workforce operations for AI agents',
+    description: 'MCP server for SprintDesk controlled autonomous workforce - exposes plan, run, queue, event, checkpoint, input, cycle, organizer, agent, approval and workforce operations for AI agents',
     author: 'SprintDesk',
     repository: 'https://github.com/khmmamed/vscode-SprintDesk',
     homepage: 'https://github.com/khmmamed/vscode-SprintDesk',
@@ -64,7 +62,7 @@ export function buildMcpManifest(): Record<string, unknown> {
       http_curl:
         "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}'",
       http_call:
-        "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_listTasks\",\"arguments\":{}}}'",
+        "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_plansList\",\"arguments\":{}}}'",
       stdio: 'cd <workspace> && npm run mcp'
     }
   };

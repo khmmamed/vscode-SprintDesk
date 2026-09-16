@@ -1,11 +1,6 @@
 import * as vscode from 'vscode';
 
 type SourceId =
-  | 'repositories'
-  | 'tasks'
-  | 'sprints'
-  | 'backlogs'
-  | 'epics'
   | 'workforce'
   | 'history';
 
@@ -39,11 +34,6 @@ export class SprintDeskTreeDataProvider implements vscode.TreeDataProvider<vscod
   readonly dropMimeTypes: string[];
 
   private readonly sections: Array<{ id: SourceId; label: string; icon: string; description?: string }> = [
-    { id: 'repositories', label: 'Repositories', icon: 'repo' },
-    { id: 'tasks', label: 'Tasks', icon: 'checklist' },
-    { id: 'sprints', label: 'Sprints', icon: 'calendar' },
-    { id: 'backlogs', label: 'Backlogs', icon: 'inbox' },
-    { id: 'epics', label: 'Epics', icon: 'milestone' },
     { id: 'workforce', label: 'People & Workforce', icon: 'organization', description: 'Humans, agents, teams, and operations' },
     { id: 'history', label: 'History', icon: 'history' }
   ];

@@ -438,7 +438,7 @@ export async function runClassificationPass(options: ClassificationPassOptions =
 
     result.proposed += 1;
 
-    if (gateMode('task-proposal') === 'auto') {
+    if (gateMode('plan-classification') === 'auto') {
       try {
         const applied = applyProposal(proposal.id, options.actorId);
         if (applied && applied.status === 'applied') {
@@ -452,7 +452,7 @@ export async function runClassificationPass(options: ClassificationPassOptions =
       }
     } else {
       requestApproval({
-        type: 'task-proposal',
+        type: 'plan-classification',
         reason: `Apply classified proposal: ${proposal.title}`,
         target: proposal.id,
         pending: { op: 'apply-proposal', proposalId: proposal.id },

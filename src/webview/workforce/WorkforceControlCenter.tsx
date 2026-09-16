@@ -4,7 +4,10 @@ import { acquireVsCodeApiOnce } from "../vscodeApi";
 
 type WorkforceSection =
   | "employees"
-  | "tasks"
+  | "plans"
+  | "inputs"
+  | "checkpoints"
+  | "cycles"
   | "runs"
   | "findings"
   | "proposals"
@@ -14,7 +17,7 @@ type WorkforceSection =
   | "event-rules"
   | "windows"
   | "activity"
-  | "create-task";
+  | "create-input";
 
 type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 type RunFilter = RunStatus | "retrying" | "all";
@@ -150,14 +153,42 @@ interface WorkflowDto {
   updatedAt: string;
 }
 
-interface TaskDto {
+interface PlanDto {
   id: string;
   title: string;
-  code: string;
   status: string;
-  workStatus?: string;
-  priority?: string;
-  agent?: string;
+  priority: string;
+  assignedTo?: string;
+  inputId?: string;
+  classification?: string;
+  schedulingStatus?: string;
+}
+
+interface InputDto {
+  id: string;
+  title: string;
+  status: string;
+  source?: string;
+  receivedAt?: string;
+}
+
+interface CheckpointDto {
+  id: string;
+  planId: string;
+  status: string;
+  planTitle?: string;
+  deployStatus?: string;
+}
+
+interface CycleDto {
+  id: string;
+  inputIds: string[];
+  planIds: string[];
+  executionIds: string[];
+  checkpointId?: string;
+  status?: string;
+  startedAt: string;
+  closedAt?: string;
 }
 
 interface ActivityEventDto {
@@ -234,6 +265,8 @@ interface FindingDto {
   runStatus?: RunStatus;
   taskId?: string;
   taskTitle?: string;
+  planId?: string;
+  planTitle?: string;
   category?: string;
   agentValidationState?: "requested" | "validated";
   agentReview?: {
@@ -268,27 +301,22 @@ const EMPTY_COUNTS: CountsDto = { pendingApprovals: 0, pendingFindings: 0, pendi
 
 const TABS: Array<{ key: WorkforceSection; label: string }> = [
   { key: "employees", label: "Employees" },
-  { key: "tasks", label: "Tasks" },
+  { key: "plans", label: "Plans" },
+  { key: "inputs", label: "Inputs" },
+  { key: "checkpoints", label: "Checkpoints" },
+  { key: "cycles", label: "Cycles" },
   { key: "runs", label: "Runs" },
   { key: "findings", label: "Findings" },
-  { key: "proposals", label: "Proposals" },
+  { key: "proposals", label: "Plan Classifications" },
   { key: "approvals", label: "Approvals" },
   { key: "schedules", label: "Schedules" },
   { key: "workflows", label: "Workflows" },
   { key: "event-rules", label: "Event Rules" },
   { key: "windows", label: "Execution Windows" },
   { key: "activity", label: "Activity" },
-  { key: "create-task", label: "Create Task" }
+  { key: "create-input", label: "Create Input" }
 ];
 
-const MODES: Array<{ value: WorkerMode; label: string; hint: string }> = [
-  { value: "ollama", label: "Ollama (LLM)", hint: "Run via the configured model provider" },
-  { value: "headless", label: "Headless", hint: "Spawn agentConfig.tool as a background process" },
-  { value: "terminal", label: "Terminal", hint: "Run the agent in the integrated terminal" },
-  { value: "noop", label: "Noop (dry run)", hint: "Simulate completion, no real execution" }
-];
-
-const TYPE_CHOICES = ["feature", "bug", "chore", "doc", "test"];
 const PRIORITY_CHOICES = ["low", "medium", "high"];
 
 const RUN_FILTER_OPTIONS: Array<{ key: RunFilter; label: string }> = [
@@ -546,7 +574,10 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [tab, setTab] = React.useState<WorkforceSection>("runs");
   const [loaded, setLoaded] = React.useState(false);
   const [runs, setRuns] = React.useState<RunDto[]>([]);
-  const [tasks, setTasks] = React.useState<TaskDto[]>([]);
+  const [plans, setPlans] = React.useState<PlanDto[]>([]);
+  const [inputs, setInputs] = React.useState<InputDto[]>([]);
+  const [checkpoints, setCheckpoints] = React.useState<CheckpointDto[]>([]);
+  const [cycles, setCycles] = React.useState<CycleDto[]>([]);
   const [employees, setEmployees] = React.useState<EmployeeDto[]>([]);
   const [findings, setFindings] = React.useState<FindingDto[]>([]);
   const [approvals, setApprovals] = React.useState<ApprovalDto[]>([]);
@@ -568,16 +599,10 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [approvalActionError, setApprovalActionError] = React.useState<string>("");
   const [proposalAction, setProposalAction] = React.useState<string>("");
   const [proposalActionError, setProposalActionError] = React.useState<string>("");
-  const [taskAction, setTaskAction] = React.useState<string>("");
-  const [taskActionError, setTaskActionError] = React.useState<string>("");
-  const [editingTask, setEditingTask] = React.useState<TaskDto | null>(null);
-  const [confirmDeleteTask, setConfirmDeleteTask] = React.useState<string | null>(null);
-  const [taskEditForm, setTaskEditForm] = React.useState<{
-    title: string;
-    status: string;
-    priority: string;
-    agent: string;
-  }>({ title: "", status: "waiting", priority: "medium", agent: "" });
+  const [createInputAction, setCreateInputAction] = React.useState<string>("");
+  const [createInputActionError, setCreateInputActionError] = React.useState<string>("");
+  const [organizerAction, setOrganizerAction] = React.useState<string>("");
+  const [organizerActionError, setOrganizerActionError] = React.useState<string>("");
 
   const [editingProposal, setEditingProposal] = React.useState<ProposalDto | null>(null);
   const [proposalEditForm, setProposalEditForm] = React.useState<{
@@ -593,16 +618,14 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   const [workflowFocus, setWorkflowFocus] = React.useState<string | null>(null);
   const [ruleFocus, setRuleFocus] = React.useState<string | null>(null);
   const [employeeFocus, setEmployeeFocus] = React.useState<string | null>(null);
-  const [taskFocus, setTaskFocus] = React.useState<string | null>(null);
+  const [planFocus, setPlanFocus] = React.useState<string | null>(null);
 
-  const [form, setForm] = React.useState<{
+  const [createInputForm, setCreateInputForm] = React.useState<{
     title: string;
-    type: string;
+    description: string;
     priority: string;
-    backlog: string;
-    agentId: string;
-    runMode: WorkerMode;
-  }>({ title: "", type: "research", priority: "medium", backlog: "", agentId: "", runMode: "ollama" });
+    source: string;
+  }>({ title: "", description: "", priority: "medium", source: "human" });
 
   const [busy, setBusy] = React.useState<"idle" | "running" | "done" | "error">("idle");
   const [outcome, setOutcome] = React.useState<any>(null);
@@ -660,20 +683,19 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
       if (command === "SET_WORKFORCE_INIT") {
         if (payload?.section) setTab(payload.section);
         if (payload?.focusAgentId) {
-          setForm(prev => ({ ...prev, agentId: payload.focusAgentId }));
-          setTab("create-task");
+          setCreateInputForm(prev => ({ ...prev, source: "agent:" + payload.focusAgentId }));
+          setTab("create-input");
         }
       } else if (command === "SET_WORKFORCE_RUNS") {
         setRuns(payload || []);
-      } else if (command === "SET_WORKFORCE_TASKS") {
-        setTasks(payload || []);
-      } else if (command === "TASK_UPDATED") {
-        const task: TaskDto | undefined = payload?.task;
-        if (task) {
-          setTasks(prev => [task, ...(prev || []).filter(t => t.id !== task.id)]);
-          setEditingTask(null);
-          setConfirmDeleteTask(null);
-        }
+      } else if (command === "SET_WORKFORCE_PLANS") {
+        setPlans(payload || []);
+      } else if (command === "SET_WORKFORCE_INPUTS") {
+        setInputs(payload || []);
+      } else if (command === "SET_WORKFORCE_CHECKPOINTS") {
+        setCheckpoints(payload || []);
+      } else if (command === "SET_WORKFORCE_CYCLES") {
+        setCycles(payload || []);
       } else if (command === "SET_WORKFORCE_EMPLOYEES") {
         setEmployees(payload || []);
       } else if (command === "AGENT_CONFIGURED") {
@@ -748,8 +770,9 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           setRunActionError(messageError);
           setFindingActionError(messageError);
           setApprovalActionError(messageError);
-          setTaskActionError(messageError);
           setProposalActionError(messageError);
+          setCreateInputActionError(messageError);
+          setOrganizerActionError(messageError);
           setBusy("error");
         } else if (payload) {
           setOutcome(payload);
@@ -777,13 +800,16 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (payload?.decided) setFindingAction(`Finding ${payload.decision === "approved" ? "approved" : "rejected"}.`);
           if (payload?.validated) setFindingAction("Agent validation recorded.");
           if (payload?.resolved) setApprovalAction(`Approval ${payload.decision === "approved" ? "approved" : "rejected"}.`);
-          if (payload?.updated) {
-            setTaskAction("Task updated.");
-            setEditingTask(null);
-            setConfirmDeleteTask(null);
+          if (payload?.createdInput) {
+            setCreateInputAction(payload?.input?.title ? `Input "${payload.input.title}" created and ingested.` : "Input created.");
+          }
+          if (payload?.organized) {
+            setOrganizerAction(
+              `Organizer pass: ${payload.examined} examined, ${payload.changed} changed.`
+            );
           }
           if (payload?.applied) {
-            setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" applied — task created.` : "Proposal applied.");
+            setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" applied as plan.` : "Proposal applied.");
           }
           if (payload?.rejected) {
             setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" rejected.` : "Proposal rejected.");
@@ -795,11 +821,6 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           if (payload?.requeued) {
             setProposalAction(payload?.proposal?.title ? `Proposal "${payload.proposal.title}" requeued to pending.` : "Proposal requeued to pending.");
           }
-          if (payload?.deleted) {
-            setTaskAction("Task deleted.");
-            setEditingTask(null);
-            setConfirmDeleteTask(null);
-          }
         }
       }
     };
@@ -808,23 +829,29 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  const setFormField = (field: keyof typeof form, value: string): void => {
-    setForm(prev => ({ ...prev, [field]: value }));
+  const setFormField = (field: keyof typeof createInputForm, value: string): void => {
+    setCreateInputForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const createAndRun = (): void => {
-    if (!form.title.trim()) {setError("Enter a task title"); return;}
+  const createInput = (): void => {
+    if (!createInputForm.title.trim()) { setError("Enter an input title"); return; }
     setError("");
     setBusy("running");
     setOutcome(null);
-    postRequest("WORKFORCE_CREATE_TASK", {
-      title: form.title,
-      type: form.type,
-      priority: form.priority,
-      backlog: form.backlog || undefined,
-      agentId: form.agentId || undefined,
-      runMode: form.runMode
+    setCreateInputAction("");
+    setCreateInputActionError("");
+    postRequest("WORKFORCE_CREATE_INPUT", {
+      title: createInputForm.title,
+      description: createInputForm.description || undefined,
+      priority: createInputForm.priority,
+      source: createInputForm.source || "human"
     });
+  };
+
+  const runOrganizer = (): void => {
+    setOrganizerAction("");
+    setOrganizerActionError("");
+    postRequest("WORKFORCE_RUN_ORGANIZER", {});
   };
 
   const cancelRun = (runId: string): void => {
@@ -926,11 +953,6 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     setTab("event-rules");
   };
 
-  const openTask = (taskId: string): void => {
-    setTaskFocus(taskId);
-    setTab("tasks");
-  };
-
   const openPlan = (planId: string): void => {
     const run = runs.find(r => r.planId === planId);
     setRunFocus(run ? run.id : null);
@@ -942,6 +964,14 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     setTab("employees");
   };
 
+  const approveCheckpoint = (checkpointId: string): void => {
+    postRequest("WORKFORCE_APPROVE_CHECKPOINT_DEPLOY", { checkpointId });
+  };
+
+  const rejectCheckpoint = (checkpointId: string): void => {
+    postRequest("WORKFORCE_REJECT_CHECKPOINT_DEPLOY", { checkpointId });
+  };
+
   const decideFinding = (findingId: string, decision: "approved" | "rejected"): void => {
     postRequest("WORKFORCE_DECIDE_FINDING", { findingId, decision });
   };
@@ -950,43 +980,6 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
     setApprovalAction("");
     setApprovalActionError("");
     postRequest("WORKFORCE_RESOLVE_APPROVAL", { approvalId, decision });
-  };
-
-  const startEditTask = (t: TaskDto): void => {
-    setTaskAction("");
-    setTaskActionError("");
-    setEditingTask(t);
-    setTaskEditForm({
-      title: t.title,
-      status: t.status,
-      priority: t.priority || "medium",
-      agent: t.agent || ""
-    });
-  };
-
-  const saveTaskEdit = (taskId: string): void => {
-    setTaskAction("");
-    setTaskActionError("");
-    if (!taskEditForm.title.trim()) { setTaskActionError("Task title is required"); return; }
-    postRequest("WORKFORCE_UPDATE_TASK", {
-      taskId,
-      updates: {
-        title: taskEditForm.title.trim(),
-        status: taskEditForm.status,
-        priority: taskEditForm.priority,
-        agent: taskEditForm.agent || undefined
-      }
-    });
-  };
-
-  const requestDeleteTask = (taskId: string): void => {
-    setConfirmDeleteTask(prev => prev === taskId ? null : taskId);
-  };
-
-  const confirmDeleteTaskAction = (taskId: string): void => {
-    setTaskAction("");
-    setTaskActionError("");
-    postRequest("WORKFORCE_DELETE_TASK", { taskId });
   };
 
   const openValidate = (f: FindingDto): void => {
@@ -1110,8 +1103,8 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
   };
 
   const startCreateForAgent = (agentId: string): void => {
-    setForm(prev => ({ ...prev, agentId }));
-    setTab("create-task");
+    setCreateInputForm(prev => ({ ...prev, source: "agent:" + agentId }));
+    setTab("create-input");
   };
 
   const openConfigure = (e: EmployeeDto): void => {
@@ -1210,7 +1203,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         <StatChip label={`Agent Reviews ${counts.pendingAgentReview}`} onClick={() => gotoFindings("agent")} />
         <StatChip label={`Human Reviews ${counts.pendingHumanReview}`} onClick={() => gotoFindings("human")} />
         <StatChip label={`Approvals ${counts.pendingApprovals}`} onClick={() => setTab("approvals")} />
-        <StatChip label={`Proposals ${counts.proposals}`} onClick={() => setTab("proposals")} />
+        <StatChip label={`Classifications ${counts.proposals}`} onClick={() => setTab("proposals")} />
         <StatChip label={`Schedules ${counts.schedules}`} onClick={() => setTab("schedules")} />
         <StatChip label={`Workflows ${counts.workflows}`} onClick={() => setTab("workflows")} />
         <StatChip label={`Event Rules ${counts.eventRules}`} onClick={() => setTab("event-rules")} />
@@ -1319,7 +1312,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 {e.agentConfig?.tool && <span style={styles.chip}>tool: {e.agentConfig.tool}</span>}
                 <span style={{ flex: 1 }} />
                 <button style={styles.buttonGhost} onClick={() => openConfigure(e)}>Configure</button>
-                <button style={styles.button} onClick={() => startCreateForAgent(e.id)}>Create Task</button>
+                <button style={styles.button} onClick={() => startCreateForAgent(e.id)}>Create Input</button>
               </div>
               {e.capabilities.length > 0 && (
                 <div style={{ marginTop: 6 }}>
@@ -1331,85 +1324,63 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
         </div>
       )}
 
-      {tab === "create-task" && (
+      {tab === "create-input" && (
         <div style={{ maxWidth: 520 }}>
           <div style={styles.field}>
-            <label style={styles.label}>Task title</label>
+            <label style={styles.label}>Input title</label>
             <input
               style={styles.input}
-              value={form.title}
+              value={createInputForm.title}
               placeholder="e.g. Research Moroccan election news"
               onChange={ev => setFormField("title", ev.target.value)}
             />
           </div>
 
           <div style={styles.field}>
-            <label style={styles.label}>Agent</label>
-            <select style={styles.select} value={form.agentId} onChange={ev => setFormField("agentId", ev.target.value)}>
-              <option value="">— Select agent —</option>
-              {agents.map(e => (
-                <option key={e.id} value={e.id}>{e.name}</option>
-              ))}
-            </select>
+            <label style={styles.label}>Description (optional)</label>
+            <textarea
+              style={{ ...styles.input, minHeight: 90, resize: "vertical" }}
+              value={createInputForm.description}
+              placeholder="Context, background, or a brief the plan should address"
+              onChange={ev => setFormField("description", ev.target.value)}
+            />
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ ...styles.field, flex: 1 }}>
-              <label style={styles.label}>Type</label>
-              <select style={styles.select} value={form.type} onChange={ev => setFormField("type", ev.target.value)}>
-                {TYPE_CHOICES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div style={{ ...styles.field, flex: 1 }}>
               <label style={styles.label}>Priority</label>
-              <select style={styles.select} value={form.priority} onChange={ev => setFormField("priority", ev.target.value)}>
+              <select style={styles.select} value={createInputForm.priority} onChange={ev => setFormField("priority", ev.target.value)}>
                 {PRIORITY_CHOICES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
+            <div style={{ ...styles.field, flex: 1 }}>
+              <label style={styles.label}>Source</label>
+              <select style={styles.select} value={createInputForm.source} onChange={ev => setFormField("source", ev.target.value)}>
+                <option value="human">Human</option>
+                <option value="agent">Agent</option>
+              </select>
+            </div>
           </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Backlog (optional)</label>
-            <input
-              style={styles.input}
-              value={form.backlog}
-              placeholder="features"
-              onChange={ev => setFormField("backlog", ev.target.value)}
-            />
-          </div>
-
-          <div style={styles.field}>
-            <label style={styles.label}>Run mode</label>
-            {MODES.map(m => (
-              <label key={m.value} style={{ display: "block", fontSize: 13, marginBottom: 4, cursor: "pointer" }}>
-                <input
-                  type="radio"
-                  name="runMode"
-                  style={{ marginRight: 6 }}
-                  checked={form.runMode === m.value}
-                  onChange={() => setFormField("runMode", m.value)}
-                />
-                <b>{m.label}</b>
-                {" — "}
-                <span style={styles.muted}>{m.hint}</span>
-              </label>
-            ))}
+          <div style={{ ...styles.field, border: "1px dashed var(--vscode-panel-border, #333)", borderRadius: 4, padding: 10 }}>
+            <label style={styles.label}>Drop-zone hint</label>
+            <div style={styles.muted}>
+              An input is a piece of intent (a brief, an issue, a feature idea). The organizer classifies it into a
+              plan, which the queue then executes. You can also drop a Markdown file into the Inputs tab — it is
+              ingested from disk.
+            </div>
           </div>
 
           {error && <div style={styles.error}>{error}</div>}
-          {busy === "done" && outcome && (
-            <div style={styles.ok}>
-              Run {outcome.runId} queued. {outcome.ran ? (outcome.result?.status || "finished") : (outcome.approvalRequired ? "Approval required — run stays queued." : "Queued — waiting on the queue.")}{" "}
-              See the Runs tab for details.
-            </div>
-          )}
+          {createInputAction && <div style={styles.ok}>{createInputAction}</div>}
+          {createInputActionError && <div style={styles.error}>{createInputActionError}</div>}
 
           <button
             style={{ ...styles.button, fontSize: 14, padding: "8px 18px", opacity: busy === "running" ? 0.6 : 1 }}
             disabled={busy === "running"}
-            onClick={createAndRun}
+            onClick={createInput}
           >
-            {busy === "running" ? "Running…" : "Create & Run"}
+            {busy === "running" ? "Creating…" : "Create Input"}
           </button>
         </div>
       )}
@@ -1600,6 +1571,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 {f.runId && <button style={styles.link} onClick={() => openRun(f.runId)}>run</button>}
                 <span style={styles.muted}>Agent: {f.agentName}</span>
                 {f.category && <span style={styles.muted}> · {f.category}</span>}
+                {f.planTitle && <span style={styles.muted}> · Plan: {f.planTitle}</span>}
                 {f.taskTitle && <span style={styles.muted}> · Task: {f.taskTitle}</span>}
                 <span style={styles.muted}> · {formatTime(f.timestamp)}</span>
               </div>
@@ -1660,7 +1632,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
       {tab === "proposals" && (
         <div>
           {proposals.length === 0 && (
-            <div style={styles.empty}>No classification proposals yet. Run a classification pass from the Runs tab or review findings with suggested fields — each proposal is reviewed here before it becomes a task.</div>
+            <div style={styles.empty}>No classification proposals yet. Run a classification pass from the Runs tab or the organizer from the Plans tab — each proposed plan classification is reviewed here before it is applied.</div>
           )}
           {proposalActionError && <div style={styles.error}>{proposalActionError}</div>}
           {proposalAction && <div style={styles.ok}>{proposalAction}</div>}
@@ -1684,7 +1656,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
               </div>
               {p.status === "pending" && (
                 <div style={{ marginTop: 8 }}>
-                  <button style={styles.button} onClick={() => applyProposal(p.id)}>Apply as Task</button>
+                  <button style={styles.button} onClick={() => applyProposal(p.id)}>Apply as Plan</button>
                   <button style={styles.buttonGhost} onClick={() => rejectProposal(p.id)}>Reject</button>
                   {editingProposal?.id !== p.id && (
                     <button style={styles.buttonGhost} onClick={() => startEditProposal(p)}>Edit</button>
@@ -2073,7 +2045,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 {ev.links.runId && <button style={styles.link} onClick={() => openRun(ev.links.runId!)}>run</button>}
                 {ev.links.findingId && <button style={styles.link} onClick={() => openFinding(ev.links.findingId!)}>finding</button>}
                 {ev.links.planId && <button style={styles.link} onClick={() => openPlan(ev.links.planId!)}>plan</button>}
-                {ev.links.taskId && <button style={styles.link} onClick={() => openTask(ev.links.taskId!)}>task</button>}
+                {ev.links.taskId && <button style={styles.link} onClick={() => setTab("plans")}>task</button>}
                 {ev.links.workflowId && <button style={styles.link} onClick={() => openWorkflow(ev.links.workflowId!)}>workflow</button>}
                 {ev.links.ruleId && <button style={styles.link} onClick={() => openRule(ev.links.ruleId!)}>rule</button>}
                 {ev.links.windowId && <button style={styles.link} onClick={() => openWindow(ev.links.windowId!)}>window</button>}
@@ -2084,70 +2056,107 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
           ))}
         </div>
       )}
-      {tab === "tasks" && (
+      {tab === "plans" && (
         <div>
-          {tasks.length === 0 && (
-            <div style={styles.empty}>No tasks yet. Tasks are created by hand (Create Task tab), by workflows, schedules, or event rules — then become runs in the queue.</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <button style={{ ...styles.button, fontSize: 12, padding: "4px 10px", opacity: busy === "running" ? 0.6 : 1 }} onClick={runOrganizer}>
+              Run Organizer
+            </button>
+            <span style={{ ...styles.muted, alignSelf: "center" }}>Classifies pending inputs into executable plans.</span>
+          </div>
+          {organizerActionError && <div style={styles.error}>{organizerActionError}</div>}
+          {organizerAction && <div style={styles.ok}>{organizerAction}</div>}
+          {plans.length === 0 && (
+            <div style={styles.empty}>No plans yet. Create an input or run the organizer — plans are classified from inputs and executed by the queue.</div>
           )}
-          {taskActionError && <div style={styles.error}>{taskActionError}</div>}
-          {taskAction && <div style={styles.ok}>{taskAction}</div>}
-          {tasks.map(t => (
-            <div key={t.id} style={taskFocus === t.id ? styles.cardFocused : styles.card}>
+          {plans.map(p => (
+            <div key={p.id} style={planFocus === p.id ? styles.cardFocused : styles.card}>
               <div style={styles.row}>
-                <span style={styles.name}>{t.title}</span>
-                <span style={styles.muted}>{t.code}</span>
-                <span style={{ ...styles.statusChip, color: t.status === "done" ? "#4caf50" : t.status === "in-progress" ? "#ffb74d" : "#9e9e9e" }}>{t.status}</span>
-                {t.workStatus && <span style={styles.chip}>{t.workStatus}</span>}
-                {t.priority && <span style={styles.chip}>{t.priority}</span>}
+                <span style={styles.name}>{p.title}</span>
+                <span style={{ ...styles.statusChip, color: p.status === "active" ? "#4caf50" : p.status === "completed" ? "#90caf9" : p.status === "failed" ? "#e53935" : p.status === "cancelled" ? "#9e9e9e" : "#ffb74d" }}>{p.status}</span>
+                <span style={styles.chip}>{p.priority}</span>
+                {p.classification && <span style={styles.chip}>{p.classification}</span>}
+                {p.schedulingStatus && <span style={styles.chip}>sched {p.schedulingStatus}</span>}
                 <span style={{ flex: 1 }} />
-                {t.agent && <span style={styles.muted}>assigned: <button style={styles.link} onClick={() => openEmployee(t.agent!)}>{t.agent}</button></span>}
-                <button
-                  style={editingTask?.id === t.id ? { ...styles.buttonGhost, backgroundColor: "var(--vscode-button-secondaryBackground, #2a2d2e)" } : styles.buttonGhost}
-                  onClick={() => { if (editingTask?.id === t.id) setEditingTask(null); else startEditTask(t); }}
-                >{editingTask?.id === t.id ? "Close" : "Edit"}</button>
-                {confirmDeleteTask === t.id ? (
-                  <button style={styles.buttonGhost} onClick={() => confirmDeleteTaskAction(t.id)}>Confirm delete</button>
-                ) : (
-                  <button style={styles.buttonGhost} onClick={() => requestDeleteTask(t.id)}>Delete</button>
+                {p.assignedTo && (
+                  <span style={styles.muted}>assigned: <button style={styles.link} onClick={() => openEmployee(p.assignedTo!)}>{p.assignedTo}</button></span>
                 )}
               </div>
-              {editingTask?.id === t.id && (
-                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-                  <div style={{ flex: 1, minWidth: 160 }}>
-                    <label style={styles.label}>Title</label>
-                    <input style={styles.input} value={taskEditForm.title}
-                      onChange={e => setTaskEditForm(prev => ({ ...prev, title: e.target.value }))} />
-                  </div>
-                  <div style={{ minWidth: 110 }}>
-                    <label style={styles.label}>Status</label>
-                    <select style={styles.select} value={taskEditForm.status}
-                      onChange={e => setTaskEditForm(prev => ({ ...prev, status: e.target.value }))}>
-                      <option value="waiting">waiting</option>
-                      <option value="in-progress">in-progress</option>
-                      <option value="review">review</option>
-                      <option value="done">done</option>
-                      <option value="blocked">blocked</option>
-                      <option value="cancelled">cancelled</option>
-                    </select>
-                  </div>
-                  <div style={{ minWidth: 100 }}>
-                    <label style={styles.label}>Priority</label>
-                    <select style={styles.select} value={taskEditForm.priority}
-                      onChange={e => setTaskEditForm(prev => ({ ...prev, priority: e.target.value }))}>
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
-                    </select>
-                  </div>
-                  <div style={{ minWidth: 150 }}>
-                    <label style={styles.label}>Assigned to</label>
-                    <select style={styles.select} value={taskEditForm.agent}
-                      onChange={e => setTaskEditForm(prev => ({ ...prev, agent: e.target.value }))}>
-                      <option value="">— unassigned —</option>
-                      {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                    </select>
-                  </div>
-                  <button style={styles.button} onClick={() => saveTaskEdit(t.id)}>Save</button>
+              {(p.inputId || p.id) && (
+                <div style={{ marginTop: 6, fontSize: 12 }}>
+                  {p.inputId && <span style={styles.muted}>input {p.inputId.slice(0, 8)}</span>}
+                  {p.id && <span style={styles.muted}> · plan {p.id.slice(0, 8)}</span>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "inputs" && (
+        <div>
+          {inputs.length === 0 && (
+            <div style={styles.empty}>No inputs yet. An input is raw intent (a brief, issue, or idea) — the organizer classifies it into a plan. Create one from the Create Input tab.</div>
+          )}
+          {inputs.map(inp => (
+            <div key={inp.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{inp.title}</span>
+                <span style={{ ...styles.statusChip, color: inp.status === "classified" ? "#4caf50" : inp.status === "pending" ? "#ffb74d" : inp.status === "rejected" ? "#e53935" : "#9e9e9e" }}>{inp.status}</span>
+                {inp.source && <span style={styles.chip}>{inp.source}</span>}
+                <span style={{ flex: 1 }} />
+                {inp.receivedAt && <span style={styles.muted}>{formatTime(inp.receivedAt)}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "checkpoints" && (
+        <div>
+          {checkpoints.length === 0 && (
+            <div style={styles.empty}>No checkpoints yet. A checkpoint is a deployable evaluation point on a plan that has been restored from a failure recovery.</div>
+          )}
+          {checkpoints.map(cp => (
+            <div key={cp.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{cp.planTitle || cp.planId}</span>
+                <span style={{ ...styles.statusChip, color: cp.status === "passed" ? "#4caf50" : cp.status === "failed" ? "#e53935" : cp.status === "pending" ? "#ffb74d" : "#9e9e9e" }}>{cp.status}</span>
+                {cp.deployStatus && <span style={styles.chip}>{cp.deployStatus}</span>}
+                <span style={{ flex: 1 }} />
+                <span style={styles.muted}>checkpoint {cp.id.slice(0, 8)}</span>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={styles.muted}>plan</span>{" "}<button style={styles.link} onClick={() => openPlan(cp.planId)}>{cp.planId.slice(0, 8)}</button>
+                {cp.status === "pending" && (
+                  <span style={{ marginLeft: 8 }}>
+                    <button style={styles.button} onClick={() => approveCheckpoint(cp.id)}>Approve Deploy</button>
+                    <button style={styles.buttonGhost} onClick={() => rejectCheckpoint(cp.id)}>Reject Deploy</button>
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "cycles" && (
+        <div>
+          {cycles.length === 0 && (
+            <div style={styles.empty}>No cycles yet. A cycle batches related inputs and plans into a single organization + execution pass.</div>
+          )}
+          {cycles.map(c => (
+            <div key={c.id} style={styles.card}>
+              <div style={styles.row}>
+                <span style={styles.name}>{c.id.slice(0, 12)}</span>
+                <span style={{ ...styles.statusChip, color: c.status === "closed" ? "#90caf9" : c.status === "active" ? "#4caf50" : "#ffb74d" }}>{c.status || "open"}</span>
+                <span style={styles.chip}>{c.inputIds.length} inputs · {c.planIds.length} plans · {c.executionIds.length} executions</span>
+                <span style={{ flex: 1 }} />
+                <span style={styles.muted}>started {formatTime(c.startedAt)}{c.closedAt ? ` · closed ${formatTime(c.closedAt)}` : ""}</span>
+              </div>
+              {c.checkpointId && (
+                <div style={{ marginTop: 6, fontSize: 12 }}>
+                  <span style={styles.muted}>checkpoint</span>{" "}<span style={styles.muted}>{c.checkpointId.slice(0, 8)}</span>
                 </div>
               )}
             </div>

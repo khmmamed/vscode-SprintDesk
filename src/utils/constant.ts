@@ -464,31 +464,6 @@ export const GIT_CONSTANTS = {
  * ===================
  */
 export const WEBVIEW_CONSTANTS = {
-    APP_TITLE: "Sprint Desk v0.2.4",
-    EXTENSION_NAME: "sprintdesk",
-    PANEL: {
-        TASKS: {
-            ID: "sprintdesk-tasks",
-            TITLE: "SprintDesk Tasks"
-        },
-        PROJECT_STRUCTURE: {
-            ID: "sprintdesk.projectStructure",
-            TITLE: "Project Structure"
-        }
-    },
-    VIEWS: {
-        PROJECTS_TITLE: "Project Structure",
-        TASK_TABLE_TITLE: "Task Table"
-    },
-    COMMANDS: {
-        SET_TASKS: "SET_TASKS",
-        SET_BACKLOGS: "SET_BACKLOGS",
-        SET_EPICS: "SET_EPICS",
-        SET_PROJECTS: "SET_PROJECTS",
-        REQUEST_PROJECTS: "REQUEST_PROJECTS",
-        REQUEST_OPEN_FILE: "REQUEST_OPEN_FILE",
-        SAVE_SPRINT_TABLE: "SAVE_SPRINT_TABLE"
-    },
     BUNDLING: {
         MAIN_JS: "main.js",
         LOCAL_SERVER: "http://localhost:9001",

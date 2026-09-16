@@ -1,35 +1,41 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 import { getWebviewContent } from '../../webview/getWebviewContent';
 import * as fileService from '../../services/fileService';
-import * as taskService from '../../services/taskService';
 import * as approvals from '../../services/workforce/approvals';
 import * as queueService from '../../services/workforce/queueService';
 import * as classificationService from '../../services/workforce/classification/classificationService';
-import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
 import { getActivitySummary, runDetail, getQueueSnapshot, getExecutionWindowReport } from '../../services/workforce/observability';
-import { legacyTaskKindToPlanCategory, materializePlan, planTitleFor } from '../../services/workforce/plan/planService';
+import { planTitleFor } from '../../services/workforce/plan/planService';
+import * as orchestrator from '../../services/workforce/orchestrator';
+import * as organizer from '../../services/workforce/plan/organizer';
 import * as findingsService from '../../services/workforce/findingsService';
 import * as workforceService from '../../services/workforce/workforceService';
 import * as eventRulesService from '../../services/workforce/eventRulesService';
 import * as executionWindowService from '../../services/workforce/executionWindowService';
 import { subscribeEvents } from '../../services/workforce/events';
 import { getDataService } from '../../data/DataService';
-import { Approval, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, Run, ScheduleRecord, Task, TaskProposal, WorkerMode } from '../../data/types';
+import { Approval, Checkpoint, Cycle, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, InputRecord, Plan, Run, ScheduleRecord, TaskProposal, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
   | 'employees'
-  | 'tasks'
+  | 'plans'
+  | 'inputs'
+  | 'checkpoints'
+  | 'cycles'
   | 'runs'
   | 'findings'
+  | 'proposals'
   | 'approvals'
   | 'schedules'
   | 'workflows'
   | 'event-rules'
   | 'windows'
   | 'activity'
-  | 'create-task';
+  | 'create-input';
 
 export interface RunDto {
   id: string;
@@ -68,16 +74,6 @@ export interface EmployeeDto {
   permissions: string[];
 }
 
-export interface TaskDto {
-  id: string;
-  title: string;
-  code: string;
-  status: Task['status'];
-  workStatus?: string;
-  priority?: string;
-  agent?: string;
-}
-
 export interface FindingDto {
   id: string;
   title: string;
@@ -89,6 +85,8 @@ export interface FindingDto {
   timestamp: string;
   runId: string;
   runStatus?: Run['status'];
+  planId?: string;
+  planTitle?: string;
   taskId?: string;
   taskTitle?: string;
   category?: string;
@@ -101,6 +99,47 @@ export interface FindingDto {
     reason?: string;
     validatedAt: string;
   };
+}
+
+export interface PlanDto {
+  id: string;
+  title: string;
+  status: Plan['scheduling']['status'];
+  category: string;
+  priority: string;
+  assignedAgent?: string;
+  runId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InputDto {
+  id: string;
+  file: string;
+  status: InputRecord['status'];
+  source: InputRecord['source'];
+  ingestedAt: string;
+}
+
+export interface CheckpointDto {
+  id: string;
+  planId: string;
+  planTitle?: string;
+  status: Checkpoint['status'];
+  artifacts: string[];
+  gitRef?: string;
+  gitCommit?: string;
+  deploymentDecision?: Checkpoint['deploymentDecision'];
+}
+
+export interface CycleDto {
+  id: string;
+  planIds: string[];
+  inputIds: string[];
+  outcome: Cycle['outcome'];
+  startedAt: string;
+  closedAt?: string;
+  organizationPasses: number;
 }
 
 export interface EventRuleDto {
@@ -295,34 +334,12 @@ function employeeDtos(): EmployeeDto[] {
   }));
 }
 
-function toTaskDto(t: Task): TaskDto {
-  return {
-    id: t.id,
-    title: t.title,
-    code: t.code,
-    status: t.status,
-    workStatus: t.workStatus,
-    priority: t.priority,
-    agent: t.agent
-  };
-}
-
-function taskDtos(): TaskDto[] {
-  const ds = dataService();
-  if (!ds) {return [];}
-  return ds.loadTasks().map(toTaskDto);
-}
-
-function taskDtoById(id: string): TaskDto | undefined {
-  const ds = dataService();
-  const t = ds?.getTask(id);
-  return t ? toTaskDto(t) : undefined;
-}
-
 function findingDtos(): FindingDto[] {
   const ds = dataService();
   return findingsService.allFindings(200).map(f => {
     const run = f.source?.runId ? getStores().runs.getById(f.source.runId) : undefined;
+    const plan = f.planId ? getStores().plans.getById(f.planId) : undefined;
+    const planTitle = plan ? planTitleFor(plan) || f.planId : undefined;
     const task = f.taskId && ds ? ds.getTask(f.taskId) : undefined;
     return {
       id: f.id,
@@ -335,6 +352,8 @@ function findingDtos(): FindingDto[] {
       timestamp: f.timestamp,
       runId: f.source?.runId || '',
       runStatus: run?.status,
+      planId: f.planId,
+      planTitle,
       taskId: f.taskId,
       taskTitle: task?.title || f.taskId,
       category: f.category,
@@ -351,6 +370,76 @@ function findingDtos(): FindingDto[] {
         : undefined
     };
   });
+}
+
+function planDtos(): PlanDto[] {
+  return getStores()
+    .plans.loadAll()
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+    .map(p => {
+      const title = planTitleFor(p) || p.id;
+      const axis = p.classification?.current || p.classification?.original;
+      const latestRun = getStores()
+        .runs.loadAll()
+        .filter(r => r.planId === p.id)
+        .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+        .pop();
+      return {
+        id: p.id,
+        title,
+        status: p.scheduling?.status,
+        category: axis?.category || 'research',
+        priority: axis?.priority || 'medium',
+        assignedAgent: p.execution?.assignedAgent,
+        runId: latestRun?.id,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt
+      };
+    });
+}
+
+function inputDtos(): InputDto[] {
+  return getStores()
+    .inputs.loadAll()
+    .sort((a, b) => (a.ingestedAt < b.ingestedAt ? 1 : -1))
+    .map(i => ({
+      id: i.id,
+      file: i.file,
+      status: i.status,
+      source: i.source,
+      ingestedAt: i.ingestedAt
+    }));
+}
+
+function checkpointDtos(): CheckpointDto[] {
+  return getStores()
+    .checkpoints.loadAll()
+    .sort((a, b) => (a.id < b.id ? 1 : -1))
+    .map(cp => ({
+      id: cp.id,
+      planId: cp.planId,
+      planTitle: planTitleFor(getStores().plans.getById(cp.planId)) || cp.planId,
+      status: cp.status,
+      artifacts: cp.artifacts,
+      gitRef: cp.gitRef,
+      gitCommit: cp.gitCommit,
+      deploymentDecision: cp.deploymentDecision
+    }));
+}
+
+function cycleDtos(): CycleDto[] {
+  return getStores()
+    .cycles.loadAll()
+    .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1))
+    .map(c => ({
+      id: c.id,
+      planIds: c.planIds,
+      inputIds: c.inputIds,
+      outcome: c.outcome,
+      startedAt: c.startedAt,
+      closedAt: c.closedAt,
+      organizationPasses: c.organizationPasses
+    }));
 }
 
 function eventRuleDtos(): EventRuleDto[] {
@@ -582,7 +671,10 @@ function pushSnapshot(panelRef: vscode.WebviewPanel): void {
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_COUNTS', payload: counts });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_QUEUE', payload: getQueueSnapshot() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EMPLOYEES', payload: employeeDtos() });
-    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_TASKS', payload: taskDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_PLANS', payload: planDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_INPUTS', payload: inputDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_CHECKPOINTS', payload: checkpointDtos() });
+    panelRef.webview.postMessage({ command: 'SET_WORKFORCE_CYCLES', payload: cycleDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_RUNS', payload: allRunDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_FINDINGS', payload: findingDtos() });
     panelRef.webview.postMessage({ command: 'SET_WORKFORCE_EVENT_RULES', payload: eventRuleDtos() });
@@ -605,11 +697,11 @@ function postResponse(panelRef: vscode.WebviewPanel, requestId: string, payload:
   }
 }
 
-async function handleCreateTask(message: any, panelRef: vscode.WebviewPanel): Promise<void> {
+async function handleCreateInput(message: any, panelRef: vscode.WebviewPanel): Promise<void> {
   const { requestId, payload } = message;
   const title: string | undefined = payload?.title;
   if (!title || !String(title).trim()) {
-    postResponse(panelRef, requestId, undefined, 'Task title is required');
+    postResponse(panelRef, requestId, undefined, 'Input title is required');
     return;
   }
 
@@ -619,64 +711,38 @@ async function handleCreateTask(message: any, panelRef: vscode.WebviewPanel): Pr
     return;
   }
 
-  const agentId: string | undefined = payload?.agentId;
-  const mode: WorkerMode | undefined = payload?.runMode;
-  const outcome: any = { ran: false, approvalRequired: false, skipReason: undefined };
-
   try {
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'SprintDesk: creating plan and queueing run…' },
-      async () => {
-        // v1.0 Slice D — the Control Center's "create task" flow materializes a
-        // runnable Plan (the queue's execution unit) and queues a Run against it.
-        const plan = materializePlan(
-          {
-            sourceInputId: 'manual:control-center',
-            title: String(title).trim(),
-            description: payload?.description,
-            category: legacyTaskKindToPlanCategory(payload?.type || 'feature'),
-            priority: payload?.priority || 'medium',
-            executionMode: 'immediate'
-          },
-          { workspaceRoot: ws }
-        );
+    const safeTitle = String(title)
+      .trim()
+      .replace(/[^a-zA-Z0-9\s\-_]/g, '')
+      .replace(/\s+/g, '-')
+      .slice(0, 60);
+    const inputDir = orchestrator.inputsDir(ws);
+    fs.mkdirSync(inputDir, { recursive: true });
+    const filename = `${safeTitle || 'input'}-${Date.now()}.md`;
+    const filePath = path.join(inputDir, filename);
 
-        const run = queueService.createRun(plan.id, agentId);
-        outcome.runId = run.id;
-        outcome.planId = plan.id;
-        pushRun(panelRef, run);
-        workforceTreeDataProvider.refresh();
+    const lines: string[] = [`# ${String(title).trim()}`, ''];
+    if (payload?.description) {
+      lines.push(String(payload.description).trim(), '');
+    }
+    if (payload?.priority) {
+      lines.push(`**Priority:** ${payload.priority}`, '');
+    }
+    if (payload?.category) {
+      lines.push(`**Category:** ${payload.category}`, '');
+    }
+    if (payload?.source) {
+      lines.push(`**Source:** ${payload.source}`, '');
+    }
+    fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
 
-        if (![undefined, 'queue'].includes(mode)) {
-          outcome.ran = true;
-          const selected: WorkerMode = mode || 'noop';
-          const started = queueService.startRun(run.id);
-          if (started) {
-            pushRun(panelRef, started);
-            workforceTreeDataProvider.refresh();
-            const result = await worker.executeRun(run.id, selected);
-            const finished = getStores().runs.getById(run.id);
-            if (finished) {
-              pushRun(panelRef, finished);
-              workforceTreeDataProvider.refresh();
-            }
-            outcome.result = result;
-          } else {
-            const current = getStores().runs.getById(run.id);
-            outcome.status = current?.status || 'queued';
-            const gates = queueService.getQueueSettings().approvalGates;
-            outcome.approvalRequired = current?.status === 'queued' && gates?.runExecution === 'manual';
-            workforceTreeDataProvider.refresh();
-          }
-        }
-      }
-    );
+    const input = orchestrator.ingestInput(filePath, { source: { type: 'human', id: 'control-center' } });
+    workforceTreeDataProvider.refresh();
+    postResponse(panelRef, requestId, { input, inputFile: input.file });
   } catch (error) {
     postResponse(panelRef, requestId, undefined, error instanceof Error ? error.message : String(error));
-    return;
   }
-
-  postResponse(panelRef, requestId, outcome);
 }
 
 export function openWorkforceControlCenter(section?: WorkforceSection, focusAgentId?: string): void {
@@ -731,58 +797,58 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         } catch {
           // panel may be disposed mid-flight
         }
-      } else if (command === 'WORKFORCE_CREATE_TASK') {
-        await handleCreateTask(message, newPanel);
+      } else if (command === 'WORKFORCE_CREATE_INPUT') {
+        await handleCreateInput(message, newPanel);
         pushSnapshot(newPanel);
-      } else if (command === 'WORKFORCE_UPDATE_TASK') {
-        const taskId: string | undefined = message?.payload?.taskId;
-        const updateInput: Record<string, unknown> = message?.payload?.updates || {};
-        const updates: Partial<Task> = {};
-        const title = typeof updateInput.title === 'string' ? updateInput.title.trim() : undefined;
-        const status = typeof updateInput.status === 'string' ? updateInput.status : undefined;
-        const priority = typeof updateInput.priority === 'string' ? updateInput.priority : undefined;
-        const agent = typeof updateInput.agent === 'string' ? updateInput.agent : undefined;
-        if (title) { updates.title = title; }
-        if (status && ['waiting', 'in-progress', 'review', 'done', 'blocked', 'cancelled'].includes(status)) {
-          updates.status = status as Task['status'];
-        }
-        if (priority && ['high', 'medium', 'low'].includes(priority)) {
-          updates.priority = priority as Task['priority'];
-        }
-        if (agent) { updates.agent = agent; }
-        if (!taskId) {
-          postResponse(newPanel, message?.requestId, undefined, 'Task id is required');
-        } else if (Object.keys(updates).length === 0) {
-          postResponse(newPanel, message?.requestId, undefined, 'No supported task fields to update');
+      } else if (command === 'WORKFORCE_RUN_ORGANIZER') {
+        const ws = fileService.getWorkspaceRoot();
+        if (!ws) {
+          postResponse(newPanel, message?.requestId, undefined, 'No workspace is open');
         } else {
           try {
-            const existing = dataService()?.getTask(taskId);
-            if (!existing) {
-              postResponse(newPanel, message?.requestId, undefined, `Task not found: ${taskId}`);
-            } else {
-              taskService.updateTask(taskId, updates);
-              const dto = taskDtoById(taskId);
-              newPanel.webview.postMessage({ command: 'TASK_UPDATED', payload: { task: dto } });
-              postResponse(newPanel, message?.requestId, { updated: true, taskId, task: dto });
-            }
+            const result = organizer.runOrganizerPass({ workspaceRoot: ws });
+            postResponse(newPanel, message?.requestId, result);
           } catch (error) {
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));
           }
         }
         workforceTreeDataProvider.refresh();
         pushSnapshot(newPanel);
-      } else if (command === 'WORKFORCE_DELETE_TASK') {
-        const taskId: string | undefined = message?.payload?.taskId;
-        if (!taskId) {
-          postResponse(newPanel, message?.requestId, undefined, 'Task id is required');
+      } else if (command === 'WORKFORCE_APPROVE_CHECKPOINT_DEPLOY' || command === 'WORKFORCE_REJECT_CHECKPOINT_DEPLOY') {
+        const checkpointId: string | undefined = message?.payload?.checkpointId;
+        const actorId: string | undefined =
+          typeof message?.payload?.actorId === 'string' ? message.payload.actorId : undefined;
+        if (!checkpointId) {
+          postResponse(newPanel, message?.requestId, undefined, 'checkpointId is required');
         } else {
           try {
-            const existing = dataService()?.getTask(taskId);
-            if (!existing) {
-              postResponse(newPanel, message?.requestId, undefined, `Task not found: ${taskId}`);
+            const checkpoint = getStores().checkpoints.getById(checkpointId);
+            if (!checkpoint) {
+              postResponse(newPanel, message?.requestId, undefined, `Checkpoint not found: ${checkpointId}`);
+            } else if (checkpoint.status !== 'deployment-authorizing') {
+              postResponse(newPanel, message?.requestId, undefined, `Checkpoint ${checkpointId} is not awaiting deploy authorization (current: ${checkpoint.status})`);
             } else {
-              taskService.deleteTask(taskId);
-              postResponse(newPanel, message?.requestId, { deleted: true, taskId });
+              const pending = getStores()
+                .approvals.pending()
+                .find(p => p.status === 'pending' && p.target === checkpoint.id && p.pending?.op === 'authorize-deploy');
+              if (!pending) {
+                postResponse(newPanel, message?.requestId, undefined, `No pending deploy authorization found for checkpoint ${checkpointId}`);
+              } else {
+                const resolved =
+                  command === 'WORKFORCE_APPROVE_CHECKPOINT_DEPLOY'
+                    ? approvals.approve(pending.id, actorId)
+                    : approvals.reject(pending.id, actorId);
+                if (!resolved) {
+                  postResponse(newPanel, message?.requestId, undefined, 'No pending approval found for checkpoint');
+                } else {
+                  postResponse(newPanel, message?.requestId, {
+                    resolved: true,
+                    checkpointId,
+                    approvalId: pending.id,
+                    approval: toApprovalDto(resolved)
+                  });
+                }
+              }
             }
           } catch (error) {
             postResponse(newPanel, message?.requestId, undefined, error instanceof Error ? error.message : String(error));

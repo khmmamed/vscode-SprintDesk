@@ -1657,7 +1657,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
   });
 
   it('honors the per-pass cap and classifies the highest severity first', async () => {
-    setApprovalGate('task-proposal', 'auto');
+    setApprovalGate('plan-classification', 'auto');
     const agent = seedAgent();
     for (let i = 0; i < 5; i += 1) {
       seedFinding({ title: `Low severity item ${i}`, severity: 'low', runId: `run_low_${i}`, agent: agent.id });
@@ -1680,12 +1680,12 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
   });
 
   it('requests approval under a manual gate and applies only on approve', async () => {
-    setApprovalGate('task-proposal', 'manual');
+    setApprovalGate('plan-classification', 'manual');
     const approved = seedFinding({ title: 'Fragile checkout flow', runId: 'run_checkout' });
     const result = await classificationService.runClassificationPass();
 
     assert.strictEqual(result.requestedApproval, 1);
-    const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
+    const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'plan-classification' && a.status === 'pending');
     assert.strictEqual(approvalsList.length, 1);
     assert.strictEqual(getDataService().loadTasks().length, 0, 'nothing is created before approval');
 
@@ -1699,10 +1699,10 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
   });
 
   it('keeps a manual-gate proposal unapplied on a reject', async () => {
-    setApprovalGate('task-proposal', 'manual');
+    setApprovalGate('plan-classification', 'manual');
     const finding = seedFinding({ title: 'Slow build pipeline', runId: 'run_build' });
     await classificationService.runClassificationPass();
-    const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
+    const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'plan-classification' && a.status === 'pending');
     assert.strictEqual(approvalsList.length, 1);
 
     const rejected = approvals.reject(approvalsList[0].id);
@@ -1713,7 +1713,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
   });
 
   it('does not create a task when the actor lacks classification:apply', async () => {
-    setApprovalGate('task-proposal', 'auto');
+    setApprovalGate('plan-classification', 'auto');
     const plainAgent = seedAgent();
     const finding = seedFinding({ title: 'Secret scan backlog', runId: 'run_secret' });
 
@@ -1815,7 +1815,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () 
   });
 
   it('marks provider failures and unclassifiable output as failed without throwing', async () => {
-    setApprovalGate('task-proposal', 'auto');
+    setApprovalGate('plan-classification', 'auto');
     const agent = seedAgent({ name: 'Fail Agent', modelProfile: { name: 'Fail Agent', provider: 'ollama', model: 'gemma4', baseUrl: 'http://localhost:11434' } });
     const findingJunk = seedFinding({ title: 'Junk output finding', runId: 'run_junk', agent: agent.id });
     const findingThrow = seedFinding({ title: 'Throwing provider finding', runId: 'run_throw', agent: agent.id });
@@ -1846,7 +1846,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () 
   });
 
   it('runs a full LLM pass with a fake provider, applies under a gate, and respects the cap', async () => {
-    setApprovalGate('task-proposal', 'auto');
+    setApprovalGate('plan-classification', 'auto');
     getStores().queue.saveSettings({ maxProposalsPerPass: 2 });
     const agent = seedAgent({ name: 'Batch Agent', modelProfile: { name: 'Batch Agent', provider: 'ollama', model: 'gemma4', baseUrl: 'http://localhost:11434' } });
 
@@ -2028,7 +2028,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
   }
 
   it('an auto-gated scheduled pass turns findings into proposals and applied tasks', async () => {
-    setApprovalGate('task-proposal', 'auto');
+    setApprovalGate('plan-classification', 'auto');
     seedSchedule('classify');
     for (let i = 0; i < 2; i += 1) {
       seedFinding({ title: `Scheduled item ${i}`, runId: `run_sched_${i}`, severity: 'high' });
@@ -2049,8 +2049,8 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     assert.strictEqual(getStores().schedules.getById('sched-classify-f')?.runCount, 1);
   });
 
-  it('a manual task-proposal gate holds scheduled classifications for approval', async () => {
-    setApprovalGate('task-proposal', 'manual');
+  it('a manual plan-classification gate holds scheduled classifications for approval', async () => {
+    setApprovalGate('plan-classification', 'manual');
     seedSchedule('classify');
     seedFinding({ title: 'Scheduled risky fix', runId: 'run_manual' });
 
@@ -2059,7 +2059,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     assert.strictEqual(result.fired[0].classification!.requestedApproval, 1);
     assert.strictEqual(getDataService().loadTasks().length, 0, 'nothing is applied before approval');
 
-    const pendingApprovals = getStores().approvals.loadAll().filter(a => a.type === 'task-proposal' && a.status === 'pending');
+    const pendingApprovals = getStores().approvals.loadAll().filter(a => a.type === 'plan-classification' && a.status === 'pending');
     assert.strictEqual(pendingApprovals.length, 1);
     assert.strictEqual(getStores().proposals.loadAll().length, 1);
   });
@@ -2076,7 +2076,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
   });
 
   it('scheduled classification honors maxProposalsPerPass', async () => {
-    setApprovalGate('task-proposal', 'auto');
+    setApprovalGate('plan-classification', 'auto');
     seedSchedule('classify');
     for (let i = 0; i < 5; i += 1) {
       seedFinding({ title: `Capped item ${i}`, runId: `run_cap_${i}`, severity: 'low' });
@@ -2092,7 +2092,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
   });
 
   it('overlapping or back-to-back passes never duplicate proposals or tasks', async () => {
-    setApprovalGate('task-proposal', 'auto');
+    setApprovalGate('plan-classification', 'auto');
     const now = new Date(2026, 0, 16, 8, 0, 0);
     seedSchedule('classify');
     seedFinding({ title: 'Only once', runId: 'run_once' });

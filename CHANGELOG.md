@@ -6,6 +6,22 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+### v1.0 Slice H — Control Center, MCP & command rework
+
+- **Plan-native Control Center:** the workforce control center now exposes Plans / Inputs / Checkpoints /
+  Cycles tabs in place of the legacy Tasks tab; Proposals becomes Plan-classification review backed by the
+  `plan-classification` gate; the create-input form and drop-zone hints replace the create-task form. Runs /
+  Queue / Findings / Approvals / Schedules / Workflows / Event Rules / Windows / Activity stay, with a plan
+  reference added to findings.
+- **MCP rework:** task/epic/sprint/backlog/move tool groups are gone; `sprintdesk_inputsList` / `inputsIngest`,
+  `plansList` / `plansReplan` / `plansGet`, `organizerRun`, `checkpointsList` / `checkpointsApproveDeploy` /
+  `checkpointsRejectDeploy`, and `cyclesList` replace them. Manifest and README are rebuilt from the registry.
+- **Legacy command & UI removal (v1.0 Slice H):** removed the 28 legacy contributed commands
+  (`addTask`…`createBacklogFromRepo`, history/settings legacy items), the Tasks / Backlogs / Epics / Sprints /
+  Repositories tree providers, the legacy `App.tsx` / TasksTable / EpicsList webview surfaces, and the dead
+  `MigrationService`. The sidebar now shows People & Workforce + History sections only; the Control Center
+  handles the plan- and workforce-driven flows.
+
 ### v0.12 Slice A — Approvals resolve (Approve / Reject)
 
 - **Inline approval decisions in the Control Center:** pending approval cards now carry Approve / Reject

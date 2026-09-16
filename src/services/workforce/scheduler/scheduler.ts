@@ -268,7 +268,7 @@ export async function runSchedulerPass(options: SchedulerPassOptions = {}): Prom
 
     if (action === 'classify') {
       // Fires the existing classification pipeline (deterministic → LLM), which
-      // itself honors maxProposalsPerPass, the task-proposal gate, dedup, and cap.
+      // itself honors maxProposalsPerPass, the plan-classification gate, dedup, and cap.
       const classification = await runClassificationPass();
       updateScheduleState(stores, schedule, occurrenceKey, now, true);
       fired.push({

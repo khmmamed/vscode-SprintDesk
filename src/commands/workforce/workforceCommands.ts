@@ -172,7 +172,7 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
         return picked?.employee;
       })());
       if (!employee) return;
-      openWorkforceControlCenter('create-task', employee.id);
+      openWorkforceControlCenter('create-input', employee.id);
     }),
 
     vscode.commands.registerCommand('sprintdesk.cancelRun', async (item: WorkforceItem) => {

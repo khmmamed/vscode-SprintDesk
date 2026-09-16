@@ -1,336 +1,4 @@
-export const TASK_TOOLS = [
-  {
-    name: 'sprintdesk_createTask',
-    description: 'Create a new task in SprintDesk',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        title: { type: 'string', description: 'Task title' },
-        type: { type: 'string', enum: ['feature', 'bug', 'chore', 'doc', 'test'], description: 'Task type' },
-        priority: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Task priority' },
-        epicCode: { type: 'string', description: 'Epic code (e.g., SPD-101)' },
-        backlogName: { type: 'string', description: 'Backlog name' },
-      },
-      required: ['title'],
-    },
-  },
-  {
-    name: 'sprintdesk_getTask',
-    description: 'Get a task by ID or code',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code (e.g., SPD-101.1)' },
-      },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'sprintdesk_updateTask',
-    description: 'Update a task',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        title: { type: 'string', description: 'New title' },
-        status: { type: 'string', enum: ['waiting', 'in-progress', 'done', 'blocked', 'cancelled'] },
-        priority: { type: 'string', enum: ['high', 'medium', 'low'] },
-        type: { type: 'string', enum: ['feature', 'bug', 'chore', 'doc', 'test'] },
-      },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'sprintdesk_deleteTask',
-    description: 'Delete a task',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-      },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'sprintdesk_listTasks',
-    description: 'List all tasks',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        status: { type: 'string', enum: ['waiting', 'in-progress', 'done', 'blocked', 'cancelled'] },
-        limit: { type: 'number', description: 'Max tasks to return' },
-      },
-    },
-  },
-  {
-    name: 'sprintdesk_searchTasks',
-    description: 'Search tasks by title or description',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        query: { type: 'string', description: 'Search query' },
-      },
-      required: ['query'],
-    },
-  },
-];
 
-export const EPIC_TOOLS = [
-  {
-    name: 'sprintdesk_createEpic',
-    description: 'Create a new epic',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        title: { type: 'string', description: 'Epic title' },
-        category: { type: 'string', description: 'Epic category (e.g., SEO, FE, BE)' },
-        priority: { type: 'string', enum: ['high', 'medium', 'low'] },
-      },
-      required: ['title'],
-    },
-  },
-  {
-    name: 'sprintdesk_getEpic',
-    description: 'Get an epic by ID or code',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        epicId: { type: 'string', description: 'Epic ID or code (e.g., SPD-101)' },
-      },
-      required: ['epicId'],
-    },
-  },
-  {
-    name: 'sprintdesk_updateEpic',
-    description: 'Update an epic',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        epicId: { type: 'string', description: 'Epic ID or code' },
-        title: { type: 'string', description: 'New title' },
-        status: { type: 'string', enum: ['planned', 'in-progress', 'completed', 'blocked'] },
-        priority: { type: 'string', enum: ['high', 'medium', 'low'] },
-        category: { type: 'string', description: 'New category' },
-      },
-      required: ['epicId'],
-    },
-  },
-  {
-    name: 'sprintdesk_deleteEpic',
-    description: 'Delete an epic',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        epicId: { type: 'string', description: 'Epic ID or code' },
-      },
-      required: ['epicId'],
-    },
-  },
-  {
-    name: 'sprintdesk_listEpics',
-    description: 'List all epics',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        status: { type: 'string', enum: ['planned', 'in-progress', 'completed', 'blocked'] },
-      },
-    },
-  },
-  {
-    name: 'sprintdesk_getTasksByEpic',
-    description: 'Get all tasks in an epic',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        epicId: { type: 'string', description: 'Epic ID or code' },
-      },
-      required: ['epicId'],
-    },
-  },
-  {
-    name: 'sprintdesk_addTaskToEpic',
-    description: 'Add a task to an epic',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        epicId: { type: 'string', description: 'Epic ID or code' },
-      },
-      required: ['taskId', 'epicId'],
-    },
-  },
-];
-
-export const SPRINT_TOOLS = [
-  {
-    name: 'sprintdesk_createSprint',
-    description: 'Create a new sprint',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Sprint name' },
-        startDate: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
-        endDate: { type: 'string', description: 'End date (YYYY-MM-DD)' },
-      },
-      required: ['name', 'startDate', 'endDate'],
-    },
-  },
-  {
-    name: 'sprintdesk_getSprint',
-    description: 'Get a sprint by ID or number',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        sprintId: { type: 'string', description: 'Sprint ID or number' },
-      },
-      required: ['sprintId'],
-    },
-  },
-  {
-    name: 'sprintdesk_updateSprint',
-    description: 'Update a sprint',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        sprintId: { type: 'string', description: 'Sprint ID or number' },
-        name: { type: 'string', description: 'New name' },
-        startDate: { type: 'string', description: 'New start date' },
-        endDate: { type: 'string', description: 'New end date' },
-        status: { type: 'string', enum: ['planned', 'in-progress', 'completed'] },
-      },
-      required: ['sprintId'],
-    },
-  },
-  {
-    name: 'sprintdesk_deleteSprint',
-    description: 'Delete a sprint',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        sprintId: { type: 'string', description: 'Sprint ID or number' },
-      },
-      required: ['sprintId'],
-    },
-  },
-  {
-    name: 'sprintdesk_listSprints',
-    description: 'List all sprints',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        status: { type: 'string', enum: ['planned', 'in-progress', 'completed'] },
-      },
-    },
-  },
-  {
-    name: 'sprintdesk_getTasksBySprint',
-    description: 'Get all tasks in a sprint',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        sprintId: { type: 'string', description: 'Sprint ID or number' },
-      },
-      required: ['sprintId'],
-    },
-  },
-  {
-    name: 'sprintdesk_addTaskToSprint',
-    description: 'Add a task to a sprint',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        sprintId: { type: 'string', description: 'Sprint ID or number' },
-      },
-      required: ['taskId', 'sprintId'],
-    },
-  },
-];
-
-export const BACKLOG_TOOLS = [
-  {
-    name: 'sprintdesk_createBacklog',
-    description: 'Create a new backlog',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Backlog name' },
-        description: { type: 'string', description: 'Backlog description' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'sprintdesk_getBacklog',
-    description: 'Get a backlog by ID or name',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        backlogId: { type: 'string', description: 'Backlog ID or name' },
-      },
-      required: ['backlogId'],
-    },
-  },
-  {
-    name: 'sprintdesk_listBacklogs',
-    description: 'List all backlogs',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-    },
-  },
-  {
-    name: 'sprintdesk_addTaskToBacklog',
-    description: 'Add a task to a backlog',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        backlogId: { type: 'string', description: 'Backlog ID or name' },
-      },
-      required: ['taskId', 'backlogId'],
-    },
-  },
-];
-
-export const MOVE_TOOLS = [
-  {
-    name: 'sprintdesk_moveTaskToEpic',
-    description: 'Move a task to a different epic (will update task code)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        epicId: { type: 'string', description: 'Target Epic ID or code' },
-      },
-      required: ['taskId', 'epicId'],
-    },
-  },
-  {
-    name: 'sprintdesk_moveTaskToSprint',
-    description: 'Move a task to a different sprint',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        sprintId: { type: 'string', description: 'Target Sprint ID or number' },
-      },
-      required: ['taskId', 'sprintId'],
-    },
-  },
-  {
-    name: 'sprintdesk_moveTaskToBacklog',
-    description: 'Move a task to a different backlog',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        backlogId: { type: 'string', description: 'Target Backlog ID or name' },
-      },
-      required: ['taskId', 'backlogId'],
-    },
-  },
-];
 
 export const AGENT_TOOLS = [
   {
@@ -350,70 +18,6 @@ export const AGENT_TOOLS = [
         agentId: { type: 'string', description: 'Agent ID' },
       },
       required: ['agentId'],
-    },
-  },
-];
-
-export const TASK_WORK_TOOLS = [
-  {
-    name: 'sprintdesk_tasksClaim',
-    description: 'Claim a task for an agent (sets workStatus=claimed; does not change classic status)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        agentId: { type: 'string', description: 'Agent ID claiming the task' },
-        runId: { type: 'string', description: 'Optional run ID to bind' },
-      },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'sprintdesk_tasksComplete',
-    description: 'Mark a task complete in the workforce workflow (sets workStatus=done; does not change classic status)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        runId: { type: 'string', description: 'Optional run ID to mark completed' },
-        result: { type: 'string', description: 'Optional run result summary' },
-      },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'sprintdesk_tasksAssign',
-    description: 'Assign a task to an agent or employee (sets task.agent; adds audit entry)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        agentId: { type: 'string', description: 'Agent/employee id or name from sprintdesk_agentsList' },
-      },
-      required: ['taskId', 'agentId'],
-    },
-  },
-  {
-    name: 'sprintdesk_tasksUnassign',
-    description: 'Remove the agent assignment from a task (clears task.agent; adds audit entry)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-      },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'sprintdesk_tasksAutoAssign',
-    description: 'Deterministically rank eligible employees for a task and assign the top candidate (writes only task.agent; adds audit entry). Explicit opt-in only — never called automatically by queueProcess.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: { type: 'string', description: 'Task ID or code' },
-        includePartial: { type: 'boolean', description: 'Include partial-coverage candidates (default false)' },
-      },
-      required: ['taskId'],
     },
   },
 ];
@@ -826,14 +430,141 @@ export const APPROVAL_TOOLS = [
   },
 ];
 
+export const INPUT_TOOLS = [
+  {
+    name: 'sprintdesk_inputsList',
+    description: 'List all inputs (raw work requests flowing through the plan pipeline)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        status: { type: 'string', enum: ['pending', 'classified', 'failed'], description: 'Status filter' },
+        limit: { type: 'number', description: 'Max inputs to return' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_inputsIngest',
+    description: 'Ingest a new raw input into the plan pipeline',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Input title' },
+        description: { type: 'string', description: 'Optional description' },
+        source: { type: 'string', description: 'Source identifier (e.g. mcp, agent, manual)' },
+        category: { type: 'string', description: 'Optional category hint' },
+        priority: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Priority hint' },
+      },
+      required: ['title'],
+    },
+  },
+];
+
+export const PLAN_TOOLS = [
+  {
+    name: 'sprintdesk_plansList',
+    description: 'List plans in the plan registry',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        status: { type: 'string', enum: ['draft', 'active', 'completed', 'failed'], description: 'Status filter' },
+        inputId: { type: 'string', description: 'Filter by source input ID' },
+        limit: { type: 'number', description: 'Max plans to return' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_plansGet',
+    description: 'Get a plan by ID or code',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        planId: { type: 'string', description: 'Plan ID or code' },
+      },
+      required: ['planId'],
+    },
+  },
+  {
+    name: 'sprintdesk_plansReplan',
+    description: 'Replan a failed or stale plan (creates a new cycle + queued run)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        planId: { type: 'string', description: 'Plan ID or code' },
+        reason: { type: 'string', description: 'Optional replan reason' },
+      },
+      required: ['planId'],
+    },
+  },
+];
+
+export const CHECKPOINT_TOOLS = [
+  {
+    name: 'sprintdesk_checkpointsList',
+    description: 'List checkpoints for a run or plan',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        runId: { type: 'string', description: 'Run ID filter' },
+        planId: { type: 'string', description: 'Plan ID filter' },
+        status: { type: 'string', enum: ['ready', 'deployment-authorizing', 'deployed', 'failed'], description: 'Status filter' },
+      },
+    },
+  },
+  {
+    name: 'sprintdesk_checkpointsApproveDeploy',
+    description: 'Approve a checkpoint deploy authorization (resolves pending deploy-authorization approval)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        checkpointId: { type: 'string', description: 'Checkpoint ID' },
+        actorId: { type: 'string', description: 'Approving employee id (must hold plan:deploy)' },
+      },
+      required: ['checkpointId', 'actorId'],
+    },
+  },
+  {
+    name: 'sprintdesk_checkpointsRejectDeploy',
+    description: 'Reject a checkpoint deploy authorization',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        checkpointId: { type: 'string', description: 'Checkpoint ID' },
+        actorId: { type: 'string', description: 'Rejecting employee id (must hold plan:deploy)' },
+      },
+      required: ['checkpointId', 'actorId'],
+    },
+  },
+];
+
+export const CYCLE_TOOLS = [
+  {
+    name: 'sprintdesk_cyclesList',
+    description: 'List execution cycles for a plan or input',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        planId: { type: 'string', description: 'Plan ID filter' },
+        inputId: { type: 'string', description: 'Input ID filter' },
+      },
+    },
+  },
+];
+
+export const ORGANIZER_TOOLS = [
+  {
+    name: 'sprintdesk_organizerRun',
+    description: 'Run one organizer pass: classify inputs → create/update plans → queue runs',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        dryRun: { type: 'boolean', description: 'If true, report what would happen without writing' },
+      },
+    },
+  },
+];
+
 export const ALL_TOOLS = [
-  ...TASK_TOOLS,
-  ...EPIC_TOOLS,
-  ...SPRINT_TOOLS,
-  ...BACKLOG_TOOLS,
-  ...MOVE_TOOLS,
   ...AGENT_TOOLS,
-  ...TASK_WORK_TOOLS,
   ...RUN_TOOLS,
   ...QUEUE_TOOLS,
   ...EVENT_TOOLS,
@@ -843,6 +574,11 @@ export const ALL_TOOLS = [
   ...WORKFORCE_TOOLS,
   ...MCP_TOOLS,
   ...APPROVAL_TOOLS,
+  ...INPUT_TOOLS,
+  ...PLAN_TOOLS,
+  ...CHECKPOINT_TOOLS,
+  ...CYCLE_TOOLS,
+  ...ORGANIZER_TOOLS,
 ];
 
 export function getToolByName(name: string) {

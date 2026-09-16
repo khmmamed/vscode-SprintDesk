@@ -244,7 +244,7 @@ export interface ApprovalGates {
   taskAssignment: ApprovalGateMode;
   runExecution: ApprovalGateMode;
   configChange: ApprovalGateMode;
-  taskProposal: ApprovalGateMode;
+  planClassification: ApprovalGateMode;
   // v1.0 Slice G — deploy authorization is human-gated by default (manual); there
   // is never an automatic deploy path even if the gate were switched to auto.
   deploy: ApprovalGateMode;
@@ -254,11 +254,11 @@ export const DEFAULT_APPROVAL_GATES: ApprovalGates = {
   taskAssignment: 'auto',
   runExecution: 'auto',
   configChange: 'auto',
-  taskProposal: 'auto',
+  planClassification: 'auto',
   deploy: 'manual'
 };
 
-export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change' | 'task-proposal' | 'deploy-authorization';
+export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change' | 'plan-classification' | 'deploy-authorization';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ApprovalPendingAssignTask {

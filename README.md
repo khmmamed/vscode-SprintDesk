@@ -58,8 +58,7 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
   (`.SprintDesk/settings/workflows.yml`)
 
 ### Quick Access
-- Keyboard shortcut: `Ctrl+Shift+T` to add a new task
-- Keyboard shortcut: `Ctrl+Shift+Q` to quickly add a task, epic, or backlog
+- Open the Workforce Control Center from the command palette or the sidebar
 - Quick commands from the command palette
 
 ### Multi-Project Support
@@ -71,27 +70,20 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
 ## Getting Started
 
 1. Open VS Code and click the SprintDesk icon in the sidebar
-2. Right-click on **Repositories** → **Add Repository**
-3. Select your workspace folder
-4. Start adding tasks, epics, backlogs, and sprints!
+2. Open the **People & Workforce** section in the sidebar
+3. Start creating teams, adding people, and running the workforce Control Center
 
 ### Commands
 
 | Do This | Use This Command |
 |---------|------------------|
 | Open the Workforce Control Center | `sprintdesk.openWorkforce` |
-| Add a new task | `sprintdesk.addTask` |
-| Add multiple tasks | `sprintdesk.addMultipleTasks` |
-| Add quickly | `sprintdesk.addQuickly` |
-| Add a new sprint | `sprintdesk.addSprint` |
-| Add a new backlog | `sprintdesk.addBacklog` |
-| Add a new epic | `sprintdesk.addEpic` |
-| View projects | `sprintdesk.viewProjects` |
-| Show sprint calendar | `sprintdesk.showSprintCalendar` |
-| Open sprint file | `sprintdesk.openSprintFile` |
-| View team | `sprintdesk.viewTeam` |
-| Sync team from Git | `sprintdesk.syncTeamFromGit` |
-| View history | `sprintdesk.viewHistory` |
+| View workforce | `sprintdesk.viewWorkforce` |
+| Add a person | `sprintdesk.addEmployee` |
+| Create team | `sprintdesk.createTeam` |
+| Sync people from Git | `sprintdesk.syncPeopleFromGit` |
+| Process queue | `sprintdesk.processQueue` |
+| Start MCP server | `sprintdesk.startMcp` |
 | Refresh | `sprintdesk.refresh` |
 
 ---
