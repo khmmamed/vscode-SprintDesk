@@ -4,6 +4,7 @@ import { requireEmployeePermission } from './capabilityService';
 import { applyProposal } from './classification/classificationService';
 import * as queueService from './queueService';
 import * as workforceService from './workforceService';
+import * as checkpoints from './plan/checkpointService';
 import { emitEvent } from './events';
 import { getApprovalGates, setApprovalGate } from './gates';
 
@@ -34,8 +35,9 @@ export function resolveApproval(approvalId: string, decision: ApprovalDecision, 
 
   requireApprovalPermission('approval:review', actorId);
 
+  const pending = approval.pending;
+
   if (decision === 'approved') {
-    const pending = approval.pending;
     switch (pending.op) {
       case 'assign-task':
         workforceService.performTaskAssignment(pending.taskId, pending.employeeId, pending.requesterId || actorId);
@@ -49,11 +51,20 @@ export function resolveApproval(approvalId: string, decision: ApprovalDecision, 
       case 'apply-proposal':
         applyProposal(pending.proposalId, pending.requesterId || actorId);
         break;
+      case 'authorize-deploy':
+        // The resolving (approving) human is the authorizing actor; the approval
+        // requester may be a validator agent, which must not self-authorize.
+        checkpoints.authorizeDeploy(pending.checkpointId, actorId);
+        break;
     }
   }
 
   const now = new Date().toISOString();
   getStores().approvals.update(approvalId, { status: decision, resolvedAt: now, decisionBy: actorId });
+
+  if (decision === 'rejected' && pending.op === 'authorize-deploy') {
+    checkpoints.onDeployRejected(pending.checkpointId, actorId ? { by: actorId } : {});
+  }
 
   emitEvent('approval.resolved', 'workforce', {
     approvalId,

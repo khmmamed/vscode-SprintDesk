@@ -55,6 +55,7 @@ import { registerWorkforceCommands } from './commands/workforce/workforceCommand
 import { registerWorkforceControlCenter } from './commands/workforce/openWorkforceControlCenter';
 import * as capabilityService from './services/workforce/capabilityService';
 import { installDispatcher } from './services/workforce/plan/dispatcher';
+import { installRecovery } from './services/workforce/plan/recovery';
 import { startScheduler } from './services/workforce/scheduler/organizerEngine';
 // Tasks - import and create wrapper for API compatibility
 import { createTask as createTaskService } from "./services/taskService";
@@ -256,8 +257,10 @@ registerRefreshCommand(context, { sprintsProvider, backlogsProvider, repositorie
   // pollIntervalMs and installs event-path organizer triggers. Both are inert until
   // the user opts in (queueSettings.enabled defaults to false).
   const disposeDispatcher = installDispatcher();
+  const disposeRecovery = installRecovery();
   const schedulerDriver = startScheduler();
   context.subscriptions.push({ dispose: disposeDispatcher });
+  context.subscriptions.push({ dispose: disposeRecovery });
   context.subscriptions.push({ dispose: () => schedulerDriver.stop() });
 
 // Settings commands

@@ -15,4 +15,8 @@ export class CycleStore extends YAMLStore<Cycle> {
   open(): Cycle[] {
     return this.loadAll().filter(c => c.outcome === 'open');
   }
+
+  byPlanId(planId: string): Cycle[] {
+    return this.loadAll().filter(c => c.planIds.includes(planId));
+  }
 }

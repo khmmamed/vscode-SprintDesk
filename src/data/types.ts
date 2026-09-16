@@ -228,12 +228,12 @@ export interface Policy {
 
 export const DEFAULT_POLICY: Policy = {
   roles: {
-    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:propose', 'classification:review', 'classification:apply'],
+    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:propose', 'classification:review', 'classification:apply', 'plan:deploy'],
     developer: ['task:claim', 'run:create'],
     reviewer: ['task:assign', 'task:claim', 'finding:validate', 'classification:review'],
     observer: [],
     agent: ['run:create', 'run:update', 'run:cancel', 'task:claim', 'mcp:list', 'mcp:call', 'classification:propose'],
-    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:review', 'classification:apply']
+    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:review', 'classification:apply', 'plan:deploy']
   },
   overrides: []
 };
@@ -245,16 +245,20 @@ export interface ApprovalGates {
   runExecution: ApprovalGateMode;
   configChange: ApprovalGateMode;
   taskProposal: ApprovalGateMode;
+  // v1.0 Slice G — deploy authorization is human-gated by default (manual); there
+  // is never an automatic deploy path even if the gate were switched to auto.
+  deploy: ApprovalGateMode;
 }
 
 export const DEFAULT_APPROVAL_GATES: ApprovalGates = {
   taskAssignment: 'auto',
   runExecution: 'auto',
   configChange: 'auto',
-  taskProposal: 'auto'
+  taskProposal: 'auto',
+  deploy: 'manual'
 };
 
-export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change' | 'task-proposal';
+export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change' | 'task-proposal' | 'deploy-authorization';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ApprovalPendingAssignTask {
@@ -288,11 +292,23 @@ export interface ApprovalPendingApplyProposal {
   requesterId?: string;
 }
 
+// v1.0 Slice G — deploy authorization flows through the existing approval
+// mechanism (op 'authorize-deploy'); the checkpoint only moves to 'deployed'
+// after a human resolves the approval in the affirmative.
+export interface ApprovalPendingAuthorizeDeploy {
+  op: 'authorize-deploy';
+  checkpointId: string;
+  planId: string;
+  runId?: string;
+  requesterId?: string;
+}
+
 export type ApprovalPending =
   | ApprovalPendingAssignTask
   | ApprovalPendingStartRun
   | ApprovalPendingConfigChange
-  | ApprovalPendingApplyProposal;
+  | ApprovalPendingApplyProposal
+  | ApprovalPendingAuthorizeDeploy;
 
 export interface Approval {
   id: string;
@@ -978,6 +994,16 @@ export interface Checkpoint {
   runId?: string;
   artifacts: string[];
   status: CheckpointStatus;
+  // v1.0 Slice G — the checkpoint captures the exact Git position and the
+  // validation evidence that produced it (additive, non-breaking).
+  gitRef?: string;
+  gitCommit?: string;
+  validation?: {
+    decision: 'passed';
+    evidence: string[];
+    validatedBy?: string;
+    validatedAt: string;
+  };
   deploymentDecision?: CheckpointDeploymentDecision;
 }
 
