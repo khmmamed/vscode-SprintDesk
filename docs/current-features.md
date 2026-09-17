@@ -1,6 +1,6 @@
 # SprintDesk Current Features
 
-**Version 1.0.0 — Plan-native.** SprintDesk is a Visual Studio Code extension for **autonomous, policy-gated
+**Version 1.0.1 — Plan-native.** SprintDesk is a Visual Studio Code extension for **autonomous, policy-gated
 workforce orchestration**. A **Plan is the only unit that can enter execution**; the legacy
 Task/Epic/Backlog/Sprint project-management surface is removed from the active runtime. All runtime state lives
 under `.SprintDesk/database/`.
