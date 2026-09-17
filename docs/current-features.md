@@ -185,9 +185,8 @@ the services. The former `workforce/` state root is gone (one-way legacy read fa
 | Refresh | `sprintdesk.refresh` |
 
 The sidebar shows the **People & Workforce** and **History** sections; plan- and workforce-driven flows live in
-the Control Center. The legacy `sprintdesk.*` settings in the extension manifest are retained for backward
-compatibility but are not consumed by the v1.0 runtime — operational configuration lives under
-`.SprintDesk/settings/`.
+the Control Center. The v1.0 manifest declares no `sprintdesk.*` extension settings — operational configuration
+lives under `.SprintDesk/settings/`.
 
 ---
 

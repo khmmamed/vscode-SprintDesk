@@ -3,29 +3,13 @@ import { IHost, GitUser, MessageType, ExecOptions, ExecResult } from './IHost';
 
 export class NodeHost implements IHost {
   private root: string;
-  private settings: Record<string, unknown>;
 
-  constructor(options?: { workspaceRoot?: string; config?: Record<string, unknown> }) {
+  constructor(options?: { workspaceRoot?: string }) {
     this.root = options?.workspaceRoot || process.env.SPRINTDESK_WORKSPACE || process.cwd();
-    this.settings = options?.config || {};
   }
 
   getWorkspaceRoot(): string | undefined {
     return this.root;
-  }
-
-  getConfig<T>(key: string, defaultValue?: T): T {
-    const value = this.lookup(key);
-    return (value === undefined ? defaultValue : value) as T;
-  }
-
-  private lookup(key: string): unknown {
-    return key.split('.').reduce<unknown>((acc, part) => {
-      if (acc !== null && typeof acc === 'object') {
-        return (acc as Record<string, unknown>)[part];
-      }
-      return undefined;
-    }, this.settings);
   }
 
   showMessage(message: string, type: MessageType = 'info'): void {

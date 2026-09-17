@@ -95,8 +95,7 @@ Operational configuration is **data-driven** and lives in the workspace under `.
 (`queue.yml`, `schedules.yml`, `workflows.yml`, `credentials.secret.json`). Approval gates
 (`run-execution`, `config-change`, `plan-classification`, `deploy`) are configured in `queue.yml`.
 
-The legacy `sprintdesk.*` settings in the extension manifest are retained for backward compatibility but are not
-consumed by the v1.0 runtime.
+There are no extension settings: the v1.0 manifest declares no `sprintdesk.*` configuration properties.
 
 ---
 

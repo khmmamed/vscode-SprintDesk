@@ -109,6 +109,15 @@ describe('documentation consistency (v1.0.0)', () => {
     assert.doesNotMatch(docs, /`task` \/ `loop`/, 'docs must describe the plan / loop / tool / condition DSL');
   });
 
+  it('the extension manifest declares no legacy sprintdesk.* settings (Slice N)', () => {
+    const pkg = JSON.parse(read('package.json')) as {
+      contributes?: { configuration?: { properties?: Record<string, unknown> } };
+    };
+    const props = pkg.contributes?.configuration?.properties ?? {};
+    const legacy = Object.keys(props).filter((key) => key.startsWith('sprintdesk.'));
+    assert.deepEqual(legacy, [], `legacy sprintdesk.* settings must be removed, found: ${legacy.join(', ')}`);
+  });
+
   it('the v1.0.0 proposal is marked implemented and defers the known debt', () => {
     const proposal = read('docs/v1.0.0-proposal.md');
     assert.match(proposal, /Status: implemented \(v1\.0\.0\)/, 'proposal must be marked implemented');

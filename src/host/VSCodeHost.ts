@@ -12,12 +12,6 @@ export class VSCodeHost implements IHost {
     return folder?.uri.fsPath;
   }
 
-  getConfig<T>(key: string, defaultValue?: T): T {
-    const cfg = vscode.workspace.getConfiguration('sprintdesk');
-    const value = defaultValue === undefined ? cfg.get<T>(key) : cfg.get<T>(key, defaultValue);
-    return (value === undefined ? defaultValue : value) as T;
-  }
-
   showMessage(message: string, type: MessageType = 'info'): void {
     if (type === 'error') {
       vscode.window.showErrorMessage(message);

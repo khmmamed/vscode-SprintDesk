@@ -18,7 +18,6 @@ export interface ExecResult {
 
 export interface IHost {
   getWorkspaceRoot(): string | undefined;
-  getConfig<T>(key: string, defaultValue?: T): T;
   showMessage(message: string, type?: MessageType): void;
   getGitUser(): Promise<GitUser | undefined>;
   execSync(command: string, options?: ExecOptions): ExecResult;
