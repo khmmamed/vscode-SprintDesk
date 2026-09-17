@@ -3,8 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { setWorkspaceRootOverride } from '../../src/services/fileService';
 import { getStores } from '../../src/data/stores';
-import { getDataService } from '../../src/data/DataService';
-import { AgentConfig, Employee, Plan, Run, Task } from '../../src/data/types';
+import { AgentConfig, Employee, Plan, Run } from '../../src/data/types';
 import { materializePlan } from '../../src/services/workforce/plan/planService';
 
 let currentRoot = '';
@@ -17,15 +16,12 @@ export interface TestWorkspace {
 
 export function makeWorkspace(): TestWorkspace {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sprintdesk-test-'));
-  fs.mkdirSync(path.join(root, '.SprintDesk', 'data'), { recursive: true });
-  fs.mkdirSync(path.join(root, '.SprintDesk', 'Tasks'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'people'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'database'), { recursive: true });
-  for (const key of ['tasks', 'backlogs', 'epics', 'sprints']) {
-    fs.writeFileSync(path.join(root, '.SprintDesk', 'data', `${key}.yml`), `${key}: []`, 'utf8');
-  }
-  // v1.0 Slice A — database/ is the single runtime-state boundary; executions.yml
-  // keeps its internal `runs` key
+  fs.mkdirSync(path.join(root, '.SprintDesk', 'workforce'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.SprintDesk', 'plans'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.SprintDesk', 'inputs'), { recursive: true });
+  // database/ registry files
   const dbFiles: Record<string, string> = {
     inputs: 'inputs',
     plans: 'plans',
@@ -38,13 +34,17 @@ export function makeWorkspace(): TestWorkspace {
   for (const [file, key] of Object.entries(dbFiles)) {
     fs.writeFileSync(path.join(root, '.SprintDesk', 'database', `${file}.yml`), `${key}: []`, 'utf8');
   }
+  // people/ files
   for (const key of ['humans', 'agents']) {
     fs.writeFileSync(path.join(root, '.SprintDesk', 'people', `${key}.yml`), `${key}: []`, 'utf8');
+  }
+  // workforce/ files
+  for (const key of ['skills', 'eventRules', 'findings', 'classification', 'approvals', 'executionWindows']) {
+    fs.writeFileSync(path.join(root, '.SprintDesk', 'workforce', `${key}.yml`), `${key}: []`, 'utf8');
   }
   currentRoot = root;
   setWorkspaceRootOverride(root);
   getStores(root);
-  getDataService(root).clearConfigCache();
   return {
     root,
     cleanup(): void {
@@ -87,30 +87,6 @@ export function makeAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConf
   return { tool: 'custom', command: 'echo {description}', ...overrides };
 }
 
-export function makeTask(overrides: Partial<Task> = {}): Task {
-  const now = new Date().toISOString();
-  const number = sequence + 1;
-  const task: Task = {
-    id: nextId('task'),
-    number,
-    code: `SPD-${number}`,
-    name: `Task ${number}`,
-    title: `Task ${number}`,
-    type: 'feature',
-    status: 'waiting',
-    priority: 'medium',
-    epic: null,
-    backlog: 'features',
-    sprint: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides
-  };
-  getDataService(currentRoot).addTask(task);
-  return task;
-}
-
-// v1.0 Slice D — tests build runnable-by-default Plans (the queue's execution unit).
 export function makePlan(overrides: Partial<Plan> = {}): Plan {
   const plan = materializePlan(
     {

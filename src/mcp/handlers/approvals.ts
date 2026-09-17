@@ -17,8 +17,8 @@ function handle_sprintdesk_gatesSet(args: any): HandlerResult {
   try {
     const type: ApprovalType = args.gate;
     const mode = args.mode;
-    if (!['task-assignment', 'run-execution', 'config-change'].includes(type)) {
-      return res(`Unknown gate: ${type}. Expected one of task-assignment, run-execution, config-change`, true);
+    if (!['plan-classification', 'run-execution', 'config-change', 'deploy-authorization'].includes(type)) {
+      return res(`Unknown gate: ${type}. Expected plan-classification, run-execution, config-change, or deploy-authorization`, true);
     }
     if (!['auto', 'manual'].includes(mode)) {
       return res(`Unknown mode: ${mode}. Expected auto or manual`, true);

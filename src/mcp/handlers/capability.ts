@@ -1,7 +1,7 @@
 import { getStores } from '../../data/stores';
 import * as capability from '../../services/workforce/capabilityService';
-import { Task } from '../../data/types';
-import { Handler, HandlerResult, res, getDs, findTask } from './helpers';
+import { ProposalType } from '../../data/types';
+import { Handler, HandlerResult, res } from './helpers';
 
 function handle_sprintdesk_skillsList(args: any): HandlerResult {
   getStores().skills.seedDefaultSkills();
@@ -49,18 +49,27 @@ function handle_sprintdesk_policyGet(args: any): HandlerResult {
 }
 
 function handle_sprintdesk_recommendEmployees(args: any): HandlerResult {
-  const ds = getDs();
-  let task: Pick<Task, 'type' | 'requiredSkills'> | undefined;
+  let task: capability.SkillTaskSpec | undefined;
 
-  if (args.taskId) {
-    if (!ds) return res('No workspace found', true);
-    const found = findTask(ds, args.taskId);
-    if (!found) return res(`Task not found: ${args.taskId}`, true);
-    task = { type: found.type, requiredSkills: found.requiredSkills };
+  if (args.planId) {
+    const plan = getStores().plans.getById(args.planId);
+    if (!plan) return res(`Plan not found: ${args.planId}`, true);
+    const axis = plan.classification?.current || plan.classification?.original;
+    const type = axis?.category;
+    const typeToProposal: Record<string, ProposalType> = {
+      feature: 'feature',
+      bug: 'bug',
+      maintenance: 'chore',
+      documentation: 'doc',
+      test: 'test',
+      research: 'feature'
+    };
+    const proposalType = type ? typeToProposal[type] : undefined;
+    task = { type: proposalType || 'feature', requiredSkills: args.requiredSkills };
   } else if (args.type) {
-    task = { type: args.type as Task['type'], requiredSkills: args.requiredSkills };
+    task = { type: args.type as ProposalType, requiredSkills: args.requiredSkills };
   } else {
-    return res('Provide either taskId or type', true);
+    return res('Provide either planId or type', true);
   }
 
   const results = capability.recommendEmployees(task, {

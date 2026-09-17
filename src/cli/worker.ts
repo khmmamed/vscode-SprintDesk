@@ -2,7 +2,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
-import { getDataService } from '../data/DataService';
 import { WorkerMode } from '../data/types';
 import * as queueService from '../services/workforce/queueService';
 import * as worker from '../services/workforce/worker/worker';
@@ -28,7 +27,6 @@ function parseMode(value: string | undefined): WorkerMode {
 
 export async function buildQueuePass(ws: string, argv: string[] = []): Promise<any> {
   fileService.setWorkspaceRootOverride(ws);
-  getDataService(ws);
 
   const mode = parseMode(flagValue(argv, 'worker'));
   const limitRaw = flagValue(argv, 'limit');

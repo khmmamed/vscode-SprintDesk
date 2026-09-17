@@ -59,8 +59,6 @@ export interface CreateFindingInput {
   agentName?: string;
   // v1.0 Slice D — run-produced findings link to the executed Plan.
   planId?: string;
-  // Legacy classification link (task proposals), retained until Slice H/I.
-  taskId?: string;
   severity?: FindingSeverity;
   confidence?: number;
   category?: string;
@@ -85,7 +83,6 @@ export function createFinding(input: CreateFindingInput): Finding {
     status: 'pending',
     agentValidationState: 'requested',
     agentValidationRequestedAt: now,
-    ...(input.taskId ? { taskId: input.taskId } : {}),
     ...(input.planId ? { planId: input.planId } : {}),
     ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
     ...(input.category ? { category: input.category } : {}),
@@ -102,7 +99,6 @@ export function createFinding(input: CreateFindingInput): Finding {
       findingId: finding.id,
       runId: input.runId,
       planId: input.planId,
-      taskId: input.taskId,
       agentId: input.agent,
       severity: finding.severity,
       status: finding.status
@@ -111,7 +107,6 @@ export function createFinding(input: CreateFindingInput): Finding {
       findingId: finding.id,
       runId: input.runId,
       planId: input.planId,
-      taskId: input.taskId,
       severity: finding.severity
     });
   }
@@ -174,7 +169,7 @@ export function updateStatus(findingId: string, decision: FindingDecision, actor
   emitEvent('finding.resolved', 'findings', {
     findingId,
     runId: finding.source?.runId,
-    taskId: finding.taskId,
+    planId: finding.planId,
     agentId: finding.agent,
     status: decision,
     decisionBy: actorId
@@ -186,17 +181,17 @@ export function updateStatus(findingId: string, decision: FindingDecision, actor
     action: `finding.${decision}`,
     targetType: 'finding',
     targetId: findingId,
-    details: { runId: finding.source?.runId, taskId: finding.taskId, severity: finding.severity },
+    details: { runId: finding.source?.runId, planId: finding.planId, severity: finding.severity },
     timestamp: now
   });
 
   return getStores().findings.getById(findingId);
 }
 
-export function linkFindingToTask(findingId: string, taskId: string): Finding | undefined {
+export function linkFindingToPlan(findingId: string, planId: string): Finding | undefined {
   const finding = getStores().findings.getById(findingId);
   if (!finding) {return undefined;}
-  getStores().findings.update(findingId, { taskId });
+  getStores().findings.update(findingId, { planId });
   return getStores().findings.getById(findingId);
 }
 
@@ -214,7 +209,7 @@ export function requestAgentValidation(findingId: string): Finding | undefined {
   emitEvent('finding.validation.requested', 'findings', {
     findingId,
     runId: finding.source?.runId,
-    taskId: finding.taskId,
+    planId: finding.planId,
     severity: finding.severity
   });
 
@@ -258,7 +253,7 @@ export function validateFinding(findingId: string, input: FindingValidationInput
   emitEvent('finding.validated', 'findings', {
     findingId,
     runId: finding.source?.runId,
-    taskId: finding.taskId,
+    planId: finding.planId,
     validatorId: review.validatorId,
     recommendation: review.recommendation,
     confidence: review.confidence,
@@ -273,7 +268,7 @@ export function validateFinding(findingId: string, input: FindingValidationInput
     targetId: findingId,
     details: {
       runId: finding.source?.runId,
-      taskId: finding.taskId,
+      planId: finding.planId,
       severity: finding.severity,
       recommendation: review.recommendation,
       confidence: review.confidence,

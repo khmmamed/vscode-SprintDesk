@@ -1,5 +1,4 @@
 import { getStores } from '../../data/stores';
-import { getDataService, DataService } from '../../data/DataService';
 import { EventRecord, EventRule, EventRuleMatcher, EventRuleTrigger } from '../../data/types';
 import { requireEmployeePermission } from './capabilityService';
 import { executeWorkflow } from './workflow/engine';
@@ -27,7 +26,6 @@ export interface RuleTriggerResult {
 }
 
 export interface ProcessEventRulesOptions {
-  dataService?: DataService;
   stores?: ReturnType<typeof getStores>;
   now?: Date;
 }
@@ -263,8 +261,7 @@ export async function processEventRules(event: EventRecord, options: ProcessEven
   const results: RuleTriggerResult[] = [];
 
   try {
-    const dataService = options.dataService ?? getDataService();
-    const stores = options.stores ?? getStores(dataService.getWorkspaceRoot());
+    const stores = options.stores ?? getStores();
 
     const rules = stores.eventRules.loadAll().slice().sort((a, b) => a.id.localeCompare(b.id));
 
@@ -308,7 +305,7 @@ export async function processEventRules(event: EventRecord, options: ProcessEven
         continue;
       }
 
-      const runResult = await executeWorkflow(workflow, { stores, dataService });
+      const runResult = await executeWorkflow(workflow, { stores });
       const createdPlanIds = collectPlanIds(runResult);
       recordTrigger(stores, rule, event, runResult.status, createdPlanIds, workflow.name, runResult.error);
 

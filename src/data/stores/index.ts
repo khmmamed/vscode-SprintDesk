@@ -1,4 +1,4 @@
-import { getDataService } from '../DataService';
+import { getWorkspaceRoot } from '../../services/fileService';
 import { getHost } from '../../host';
 import { RunStore } from './RunStore';
 import { EventStore } from './EventStore';
@@ -63,8 +63,7 @@ let activeStoresRoot: string | undefined;
 
 function resolveRoot(workspaceRoot?: string): string {
   if (workspaceRoot) return workspaceRoot;
-  const dataRoot = getDataService().getWorkspaceRoot();
-  return (dataRoot || getHost().getWorkspaceRoot() || '') as string;
+  return getWorkspaceRoot() || getHost().getWorkspaceRoot() || '';
 }
 
 export function getStores(workspaceRoot?: string): Stores {

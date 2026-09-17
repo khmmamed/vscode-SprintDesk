@@ -146,7 +146,7 @@ export const HISTORY_TOOLS = [
       type: 'object' as const,
       properties: {
         itemId: { type: 'string', description: 'Item ID filter' },
-        itemType: { type: 'string', enum: ['task', 'epic', 'backlog', 'sprint'], description: 'Item type filter' },
+        itemType: { type: 'string', enum: ['plan', 'run', 'checkpoint'], description: 'Item type filter' },
         limit: { type: 'number', description: 'Max entries to return' },
       },
     },
@@ -158,7 +158,7 @@ export const HISTORY_TOOLS = [
       type: 'object' as const,
       properties: {
         itemId: { type: 'string', description: 'Item ID' },
-        itemType: { type: 'string', enum: ['task', 'epic', 'backlog', 'sprint'], description: 'Item type' },
+        itemType: { type: 'string', enum: ['plan', 'run', 'checkpoint'], description: 'Item type' },
         action: { type: 'string', enum: ['create', 'update', 'delete', 'move', 'assign'], description: 'Change action' },
         field: { type: 'string', description: 'Optional changed field' },
         oldValue: { type: 'string', description: 'Optional previous value' },
@@ -233,12 +233,12 @@ export const WORKFORCE_TOOLS = [
   },
   {
     name: 'sprintdesk_recommendEmployees',
-    description: 'Deterministically rank employees for a task by skill coverage -> lower load -> idle -> name -> id',
+    description: 'Deterministically rank employees for a plan or classification type by skill coverage -> lower load -> idle -> name -> id',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        taskId: { type: 'string', description: 'Task id or code; its type/requiredSkills drive the match' },
-        type: { type: 'string', enum: ['feature', 'bug', 'chore', 'doc', 'test'], description: 'Task type when taskId is not provided' },
+        planId: { type: 'string', description: 'Plan id; its classification category/requiredSkills drive the match' },
+        type: { type: 'string', enum: ['feature', 'bug', 'chore', 'doc', 'test'], description: 'Classification type when planId is not provided' },
         requiredSkills: { type: 'array', items: { type: 'string' }, description: 'Override required skills' },
         includePartial: { type: 'boolean', description: 'Include partial-coverage candidates (default false)' },
         maxResults: { type: 'number', description: 'Max ranked results (default all)' },
@@ -359,7 +359,7 @@ export const MCP_TOOLS = [
 export const APPROVAL_TOOLS = [
   {
     name: 'sprintdesk_gatesGet',
-    description: 'Read the current approval gate modes (task-assignment, run-execution, config-change): auto or manual',
+    description: 'Read the current approval gate modes (plan-classification, run-execution, config-change, deploy-authorization): auto or manual',
     inputSchema: {
       type: 'object' as const,
       properties: {},
@@ -371,7 +371,7 @@ export const APPROVAL_TOOLS = [
     inputSchema: {
       type: 'object' as const,
       properties: {
-        gate: { type: 'string', enum: ['task-assignment', 'run-execution', 'config-change'], description: 'Which gate to configure' },
+        gate: { type: 'string', enum: ['plan-classification', 'run-execution', 'config-change', 'deploy-authorization'], description: 'Which gate to configure' },
         mode: { type: 'string', enum: ['auto', 'manual'], description: 'auto = proceed without approval, manual = requires approval' },
         actorId: { type: 'string', description: 'Acting employee id or name (must hold approval:configure)' },
       },

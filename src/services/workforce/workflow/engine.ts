@@ -10,7 +10,6 @@ import {
   WorkflowTaskStep,
   WorkflowToolStep
 } from '../../../data/types';
-import { DataService, getDataService } from '../../../data/DataService';
 import { getStores, Stores } from '../../../data/stores';
 import { emitEvent } from '../events';
 import { callServerTool } from '../mcp/client';
@@ -26,7 +25,6 @@ export interface WorkflowContext {
 
 export interface ExecuteWorkflowOptions {
   now?: Date;
-  dataService?: DataService;
   stores?: Stores;
 }
 
@@ -81,7 +79,6 @@ function executeTaskStep(
   step: WorkflowTaskStep,
   context: WorkflowContext,
   now: Date,
-  dataService: DataService,
   stores: Stores
 ): WorkflowStepResult {
   const title = taskTitle(step, context);
@@ -126,14 +123,13 @@ async function executeLoopStep(
   step: WorkflowLoopStep,
   context: WorkflowContext,
   now: Date,
-  dataService: DataService,
   stores: Stores
 ): Promise<WorkflowStepResult> {
   const results: WorkflowStepResult[] = [];
   for (let index = 0; index < step.maxIterations; index += 1) {
     context.variables[step.iterateVar] = index;
     for (const bodyStep of step.body) {
-      const result = await executeStep(bodyStep, context, now, dataService, stores);
+      const result = await executeStep(bodyStep, context, now, stores);
       results.push(result);
       context.stepOutputs.set(bodyStep.id, result);
       if (result.status === 'failed' && !bodyStep.continueOnError) {
@@ -152,7 +148,6 @@ async function executeConditionStep(
   step: WorkflowConditionStep,
   context: WorkflowContext,
   now: Date,
-  dataService: DataService,
   stores: Stores
 ): Promise<WorkflowStepResult> {
   const takeThen = evaluateCondition(step.when, context.stepOutputs);
@@ -162,7 +157,7 @@ async function executeConditionStep(
   }
   const results: WorkflowStepResult[] = [];
   for (const branchStep of branch) {
-    const result = await executeStep(branchStep, context, now, dataService, stores);
+    const result = await executeStep(branchStep, context, now, stores);
     results.push(result);
     context.stepOutputs.set(branchStep.id, result);
     if (result.status === 'failed' && !branchStep.continueOnError) {
@@ -180,18 +175,17 @@ async function executeStep(
   step: WorkflowStep,
   context: WorkflowContext,
   now: Date,
-  dataService: DataService,
   stores: Stores
 ): Promise<WorkflowStepResult> {
   switch (step.type) {
     case 'task':
-      return executeTaskStep(step, context, now, dataService, stores);
+      return executeTaskStep(step, context, now, stores);
     case 'loop':
-      return executeLoopStep(step, context, now, dataService, stores);
+      return executeLoopStep(step, context, now, stores);
     case 'tool':
       return executeToolStep(step, context, now);
     case 'condition':
-      return executeConditionStep(step, context, now, dataService, stores);
+      return executeConditionStep(step, context, now, stores);
     default:
       return failed((step as { id: string; type: string }).id, `unsupported step type '${(step as { type: string }).type}'`);
   }
@@ -201,13 +195,12 @@ export async function executeWorkflow(workflow: WorkflowDefinition, options: Exe
   validateWorkflow(workflow);
 
   const now = options.now ?? new Date();
-  const dataService = options.dataService ?? getDataService();
-  const stores = options.stores ?? getStores(dataService.getWorkspaceRoot());
+  const stores = options.stores || getStores();
   const context = createContext(workflow.id, workflow.name);
   const stepResults: WorkflowStepResult[] = [];
 
   for (const step of workflow.steps) {
-    const result = await executeStep(step, context, now, dataService, stores);
+    const result = await executeStep(step, context, now, stores);
     stepResults.push(result);
     context.stepOutputs.set(step.id, result);
 

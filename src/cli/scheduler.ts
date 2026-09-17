@@ -2,7 +2,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fileService from '../services/fileService';
-import { getDataService } from '../data/DataService';
 import { getQueueSettings } from '../services/workforce/queueService';
 import { runOrganizerPass } from '../services/workforce/plan/organizer';
 import { startScheduler } from '../services/workforce/scheduler/organizerEngine';
@@ -45,7 +44,6 @@ export interface SchedulerCliResult {
 
 export async function buildSchedulerPass(ws: string, argv: string[] = []): Promise<SchedulerCliResult> {
   fileService.setWorkspaceRootOverride(ws);
-  getDataService(ws);
 
   if (hasFlag(argv, 'organize')) {
     // Manual force-run: a single capped Organizer pass, independent of schedules.

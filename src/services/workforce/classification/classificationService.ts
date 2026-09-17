@@ -1,30 +1,30 @@
-import { getDataService } from '../../../data/DataService';
 import { getHost } from '../../../host';
 import { getStores } from '../../../data/stores';
-import { Finding, Task, TaskProposal, TaskProposalEdit, TaskProposalTaskPayload } from '../../../data/types';
-import { getTaskService } from '../../taskService';
+import { Finding, PlanPriority, ProposalType, ProposalPriority, TaskProposal, TaskProposalEdit, TaskProposalTaskPayload } from '../../../data/types';
+import { getWorkspaceRoot } from '../../../services/fileService';
 import { requireEmployeePermission } from '../capabilityService';
 import { emitEvent } from '../events';
 import { gateMode, requestApproval } from '../gates';
 import * as findingsService from '../findingsService';
 import { classifyFinding as llmClassifyFinding, ClassificationOutcome } from '../worker/classifier';
 import { LLMProvider } from '../llm/types';
+import { materializePlan, planTitleFor, legacyTaskKindToPlanCategory } from '../plan/planService';
 
-export const TASK_TYPES: Task['type'][] = ['feature', 'bug', 'chore', 'doc', 'test'];
-export const TASK_PRIORITIES: Task['priority'][] = ['high', 'medium', 'low'];
+export const TASK_TYPES: ProposalType[] = ['feature', 'bug', 'chore', 'doc', 'test'];
+export const TASK_PRIORITIES: ProposalPriority[] = ['high', 'medium', 'low'];
 
 export interface ProposalClassification {
   title?: string;
-  type?: Task['type'];
-  priority?: Task['priority'];
+  type?: ProposalType;
+  priority?: ProposalPriority;
   workflow?: string;
   confidence?: number;
 }
 
 export interface ResolvedClassification {
   title: string;
-  type: Task['type'];
-  priority: Task['priority'];
+  type: ProposalType;
+  priority: ProposalPriority;
   workflow?: string;
   confidence?: number;
   reason?: string;
@@ -40,30 +40,35 @@ export interface ClassificationPassResult {
 }
 
 function proposalRoot(): string {
-  return getDataService().getWorkspaceRoot() || getHost().getWorkspaceRoot() || '';
+  return getWorkspaceRoot() || getHost().getWorkspaceRoot() || '';
 }
-
-function taskSvc() { return getTaskService(proposalRoot()); }
 
 function severityRank(severity: Finding['severity']): number {
   return severity === 'high' ? 2 : severity === 'medium' ? 1 : 0;
 }
 
-function severityToPriority(severity: Finding['severity']): Task['priority'] {
+function severityToPriority(severity: Finding['severity']): ProposalPriority {
   return severity === 'high' ? 'high' : severity === 'medium' ? 'medium' : 'low';
+}
+
+function ProposalPriorityToPlanPriority(priority: ProposalPriority): PlanPriority {
+  return priority === 'high' ? 'high' : priority === 'medium' ? 'medium' : 'low';
 }
 
 function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function openTasks(): Task[] {
-  return taskSvc().loadTasks().filter(t => t.status !== 'done' && t.status !== 'cancelled');
+/** Plans with scheduling status not in {done, failed, cancelled} are "open". */
+function openPlans() {
+  const statuses = new Set(['done', 'failed', 'cancelled']);
+  return getStores().plans.loadAll().filter(p => !statuses.has(p.scheduling.status));
 }
 
-function hasOpenTaskWithTitle(title: string): boolean {
+function hasOpenPlanWithTitle(title: string): boolean {
   const normalized = normalizeTitle(title);
-  return openTasks().some(t => normalizeTitle(t.title) === normalized);
+  const root = proposalRoot();
+  return openPlans().some(p => normalizeTitle(planTitleFor(p, root) || p.id) === normalized);
 }
 
 function proposalId(): string {
@@ -71,7 +76,7 @@ function proposalId(): string {
 }
 
 export function hasDeterministicSuggestion(finding: Finding): boolean {
-  return typeof finding.suggestedTaskType === 'string' && TASK_TYPES.includes(finding.suggestedTaskType as Task['type']);
+  return typeof finding.suggestedTaskType === 'string' && TASK_TYPES.includes(finding.suggestedTaskType);
 }
 
 export function hasProposal(findingId: string): boolean {
@@ -79,10 +84,10 @@ export function hasProposal(findingId: string): boolean {
 }
 
 export function invalidSuggestionReason(finding: Finding): string | undefined {
-  if (finding.suggestedTaskType !== undefined && !TASK_TYPES.includes(finding.suggestedTaskType as Task['type'])) {
+  if (finding.suggestedTaskType !== undefined && !TASK_TYPES.includes(finding.suggestedTaskType)) {
     return `invalid suggestedTaskType '${finding.suggestedTaskType}'`;
   }
-  if (finding.suggestedPriority !== undefined && !TASK_PRIORITIES.includes(finding.suggestedPriority as Task['priority'])) {
+  if (finding.suggestedPriority !== undefined && !TASK_PRIORITIES.includes(finding.suggestedPriority)) {
     return `invalid suggestedPriority '${finding.suggestedPriority}'`;
   }
   if (!hasDeterministicSuggestion(finding)) {
@@ -100,7 +105,7 @@ export function validateSuggestion(
     ok: true,
     value: {
       title: finding.title.trim() || 'Untitled finding',
-      type: finding.suggestedTaskType as Task['type'],
+      type: finding.suggestedTaskType as ProposalType,
       priority: finding.suggestedPriority || severityToPriority(finding.severity),
       ...(finding.suggestedWorkflow && finding.suggestedWorkflow.trim().length > 0
         ? { workflow: finding.suggestedWorkflow.trim() }
@@ -135,9 +140,9 @@ export function createProposal(finding: Finding, classification?: ProposalClassi
   if (resolved.reason || failedReason) {
     proposal.status = 'failed';
     proposal.reason = failedReason || resolved.reason;
-  } else if (hasOpenTaskWithTitle(proposal.title)) {
+  } else if (hasOpenPlanWithTitle(proposal.title)) {
     proposal.status = 'duplicate';
-    proposal.reason = 'open task with a matching title already exists';
+    proposal.reason = 'open plan with a matching title already exists';
   }
 
   getStores().proposals.add(proposal);
@@ -171,20 +176,20 @@ function resolveClassification(finding: Finding, classification?: ProposalClassi
     return { title: finding.title.trim() || 'Untitled finding', type: 'feature', priority: severityToPriority(finding.severity), reason: validated.reason };
   }
 
-  const type: Task['type'] | undefined =
+  const type: ProposalType | undefined =
     classification.type && TASK_TYPES.includes(classification.type) ? classification.type
-    : finding.suggestedTaskType && TASK_TYPES.includes(finding.suggestedTaskType as Task['type']) ? (finding.suggestedTaskType as Task['type'])
+    : finding.suggestedTaskType && TASK_TYPES.includes(finding.suggestedTaskType) ? finding.suggestedTaskType
     : undefined;
 
   if (!type) {
     return { title: classification.title || finding.title, type: 'feature', priority: severityToPriority(finding.severity), reason: `invalid type '${String(classification.type)}'` };
   }
 
-  const priority: Task['priority'] =
+  const priority: ProposalPriority =
     classification.priority && TASK_PRIORITIES.includes(classification.priority)
       ? classification.priority
-      : finding.suggestedPriority && TASK_PRIORITIES.includes(finding.suggestedPriority as Task['priority'])
-        ? (finding.suggestedPriority as Task['priority'])
+      : finding.suggestedPriority && TASK_PRIORITIES.includes(finding.suggestedPriority)
+        ? finding.suggestedPriority
         : severityToPriority(finding.severity);
 
   return {
@@ -204,25 +209,30 @@ export function applyProposal(proposalIdInput: string, actorId?: string): TaskPr
   if (!proposal) {return undefined;}
   if (proposal.status !== 'pending') {return proposal;}
 
-  if (hasOpenTaskWithTitle(proposal.title)) {
+  if (hasOpenPlanWithTitle(proposal.title)) {
     const now = new Date().toISOString();
-    getStores().proposals.update(proposal.id, { status: 'duplicate', reason: 'open task with a matching title already exists' });
+    getStores().proposals.update(proposal.id, { status: 'duplicate', reason: 'open plan with a matching title already exists' });
     return getStores().proposals.getById(proposal.id);
   }
 
-  const task = taskSvc().createTask({ title: proposal.title, type: proposal.type, priority: proposal.priority });
-  getDataService(proposalRoot()).updateTask(task.id, { source: 'classification', ...(proposal.workflow ? { workflow: proposal.workflow } : {}) });
+  const plan = materializePlan({
+    sourceInputId: `proposal:${proposal.id}`,
+    title: proposal.title,
+    description: proposal.reason,
+    category: legacyTaskKindToPlanCategory(proposal.type),
+    priority: ProposalPriorityToPlanPriority(proposal.priority)
+  }, { workspaceRoot: proposalRoot() });
 
   const now = new Date().toISOString();
-  getStores().proposals.update(proposal.id, { status: 'applied', appliedTaskId: task.id, appliedAt: now });
+  getStores().proposals.update(proposal.id, { status: 'applied', appliedPlanId: plan.id, appliedAt: now });
 
-  findingsService.linkFindingToTask(proposal.findingId, task.id);
+  findingsService.linkFindingToPlan(proposal.findingId, plan.id);
   findingsService.updateStatus(proposal.findingId, 'approved', actorId);
 
   emitEvent('finding.classified', 'classification', {
     proposalId: proposal.id,
     findingId: proposal.findingId,
-    taskId: task.id,
+    planId: plan.id,
     actorId
   });
 
@@ -232,7 +242,7 @@ export function applyProposal(proposalIdInput: string, actorId?: string): TaskPr
     action: 'classification.apply',
     targetType: 'proposal',
     targetId: proposal.id,
-    details: { findingId: proposal.findingId, taskId: task.id },
+    details: { findingId: proposal.findingId, planId: plan.id },
     timestamp: now
   });
 
@@ -312,16 +322,16 @@ function mergeProposalPayload(before: TaskProposalTaskPayload, changes: Proposal
     if (title.length === 0) {throw new Error('invalid proposal title: must be non-empty');}
   }
 
-  let type: Task['type'] = before.type;
+  let type: ProposalType = before.type;
   if (changes.type !== undefined) {
-    if (!TASK_TYPES.includes(changes.type as Task['type'])) {throw new Error(`invalid proposal type '${changes.type}'`);}
-    type = changes.type as Task['type'];
+    if (!TASK_TYPES.includes(changes.type as ProposalType)) {throw new Error(`invalid proposal type '${changes.type}'`);}
+    type = changes.type as ProposalType;
   }
 
-  let priority: Task['priority'] = before.priority;
+  let priority: ProposalPriority = before.priority;
   if (changes.priority !== undefined) {
-    if (!TASK_PRIORITIES.includes(changes.priority as Task['priority'])) {throw new Error(`invalid proposal priority '${changes.priority}'`);}
-    priority = changes.priority as Task['priority'];
+    if (!TASK_PRIORITIES.includes(changes.priority as ProposalPriority)) {throw new Error(`invalid proposal priority '${changes.priority}'`);}
+    priority = changes.priority as ProposalPriority;
   }
 
   let workflow: string | undefined = before.workflow;

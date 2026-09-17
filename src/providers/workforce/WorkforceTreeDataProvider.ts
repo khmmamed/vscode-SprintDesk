@@ -1,9 +1,7 @@
 import * as vscode from 'vscode';
-import { Employee, EmployeeTeam, Run, Task } from '../../data/types';
+import { Employee, EmployeeTeam, Plan, Run } from '../../data/types';
 import * as workforceService from '../../services/workforce/workforceService';
 import { getStores } from '../../data/stores';
-import { getDataService } from '../../data/DataService';
-import { getWorkspaceRoot } from '../../services/fileService';
 import { planTitleFor } from '../../services/workforce/plan/planService';
 import type { WorkforceSection } from '../../commands/workforce/openWorkforceControlCenter';
 
@@ -15,7 +13,7 @@ export class WorkforceItem extends vscode.TreeItem {
     public readonly employee?: Employee,
     public readonly team?: EmployeeTeam,
     public readonly run?: Run,
-    public readonly task?: Task,
+    public readonly plan?: Plan,
     public readonly section?: WorkforceSection,
     icon?: string,
     description?: string,
@@ -76,15 +74,15 @@ export class WorkforceItem extends vscode.TreeItem {
   }
 }
 
-function dataService() {
-  const ws = getWorkspaceRoot();
-  return ws ? getDataService(ws) : undefined;
+function assignedPlanCount(): number {
+  const employeeIds = new Set(workforceService.getWorkforce().employees.map(e => e.id));
+  return getStores().plans.loadAll().filter(p => Boolean(p.execution?.assignedAgent) && employeeIds.has(p.execution.assignedAgent as string)).length;
 }
 
-function taskTitleFor(run: Run): string {
+function planTitle(runPlanId: string): string {
   // v1.0 Slice D — runs execute Plans; the title comes from the Plan artifact.
-  const plan = getStores().plans.getById(run.planId);
-  return planTitleFor(plan) || run.planId;
+  const plan = getStores().plans.getById(runPlanId);
+  return planTitleFor(plan) || runPlanId;
 }
 
 function runDescription(run: Run): string {
@@ -134,8 +132,8 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
         return Promise.resolve(this.buildMemberRows(element.team));
       case 'workforceUnassigned':
         return Promise.resolve(this.buildMemberRows());
-      case 'workforceTasks':
-        return Promise.resolve(this.buildTaskRows());
+      case 'workforcePlans':
+        return Promise.resolve(this.buildPlanRows());
       case 'workforceRuns':
         return Promise.resolve(this.buildRunRows());
       default:
@@ -154,7 +152,7 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     const eventRulesActive = eventRules.filter(r => r.enabled).length;
     const running = getStores().runs.loadAll().filter(r => r.status === 'running').length;
     const lastEvent = getStores().events.latest(1)[0];
-    const assignedTasks = this.assignedTaskCount();
+    const assignedPlans = assignedPlanCount();
 
     return [
       new WorkforceItem(
@@ -166,9 +164,14 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
         `${employees.filter(person => person.role === 'human').length} humans · ${employees.filter(person => person.role === 'agent').length} agents · ${teams.length} teams`
       ),
       new WorkforceItem(
-        `Tasks (${assignedTasks})`,
+        `Plans (${assignedPlans})`,
         vscode.TreeItemCollapsibleState.Expanded,
-        'workforceTasks'
+        'workforcePlans',
+        undefined, undefined, undefined, undefined,
+        'plans',
+        'checklist',
+        undefined,
+        'Open assigned plans in the Control Center'
       ),
       new WorkforceItem(
         `Runs (${running} running)`,
@@ -238,11 +241,28 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     ];
   }
 
-  private assignedTaskCount(): number {
-    const ds = dataService();
-    if (!ds) {return 0;}
+  private buildPlanRows(): WorkforceItem[] {
     const employeeIds = new Set(workforceService.getWorkforce().employees.map(e => e.id));
-    return ds.loadTasks().filter(t => Boolean(t.agent) && employeeIds.has(t.agent as string)).length;
+    const assigned = getStores().plans.loadAll()
+      .filter(p => Boolean(p.execution?.assignedAgent) && employeeIds.has(p.execution.assignedAgent as string))
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+
+    if (assigned.length === 0) {
+      return [new WorkforceItem('No assigned plans', vscode.TreeItemCollapsibleState.None, 'workforceEmpty')];
+    }
+
+    return assigned.map(p => new WorkforceItem(
+      planTitleFor(p) || p.id,
+      vscode.TreeItemCollapsibleState.None,
+      'workforceTask',
+      undefined,
+      undefined,
+      undefined,
+      p,
+      undefined,
+      'checklist',
+      `${p.id} · ${p.scheduling?.status}${(p.classification?.current || p.classification?.original)?.priority && (p.classification.current || p.classification.original)?.priority !== 'medium' ? ` · ${(p.classification.current || p.classification.original)?.priority}` : ''}`
+    ));
   }
 
   private buildTeamRows(): WorkforceItem[] {
@@ -315,32 +335,6 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     }).filter((x): x is WorkforceItem => x !== null);
   }
 
-  private buildTaskRows(): WorkforceItem[] {
-    const ds = dataService();
-    if (!ds) {return [];}
-    const employeeIds = new Set(workforceService.getWorkforce().employees.map(e => e.id));
-    const assigned = ds.loadTasks()
-      .filter(t => Boolean(t.agent) && employeeIds.has(t.agent as string))
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-
-    if (assigned.length === 0) {
-      return [new WorkforceItem('No assigned tasks', vscode.TreeItemCollapsibleState.None, 'workforceEmpty')];
-    }
-
-    return assigned.map(t => new WorkforceItem(
-      t.title,
-      vscode.TreeItemCollapsibleState.None,
-      'workforceTask',
-      undefined,
-      undefined,
-      undefined,
-      t,
-      undefined,
-      'checklist',
-      `${t.code} · ${t.workStatus || t.status}${t.priority && t.priority !== 'medium' ? ` · ${t.priority}` : ''}`
-    ));
-  }
-
   private buildRunRows(): WorkforceItem[] {
     const runs = getStores().runs.loadAll()
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
@@ -352,9 +346,9 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
 
     return runs.map(run => {
       const employee = run.agentId ? getStores().people.getById(run.agentId) : undefined;
-      const tooltip = run.error ? `${taskTitleFor(run)} - ${run.error}` : taskTitleFor(run);
+      const tooltip = run.error ? `${planTitle(run.planId)} - ${run.error}` : planTitle(run.planId);
       return new WorkforceItem(
-        taskTitleFor(run),
+        planTitle(run.planId),
         vscode.TreeItemCollapsibleState.None,
         'runItem',
         undefined,

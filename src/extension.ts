@@ -118,21 +118,11 @@ export async function activate(context: vscode.ExtensionContext) {
     const sdPath = path.join(ws, '.SprintDesk');
 
 // Ensure all directories exist
-    const dirs = ['data', 'Tasks', 'Backlogs', 'Epics', 'Sprints', 'mcp', 'people', 'workforce', 'database', 'plans', 'inputs'];
+    const dirs = ['database', 'people', 'workforce', 'settings', 'mcp', 'plans', 'inputs'];
     for (const dir of dirs) {
       const fullPath = path.join(sdPath, dir);
       if (!fs.existsSync(fullPath)) {
         fs.mkdirSync(fullPath, { recursive: true });
-      }
-    }
-
-    // Ensure data files exist
-    const dataFiles = ['tasks.yml', 'backlogs.yml', 'epics.yml', 'sprints.yml'];
-    for (const file of dataFiles) {
-      const dataPath = path.join(sdPath, 'data', file);
-      if (!fs.existsSync(dataPath)) {
-        const key = file.replace('.yml', '');
-        fs.writeFileSync(dataPath, `${key}: []`, 'utf8');
       }
     }
 

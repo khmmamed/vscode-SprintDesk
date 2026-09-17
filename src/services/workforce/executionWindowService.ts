@@ -1,5 +1,4 @@
 import { getStores } from '../../data/stores';
-import { getDataService } from '../../data/DataService';
 import { ExecutionWindow, ExecutionWindowCompletionSummary, WorkerMode } from '../../data/types';
 import { emitEvent, subscribeEvents } from './events';
 import { runQueuePass } from './worker/worker';
@@ -201,14 +200,13 @@ export async function startExecutionWindow(windowId: string, actorId?: string): 
   const gate = requireEmployeePermission('run:create', actorId);
   if (!gate.ok) {throw new Error(gate.error);}
 
-  const ds = getDataService();
   const runIds: string[] = [];
   const planIds: string[] = [];
 
   for (const workflowId of window.workflowIds) {
     const workflow = stores.workflows.getById(workflowId);
     if (!workflow || !workflow.enabled) {continue;}
-    const result = await executeWorkflow(workflow, { stores, dataService: ds });
+    const result = await executeWorkflow(workflow, { stores });
     collectPlansFromWorkflow(planIds, result);
   }
 

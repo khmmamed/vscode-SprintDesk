@@ -1,8 +1,7 @@
 import { YAMLStore } from './BaseStore';
-import { Skill } from '../types';
-import { Task } from '../types';
+import { Skill, ProposalType } from '../types';
 
-export type TaskType = Task['type'];
+export type TaskType = ProposalType;
 
 export const DEFAULT_TYPE_SKILLS: Record<TaskType, string[]> = {
   bug: ['debugging'],

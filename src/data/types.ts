@@ -1,43 +1,3 @@
-export interface Task {
-  id: string;
-  number: number;
-  code: string;
-  name: string;
-  title: string;
-  type: 'feature' | 'bug' | 'chore' | 'doc' | 'test';
-  status: 'waiting' | 'in-progress' | 'review' | 'done' | 'blocked' | 'cancelled';
-  priority: 'high' | 'medium' | 'low';
-  epic: string | null;
-  backlog: string;
-  sprint: string | null;
-  createdAt: string;
-  updatedAt: string;
-  path?: string;
-
-  // v0.4 workforce / agent additions (all optional, additive, non-breaking)
-  source?: string;
-  workStatus?: TaskWorkStatus;
-  agent?: string;
-  workflow?: string;
-  parentTaskId?: string;
-  childTaskIds?: string[];
-  runId?: string;
-  attempts?: number;
-
-  // v0.5 workforce semantics (all optional, additive, non-breaking)
-  requiredSkills?: string[];
-}
-
-export type TaskWorkStatus =
-  | 'waiting'
-  | 'assigned'
-  | 'claimed'
-  | 'in-progress'
-  | 'review'
-  | 'done'
-  | 'blocked'
-  | 'cancelled';
-
 export interface Run {
   id: string;
   // v1.0 Slice D — the Plan is the execution identity (taskId removed); the Run key
@@ -90,10 +50,15 @@ export type FindingAgentReviewState = 'requested' | 'validated';
 // v0.12 autonomous classification: task proposals (additive, non-breaking)
 export type TaskProposalStatus = 'pending' | 'applied' | 'duplicate' | 'skipped' | 'failed' | 'rejected';
 
+// Classification vocab pulled off the legacy Task domain so proposals, findings,
+// and workflow steps no longer depend on the Task type (removed Slice I).
+export type ProposalType = 'feature' | 'bug' | 'chore' | 'doc' | 'test';
+export type ProposalPriority = 'high' | 'medium' | 'low';
+
 export interface TaskProposalTaskPayload {
   title: string;
-  type: Task['type'];
-  priority: Task['priority'];
+  type: ProposalType;
+  priority: ProposalPriority;
   workflow?: string;
 }
 
@@ -111,13 +76,13 @@ export interface TaskProposal {
   agent: string;
   agentName?: string;
   title: string;
-  type: Task['type'];
-  priority: Task['priority'];
+  type: ProposalType;
+  priority: ProposalPriority;
   workflow?: string;
   confidence?: number;
   status: TaskProposalStatus;
   proposedBy?: string;
-  appliedTaskId?: string;
+  appliedPlanId?: string;
   appliedAt?: string;
   reason?: string;
   createdAt: string;
@@ -139,13 +104,11 @@ export interface Finding {
   severity: FindingSeverity;
   confidence?: number;
   category?: string;
-  suggestedTaskType?: Task['type'];
+  suggestedTaskType?: ProposalType;
   suggestedWorkflow?: string;
-  suggestedPriority?: Task['priority'];
+  suggestedPriority?: ProposalPriority;
   status: FindingStatus;
   // v1.0 Slice D — findings produced by a run link to the executed Plan (planId).
-  // taskId remains for the legacy classification link (task proposals), removed Slice H/I.
-  taskId?: string;
   planId?: string;
   resolvedAt?: string;
   decisionBy?: string;
@@ -241,7 +204,6 @@ export const DEFAULT_POLICY: Policy = {
 export type ApprovalGateMode = 'auto' | 'manual';
 
 export interface ApprovalGates {
-  taskAssignment: ApprovalGateMode;
   runExecution: ApprovalGateMode;
   configChange: ApprovalGateMode;
   planClassification: ApprovalGateMode;
@@ -251,23 +213,14 @@ export interface ApprovalGates {
 }
 
 export const DEFAULT_APPROVAL_GATES: ApprovalGates = {
-  taskAssignment: 'auto',
   runExecution: 'auto',
   configChange: 'auto',
   planClassification: 'auto',
   deploy: 'manual'
 };
 
-export type ApprovalType = 'task-assignment' | 'run-execution' | 'config-change' | 'plan-classification' | 'deploy-authorization';
+export type ApprovalType = 'run-execution' | 'config-change' | 'plan-classification' | 'deploy-authorization';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
-
-export interface ApprovalPendingAssignTask {
-  op: 'assign-task';
-  taskId: string;
-  employeeId: string;
-  employeeName?: string;
-  requesterId?: string;
-}
 
 export interface ApprovalPendingStartRun {
   op: 'start-run';
@@ -304,7 +257,6 @@ export interface ApprovalPendingAuthorizeDeploy {
 }
 
 export type ApprovalPending =
-  | ApprovalPendingAssignTask
   | ApprovalPendingStartRun
   | ApprovalPendingConfigChange
   | ApprovalPendingApplyProposal
@@ -371,7 +323,7 @@ export interface Epic {
   number: number;
   code: string;
   name: string;
-  title: string;
+title: string;
   category: string;
   description: string;
   status: 'planned' | 'in-progress' | 'completed' | 'blocked';
@@ -380,120 +332,6 @@ export interface Epic {
   createdAt: string;
   updatedAt: string;
   path?: string;
-}
-
-export interface Backlog {
-  id: string;
-  title: string;
-  name: string;
-  description: string;
-  tasks: string[];
-  color: string;
-  path?: string;
-}
-
-export interface Sprint {
-  id: string;
-  number: number;
-  title: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  status: 'planned' | 'in-progress' | 'completed';
-  tasks: string[];
-  createdAt: string;
-  updatedAt: string;
-  path?: string;
-}
-
-export interface IdsConfig {
-  task: { prefix: string; startNumber: number; padding: number };
-  epic: { prefix: string; startNumber: number; padding: number };
-  sprint: { prefix: string; startNumber: number; padding: number };
-  backlog: { prefix: string };
-}
-
-export interface DefaultsConfig {
-  backlog: string | null;
-  epic: string | null;
-  sprint: string | null;
-  status: string;
-  priority: string;
-  type: string;
-}
-
-export interface UIConfig {
-  showCompleted: boolean;
-  defaultView: 'tree' | 'table';
-  showIds: boolean;
-  dateFormat: 'iso' | 'short' | 'relative';
-}
-
-export interface DirectoriesConfig {
-  data: string;
-  tasks: string;
-  backlogs: string;
-  epics: string;
-  sprints: string;
-  templates: string;
-}
-
-export interface Config {
-  projectPrefix: string;
-  developBranch: string;
-  ids: IdsConfig;
-  defaults: DefaultsConfig;
-  ui: UIConfig;
-  directories: DirectoriesConfig;
-}
-
-export const DEFAULT_CONFIG: Config = {
-  projectPrefix: 'SPD',
-  developBranch: 'develop',
-  ids: {
-    task: { prefix: 'task_', startNumber: 100, padding: 3 },
-    epic: { prefix: 'epic_', startNumber: 1, padding: 2 },
-    sprint: { prefix: 'sprint_', startNumber: 1, padding: 1 },
-    backlog: { prefix: '' }
-  },
-  defaults: {
-    backlog: 'features',
-    epic: null,
-    sprint: null,
-    status: 'waiting',
-    priority: 'medium',
-    type: 'feature'
-  },
-  ui: {
-    showCompleted: false,
-    defaultView: 'tree',
-    showIds: true,
-    dateFormat: 'iso'
-  },
-  directories: {
-    data: 'data',
-    tasks: 'Tasks',
-    backlogs: 'Backlogs',
-    epics: 'Epics',
-    sprints: 'Sprints',
-    templates: 'templates'
-  }
-};
-
-export interface TasksData {
-  tasks: Task[];
-}
-
-export interface EpicsData {
-  epics: Epic[];
-}
-
-export interface BacklogsData {
-  backlogs: Backlog[];
-}
-
-export interface SprintsData {
-  sprints: Sprint[];
 }
 
 export interface AgentConfig {
@@ -539,7 +377,7 @@ export interface McpServerConfig {
 export interface HistoryEntry {
   id: string;
   itemId: string;
-  itemType: 'task' | 'epic' | 'backlog' | 'sprint';
+  itemType: 'plan' | 'run' | 'checkpoint';
   action: 'create' | 'update' | 'delete' | 'move' | 'assign';
   field?: string;
   oldValue?: string;
@@ -691,8 +529,8 @@ export interface WorkflowBaseStep {
 export interface WorkflowTaskStep extends WorkflowBaseStep {
   type: 'task';
   title: string;
-  taskType: Task['type'];
-  priority: Task['priority'];
+  taskType: ProposalType;
+  priority: ProposalPriority;
   backlog?: string;
   requiredSkills?: string[];
 }

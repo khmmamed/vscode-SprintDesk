@@ -3,7 +3,6 @@ import * as http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { TestWorkspace, makeEmployee, makeWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
-import { getDataService } from '../../src/data/DataService';
 import { upsertMcpServer } from '../../src/services/workforce/mcp/registry';
 import {
   WorkflowCondition,
@@ -76,7 +75,7 @@ describe('C7 workflow DSL', () => {
 
   it('rejects a workflow with no steps', async () => {
     await assert.rejects(
-      () => executeWorkflow(workflow('empty', []), { stores: getStores(ws.root), dataService: getDataService(ws.root) }),
+      () => executeWorkflow(workflow('empty', []), { stores: getStores(ws.root) }),
       /must define at least one step/
     );
   });
@@ -84,7 +83,7 @@ describe('C7 workflow DSL', () => {
   it('rejects duplicate step ids', async () => {
     const def = workflow('dup', [taskStep('same', 'A'), taskStep('same', 'B')]);
     await assert.rejects(
-      () => executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) }),
+      () => executeWorkflow(def, { stores: getStores(ws.root) }),
       /duplicate step id 'same'/
     );
   });
@@ -92,7 +91,7 @@ describe('C7 workflow DSL', () => {
   it('rejects unsupported step types', async () => {
     const def = workflow('bad-step', [{ id: 'x', type: 'explode' } as unknown as WorkflowStep]);
     await assert.rejects(
-      () => executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) }),
+      () => executeWorkflow(def, { stores: getStores(ws.root) }),
       /unsupported step type 'explode'/
     );
   });
@@ -101,7 +100,7 @@ describe('C7 workflow DSL', () => {
     for (const max of [0, -1, 2.5]) {
       const def = workflow('loop-bad', [loopStep('l', max, [taskStep('a', 'A')])]);
       await assert.rejects(
-        () => executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) }),
+        () => executeWorkflow(def, { stores: getStores(ws.root) }),
         /maxIterations/
       );
     }
@@ -110,7 +109,7 @@ describe('C7 workflow DSL', () => {
   it('rejects a tool step without an agent (authorization context is required)', async () => {
     const def = workflow('tool-noagent', [toolStep('t', 'web', 'list', 'Agent', { agent: '' })]);
     await assert.rejects(
-      () => executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) }),
+      () => executeWorkflow(def, { stores: getStores(ws.root) }),
       /requires an agent/
     );
   });
@@ -128,7 +127,7 @@ describe('C7 workflow DSL', () => {
   it('task steps create runnable plans and queued runs and persist workflow metadata', async () => {
     const def = workflow('wf-basic', [taskStep('one', 'First Task'), taskStep('two', 'Second Task')]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.strictEqual(result.status, 'completed');
     assert.strictEqual(result.stepResults.length, 2);
@@ -153,7 +152,7 @@ describe('C7 workflow DSL', () => {
       taskStep('c', 'Gamma')
     ]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.deepStrictEqual(result.stepResults.map(s => s.stepId), ['a', 'b', 'c']);
     assert.deepStrictEqual(
@@ -165,7 +164,7 @@ describe('C7 workflow DSL', () => {
   it('never bypasses the queue: runs stay queued and no approval is requested', async () => {
     const def = workflow('wf-queue', [taskStep('a', 'Alpha')]);
 
-    await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    await executeWorkflow(def, { stores: getStores(ws.root) });
 
     const runs = getStores(ws.root).runs.loadAll();
     assert.ok(runs.length > 0);
@@ -178,7 +177,7 @@ describe('C7 workflow DSL', () => {
   it('emits run.queued and workflow.completed events sourced as workflow', async () => {
     const def = workflow('wf-events', [taskStep('a', 'Alpha')]);
 
-    await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    await executeWorkflow(def, { stores: getStores(ws.root) });
 
     const queued = getStores(ws.root).events.findByType('run.queued');
     assert.strictEqual(queued.length, 1);
@@ -190,7 +189,7 @@ describe('C7 workflow DSL', () => {
   it('loops run a bounded number of times, terminate, and inject the iterate variable', async () => {
     const def = workflow('wf-loop', [loopStep('batch', 3, [taskStep('item', 'Batch Item {i}')])]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.strictEqual(result.status, 'completed');
     const loop = result.stepResults[0];
@@ -209,7 +208,7 @@ describe('C7 workflow DSL', () => {
 
     const def = workflow('wf-loop-fail', [loopStep('batch', 3, [toolStep('probe', 'web', 'boom', 'Probe')])]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.strictEqual(result.status, 'failed');
     assert.strictEqual(result.stepResults[0].status, 'failed');
@@ -228,7 +227,7 @@ describe('C7 workflow DSL', () => {
       )
     ]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.strictEqual(result.status, 'completed');
     assert.strictEqual(result.stepResults[1].outputs.branch, 'then');
@@ -253,7 +252,7 @@ describe('C7 workflow DSL', () => {
       )
     ]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.strictEqual(result.status, 'completed');
     assert.strictEqual(result.stepResults[0].status, 'failed');
@@ -267,12 +266,12 @@ describe('C7 workflow DSL', () => {
 
   it('static always/never conditions branch deterministically', async () => {
     const always = workflow('wf-always', [conditionStep('c', { type: 'always' }, [taskStep('a', 'Always Task')])]);
-    const alwaysResult = await executeWorkflow(always, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const alwaysResult = await executeWorkflow(always, { stores: getStores(ws.root) });
     assert.strictEqual(alwaysResult.status, 'completed');
     assert.deepStrictEqual(getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)), ['Always Task']);
 
     const never = workflow('wf-never', [conditionStep('c', { type: 'never' }, [taskStep('a', 'Never Task')])]);
-    const neverResult = await executeWorkflow(never, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const neverResult = await executeWorkflow(never, { stores: getStores(ws.root) });
     assert.strictEqual(neverResult.status, 'completed');
     assert.strictEqual(neverResult.stepResults[0].status, 'skipped');
     assert.strictEqual(getStores(ws.root).plans.loadAll().length, 1);
@@ -285,7 +284,7 @@ describe('C7 workflow DSL', () => {
 
     const def = workflow('wf-tool-deny', [toolStep('t', 'web', 'list', 'Restricted')]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.strictEqual(result.status, 'failed');
     assert.strictEqual(result.stepResults[0].status, 'failed');
@@ -299,7 +298,7 @@ describe('C7 workflow DSL', () => {
 
     const def = workflow('wf-tool-net', [toolStep('t', 'web', 'list', 'Chained')]);
 
-    const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+    const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
     assert.strictEqual(result.status, 'failed');
     const error = result.stepResults[0].error || '';
@@ -324,7 +323,7 @@ describe('C7 workflow DSL', () => {
         )
       ]);
 
-      const result = await executeWorkflow(def, { stores: getStores(ws.root), dataService: getDataService(ws.root) });
+      const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
       assert.strictEqual(result.status, 'completed');
       const toolResult = result.stepResults[0];

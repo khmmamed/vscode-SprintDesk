@@ -39,9 +39,6 @@ export function resolveApproval(approvalId: string, decision: ApprovalDecision, 
 
   if (decision === 'approved') {
     switch (pending.op) {
-      case 'assign-task':
-        workforceService.performTaskAssignment(pending.taskId, pending.employeeId, pending.requesterId || actorId);
-        break;
       case 'start-run':
         queueService.startRun(pending.runId, { bypassGate: true });
         break;

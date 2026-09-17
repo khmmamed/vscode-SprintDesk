@@ -1,11 +1,10 @@
 import { getStores } from '../../data/stores';
 import { requireEmployeePermission } from '../../services/workforce/capabilityService';
 import * as queueService from '../../services/workforce/queueService';
-import { Handler, HandlerResult, res, getDs } from './helpers';
+import { Handler, HandlerResult, res, getWs } from './helpers';
 
 async function handle_sprintdesk_runsCreate(args: any): Promise<HandlerResult> {
-  const ds = getDs();
-  if (!ds) return res('No workspace found', true);
+  if (!getWs()) return res('No workspace found', true);
 
   try {
     // v1.0 Slice D — createRun is Plan-scoped (planId replaces taskId).

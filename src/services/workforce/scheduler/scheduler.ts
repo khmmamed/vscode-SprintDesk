@@ -1,4 +1,3 @@
-import { getDataService, DataService } from '../../../data/DataService';
 import { getStores, Stores } from '../../../data/stores';
 import { emitEvent } from '../events';
 import { AutonomyLevel, Plan, ScheduleRecord } from '../../../data/types';
@@ -55,7 +54,6 @@ export interface SchedulerPassResult {
 }
 
 export interface SchedulerPassOptions {
-  dataService?: DataService;
   stores?: Stores;
   now?: Date;
   // Upper bound organizer passes apply per fire (defaults to queue settings maxPlansPerPass).
@@ -211,8 +209,7 @@ function updateScheduleState(
 
 export async function runSchedulerPass(options: SchedulerPassOptions = {}): Promise<SchedulerPassResult> {
   const now = options.now || new Date();
-  const dataService = options.dataService || getDataService();
-  const stores = options.stores || getStores(dataService.getWorkspaceRoot());
+  const stores = options.stores || getStores();
 
   const schedules = stores.schedules
     .loadAll()

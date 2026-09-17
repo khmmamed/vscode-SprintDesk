@@ -16,7 +16,6 @@ import * as workforceService from '../../services/workforce/workforceService';
 import * as eventRulesService from '../../services/workforce/eventRulesService';
 import * as executionWindowService from '../../services/workforce/executionWindowService';
 import { subscribeEvents } from '../../services/workforce/events';
-import { getDataService } from '../../data/DataService';
 import { Approval, Checkpoint, Cycle, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, InputRecord, Plan, Run, ScheduleRecord, TaskProposal, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
@@ -87,8 +86,6 @@ export interface FindingDto {
   runStatus?: Run['status'];
   planId?: string;
   planTitle?: string;
-  taskId?: string;
-  taskTitle?: string;
   category?: string;
   agentValidationState?: 'requested' | 'validated';
   agentReview?: {
@@ -201,7 +198,6 @@ export interface ActivityEventDto {
   links: {
     runId?: string;
     planId?: string;
-    taskId?: string;
     workflowId?: string;
     ruleId?: string;
     findingId?: string;
@@ -233,7 +229,7 @@ export interface ProposalDto {
   confidence?: number;
   status: string;
   createdAt: string;
-  appliedTaskId?: string;
+  appliedPlanId?: string;
   reason?: string;
   editedAt?: string;
   editCount?: number;
@@ -272,11 +268,6 @@ function scheduleSnapshotRefresh(panelRef: vscode.WebviewPanel): void {
     snapshotTimer = undefined;
     if (panelRef === panel) {pushSnapshot(panelRef);}
   }, 150);
-}
-
-function dataService() {
-  const ws = fileService.getWorkspaceRoot();
-  return ws ? getDataService(ws) : undefined;
 }
 
 function getRunDto(run: Run): RunDto {
@@ -335,12 +326,10 @@ function employeeDtos(): EmployeeDto[] {
 }
 
 function findingDtos(): FindingDto[] {
-  const ds = dataService();
   return findingsService.allFindings(200).map(f => {
     const run = f.source?.runId ? getStores().runs.getById(f.source.runId) : undefined;
     const plan = f.planId ? getStores().plans.getById(f.planId) : undefined;
     const planTitle = plan ? planTitleFor(plan) || f.planId : undefined;
-    const task = f.taskId && ds ? ds.getTask(f.taskId) : undefined;
     return {
       id: f.id,
       title: f.title,
@@ -354,8 +343,6 @@ function findingDtos(): FindingDto[] {
       runStatus: run?.status,
       planId: f.planId,
       planTitle,
-      taskId: f.taskId,
-      taskTitle: task?.title || f.taskId,
       category: f.category,
       agentValidationState: f.agentValidationState,
       agentReview: f.agentReview
@@ -543,11 +530,9 @@ function pickStr(value: unknown): string | undefined {
 function eventLink(event: EventRecord): ActivityEventDto['links'] {
   const p = event.payload || {};
   const firstPlan = Array.isArray(p.createdPlanIds) && typeof p.createdPlanIds[0] === 'string' ? p.createdPlanIds[0] : undefined;
-  const firstTask = Array.isArray(p.createdTaskIds) && typeof p.createdTaskIds[0] === 'string' ? p.createdTaskIds[0] : undefined;
   return {
     runId: pickStr(p.runId),
     planId: pickStr(p.planId) || firstPlan,
-    taskId: pickStr(p.taskId) || firstTask,
     workflowId: pickStr(p.workflowId),
     ruleId: pickStr(p.ruleId),
     findingId: pickStr(p.findingId),
@@ -606,7 +591,7 @@ function toProposalDto(p: TaskProposal): ProposalDto {
     ...(p.confidence !== undefined ? { confidence: p.confidence } : {}),
     status: p.status,
     createdAt: p.createdAt,
-    ...(p.appliedTaskId ? { appliedTaskId: p.appliedTaskId } : {}),
+    ...(p.appliedPlanId ? { appliedPlanId: p.appliedPlanId } : {}),
     ...(p.reason ? { reason: p.reason } : {}),
     ...(p.editedAt ? { editedAt: p.editedAt } : {}),
     ...(p.edits && p.edits.length > 0 ? { editCount: p.edits.length } : {}),

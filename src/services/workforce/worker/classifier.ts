@@ -1,4 +1,4 @@
-import { Employee, EmployeeModelProfile, Finding, Task } from '../../../data/types';
+import { Employee, EmployeeModelProfile, Finding, ProposalType, ProposalPriority } from '../../../data/types';
 import { getStores } from '../../../data/stores';
 import { getLLMProvider } from '../llm/registry';
 import { ChatMessage, LLMProvider, profileToRequest } from '../llm/types';
@@ -69,10 +69,10 @@ export function parseClassification(output: string): ClassificationOutcome {
 
   const title = typeof parsed.title === 'string' ? parsed.title.trim() : undefined;
   const type = typeof parsed.type === 'string' && (TASK_TYPES as readonly string[]).includes(parsed.type)
-    ? parsed.type as Task['type']
+    ? parsed.type as ProposalType
     : undefined;
   const priority = typeof parsed.priority === 'string' && (TASK_PRIORITIES as readonly string[]).includes(parsed.priority)
-    ? parsed.priority as Task['priority']
+    ? parsed.priority as ProposalPriority
     : undefined;
   const workflow = typeof parsed.workflow === 'string' && parsed.workflow.trim().length > 0
     ? parsed.workflow.trim()

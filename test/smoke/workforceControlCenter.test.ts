@@ -1,10 +1,9 @@
 import { strict as assert } from 'node:assert';
-import { makeEmployee, makeTask, makePlan, makeRun, makeWorkspace, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
+import { makeEmployee, makePlan, makeRun, makeWorkspace, makeAgentConfig, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
 import * as queueService from '../../src/services/workforce/queueService';
 import * as findingsService from '../../src/services/workforce/findingsService';
 import * as workforceService from '../../src/services/workforce/workforceService';
-import * as taskService from '../../src/services/taskService';
 import * as approvals from '../../src/services/workforce/approvals';
 import * as classificationService from '../../src/services/workforce/classification/classificationService';
 import { classifyFinding } from '../../src/services/workforce/worker/classifier';
@@ -12,7 +11,6 @@ import * as eventRulesService from '../../src/services/workforce/eventRulesServi
 import { emitEvent } from '../../src/services/workforce/events';
 import { getRunsByFilter, runDetail, getQueueSnapshot, getActivitySummary, getExecutionWindowReport } from '../../src/services/workforce/observability';
 import * as executionWindowService from '../../src/services/workforce/executionWindowService';
-import { getDataService } from '../../src/data/DataService';
 import { EventRecord, WorkflowDefinition, ScheduleRecord } from '../../src/data/types';
 import { createOllamaWorker } from '../../src/services/workforce/worker/ollamaWorker';
 import { getWorkerRuntime, executeRun, resolveRunnableState } from '../../src/services/workforce/worker/worker';
@@ -1452,7 +1450,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
     };
     getStores().schedules.add(schedule);
 
-    const result = await runSchedulerPass({ stores: getStores(), dataService: getDataService(), now });
+    const result = await runSchedulerPass({ stores: getStores(), now });
     assert.strictEqual(result.fired.length, 1);
     assert.strictEqual(result.fired[0].mode, 'execute');
     assert.strictEqual(result.fired[0].scheduleId, 'sched-slice8');
@@ -1474,10 +1472,10 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
     assert.strictEqual(getStores().schedules.getById('sched-slice8')?.runCount, 1);
     assert.strictEqual(getStores().events.findByType('schedule.fired').length, 1);
 
-    const early = await runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 30_000) });
+    const early = await runSchedulerPass({ stores: getStores(), now: new Date(now.getTime() + 30_000) });
     assert.strictEqual(early.fired.length, 0, 'interval not elapsed → no duplicate');
 
-    const after = await runSchedulerPass({ stores: getStores(), dataService: getDataService(), now: new Date(now.getTime() + 120_000) });
+    const after = await runSchedulerPass({ stores: getStores(), now: new Date(now.getTime() + 120_000) });
     assert.strictEqual(after.fired.length, 1, 'interval elapsed → fires again');
   });
 });
@@ -1518,24 +1516,23 @@ describe('v0.12 Proposal 1 — approvals resolve (Slice A)', () => {
     );
   });
 
-  it('rejects a pending task-assignment approval without applying the assignment', () => {
-    setApprovalGate('task-assignment', 'manual');
+  it('rejects a pending run-execution approval without starting the run', () => {
+    setApprovalGate('run-execution', 'manual');
     const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead' });
     const agent = seedAgent({ name: 'Agent Beta' });
-    const task = makeTask({ type: 'feature' });
+    const plan = makePlan();
+    const run = queueService.createRun(plan.id, agent.id);
 
-    const approval = requestApproval({
-      type: 'task-assignment',
-      reason: 'Task assignment requires manual approval',
-      requesterId: agent.id,
-      target: `${task.code} → ${agent.name}`,
-      pending: { op: 'assign-task', taskId: task.id, employeeId: agent.id }
-    });
+    const started = queueService.startRun(run.id);
+    assert.strictEqual(started, undefined, 'manual gate blocks start');
 
-    const rejected = approvals.reject(approval.id, lead.id);
+    const pending = getStores().approvals.loadAll().filter(a => a.type === 'run-execution' && a.status === 'pending');
+    assert.strictEqual(pending.length, 1);
+
+    const rejected = approvals.reject(pending[0].id, lead.id);
     assert.strictEqual(rejected?.status, 'rejected');
     assert.strictEqual(rejected?.decisionBy, lead.id);
-    assert.strictEqual(getDataService().getTask(task.id)?.agent, undefined, 'assignment not applied on reject');
+    assert.strictEqual(getStores().runs.getById(run.id)?.status, 'queued', 'run stays queued on reject');
   });
 
   it('no-ops for a missing id and for a double resolve', () => {
@@ -1553,48 +1550,46 @@ describe('v0.12 Proposal 1 — approvals resolve (Slice A)', () => {
   });
 });
 
-describe('v0.12 Proposal 1 — tasks CRUD (Slice B)', () => {
+describe('v1.0 Slice I — plan registry CRUD', () => {
   let ws: TestWorkspace;
 
   beforeEach(() => {
     ws = makeWorkspace();
-    taskService.getTaskService(ws.root);
   });
 
   afterEach(() => {
     ws.cleanup();
   });
 
-  it('updates title, priority, status and agent on a task', () => {
+  it('updates scheduling and execution state on a plan', () => {
     const employee = makeEmployee({ name: 'Agent Alpha' });
     getStores().people.add(employee);
-    const task = makeTask({ type: 'feature', priority: 'medium', status: 'waiting' });
+    const plan = materializePlan(
+      { sourceInputId: 'test:crud', title: 'Original Title', category: 'feature', priority: 'medium' },
+      { workspaceRoot: ws.root }
+    );
 
-    taskService.updateTask(task.id, {
-      title: 'Updated Title',
-      priority: 'high',
-      status: 'in-progress',
-      agent: employee.id
+    getStores().plans.update(plan.id, {
+      scheduling: { ...plan.scheduling, status: 'ready' },
+      execution: { status: 'assigned', assignedAgent: employee.id }
     });
 
-    const updated = getDataService().getTask(task.id);
-    assert.strictEqual(updated?.title, 'Updated Title');
-    assert.strictEqual(updated?.priority, 'high');
-    assert.strictEqual(updated?.status, 'in-progress');
-    assert.strictEqual(updated?.agent, employee.id);
+    const updated = getStores().plans.getById(plan.id);
+    assert.strictEqual(updated?.execution.status, 'assigned');
+    assert.strictEqual(updated?.execution.assignedAgent, employee.id);
   });
 
-  it('returns undefined for a missing task', () => {
-    assert.strictEqual(getDataService().getTask('task_nope'), undefined);
+  it('returns undefined for a missing plan', () => {
+    assert.strictEqual(getStores().plans.getById('PLAN-999999'), undefined);
   });
 
-  it('deletes a task so it no longer appears in the store', () => {
-    const task = makeTask({ type: 'feature' });
-    assert.ok(getDataService().getTask(task.id), 'task exists before delete');
+  it('deletes a plan so it no longer appears in the registry', () => {
+    const plan = materializePlan({ sourceInputId: 'test:delete', title: 'Delete me', category: 'maintenance' }, { workspaceRoot: ws.root });
+    assert.ok(getStores().plans.getById(plan.id), 'plan exists before delete');
 
-    taskService.deleteTask(task.id);
-    assert.strictEqual(getDataService().getTask(task.id), undefined);
-    assert.strictEqual(getDataService().loadTasks().find(t => t.id === task.id), undefined);
+    getStores().plans.delete(plan.id);
+    assert.strictEqual(getStores().plans.getById(plan.id), undefined);
+    assert.strictEqual(getStores().plans.loadAll().find(p => p.id === plan.id), undefined);
   });
 });
 
@@ -1603,7 +1598,6 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
 
   beforeEach(() => {
     ws = makeWorkspace();
-    taskService.getTaskService(ws.root);
   });
 
   afterEach(() => {
@@ -1642,18 +1636,21 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(getStores().proposals.loadAll().length, 1);
   });
 
-  it('suppresses duplicates against an open matching task but not a finished one', () => {
-    makeTask({ title: 'Investigate flaky login test', status: 'waiting' });
+  it('suppresses duplicates against an open matching plan but not a finished one', () => {
+    materializePlan({ sourceInputId: 'test:dupe-open', title: 'Investigate flaky login test' }, { workspaceRoot: ws.root });
 
     const blocked = seedFinding({ title: 'Investigate flaky login test' });
     const proposal = classificationService.createProposal(blocked);
     assert.strictEqual(proposal?.status, 'duplicate');
-    assert.strictEqual(getDataService().loadTasks().length, 1, 'no task is created for a duplicate');
+    assert.strictEqual(getStores().plans.loadAll().length, 1, 'no plan is materialized for a duplicate');
 
-    makeTask({ title: 'Archive old reports', status: 'done' });
+    const finished = materializePlan({ sourceInputId: 'test:dupe-done', title: 'Archive old reports' }, { workspaceRoot: ws.root });
+    getStores().plans.update(finished.id, {
+      scheduling: { ...finished.scheduling, status: 'done' }
+    });
     const free = seedFinding({ title: 'Archive old reports' });
     const freeProposal = classificationService.createProposal(free);
-    assert.strictEqual(freeProposal?.status, 'pending', 'a finished task does not block classification');
+    assert.strictEqual(freeProposal?.status, 'pending', 'a finished plan does not block classification');
   });
 
   it('honors the per-pass cap and classifies the highest severity first', async () => {
@@ -1673,10 +1670,10 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(result.applied, 3);
     assert.strictEqual(result.duplicates, 0);
 
-    const titles = getDataService().loadTasks().map(t => t.title);
+    const titles = getStores().plans.loadAll().map(p => planTitleFor(p, ws.root));
     assert.ok(titles.includes('High severity item 0'), 'high severity classified first');
     assert.ok(titles.includes('High severity item 1'));
-    assert.ok(titles.some(t => t.startsWith('Low severity item')), 'one low severity item fits the cap');
+    assert.ok(titles.some(t => t?.startsWith('Low severity item')), 'one low severity item fits the cap');
   });
 
   it('requests approval under a manual gate and applies only on approve', async () => {
@@ -1687,14 +1684,14 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(result.requestedApproval, 1);
     const approvalsList = getStores().approvals.loadAll().filter(a => a.type === 'plan-classification' && a.status === 'pending');
     assert.strictEqual(approvalsList.length, 1);
-    assert.strictEqual(getDataService().loadTasks().length, 0, 'nothing is created before approval');
+    assert.strictEqual(getStores().plans.loadAll().length, 0, 'nothing is created before approval');
 
     const resolved = approvals.approve(approvalsList[0].id);
     assert.strictEqual(resolved?.status, 'approved');
-    assert.strictEqual(getDataService().loadTasks().length, 1);
+    assert.strictEqual(getStores().plans.loadAll().length, 1);
     const applied = getStores().proposals.byFindingId(approved.id);
     assert.strictEqual(applied?.status, 'applied');
-    assert.strictEqual(getStores().findings.getById(approved.id)?.taskId, getDataService().loadTasks()[0].id);
+    assert.strictEqual(getStores().findings.getById(approved.id)?.planId, applied?.appliedPlanId);
     assert.strictEqual(getStores().findings.getById(approved.id)?.status, 'approved');
   });
 
@@ -1709,10 +1706,10 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(rejected?.status, 'rejected');
     const proposal = getStores().proposals.byFindingId(finding.id);
     assert.strictEqual(proposal?.status, 'pending', 'reject does not apply the proposal');
-    assert.strictEqual(getDataService().loadTasks().length, 0, 'no task is created on a reject');
+    assert.strictEqual(getStores().plans.loadAll().length, 0, 'no plan is created on a reject');
   });
 
-  it('does not create a task when the actor lacks classification:apply', async () => {
+  it('does not create a plan when the actor lacks classification:apply', async () => {
     setApprovalGate('plan-classification', 'auto');
     const plainAgent = seedAgent();
     const finding = seedFinding({ title: 'Secret scan backlog', runId: 'run_secret' });
@@ -1721,17 +1718,17 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
     assert.strictEqual(result.applied, 0);
     assert.strictEqual(result.failed, 1);
     assert.strictEqual(getStores().proposals.byFindingId(finding.id)?.status, 'failed');
-    assert.strictEqual(getDataService().loadTasks().length, 0);
+    assert.strictEqual(getStores().plans.loadAll().length, 0);
   });
 
-  it('marks an invalid suggestion as failed without creating a task', () => {
+  it('marks an invalid suggestion as failed without creating a plan', () => {
     const finding = seedFinding({ suggestedTaskType: 'suggestion' as any });
     const proposal = classificationService.createProposal(finding);
 
     assert.strictEqual(proposal?.status, 'failed');
     assert.ok(proposal?.reason, 'failure carries a reason');
     assert.strictEqual(getStores().proposals.loadAll().length, 1);
-    assert.strictEqual(getDataService().loadTasks().length, 0, 'no task is created from a failed suggestion');
+    assert.strictEqual(getStores().plans.loadAll().length, 0, 'no plan is created from a failed suggestion');
   });
 });
 
@@ -1740,7 +1737,6 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () 
 
   beforeEach(() => {
     ws = makeWorkspace();
-    taskService.getTaskService(ws.root);
   });
 
   afterEach(() => {
@@ -1829,7 +1825,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () 
     assert.strictEqual(getStores().proposals.byFindingId(findingJunk.id)?.status, 'failed');
     assert.ok(getStores().proposals.byFindingId(findingJunk.id)?.reason);
     assert.strictEqual(getStores().proposals.byFindingId(findingThrow.id)?.status, 'failed');
-    assert.strictEqual(getDataService().loadTasks().length, 0);
+    assert.strictEqual(getStores().plans.loadAll().length, 0);
   });
 
   it('falls back to a severity-based priority when the provider omits priority', async () => {
@@ -1863,7 +1859,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice D — LLM)', () 
     assert.strictEqual(result.proposed, 2);
     assert.strictEqual(result.applied, 2);
     assert.strictEqual(result.duplicates, 0);
-    assert.strictEqual(getDataService().loadTasks().length, 2);
+    assert.strictEqual(getStores().plans.loadAll().length, 2);
     assert.strictEqual(getStores().proposals.loadAll().length, 2, 'the capped-out finding is not proposed');
   });
 });
@@ -1873,7 +1869,6 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice E — proposals 
 
   beforeEach(() => {
     ws = makeWorkspace();
-    taskService.getTaskService(ws.root);
   });
 
   afterEach(() => {
@@ -1901,14 +1896,14 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice E — proposals 
     return classificationService.createProposal(finding, { title: 'Handle checkout timeout', type: 'bug', priority: 'high' }, proposedBy);
   }
 
-  it('rejects a pending proposal without touching tasks or the finding', () => {
+  it('rejects a pending proposal without touching plans or the finding', () => {
     const proposal = seedPendingProposal();
     assert.strictEqual(proposal?.status, 'pending');
 
     const rejected = classificationService.rejectProposal(proposal!.id);
     assert.strictEqual(rejected?.status, 'rejected');
     assert.strictEqual(rejected?.reason, 'rejected by review');
-    assert.strictEqual(getDataService().loadTasks().length, 0, 'reject never creates a task');
+    assert.strictEqual(getStores().plans.loadAll().length, 0, 'reject never creates a plan');
     assert.strictEqual(getStores().findings.getById(proposal!.findingId)?.status, 'pending', 'finding stays pending');
     assert.strictEqual(getStores().audit.loadAll().filter(a => a.action === 'classification.reject').length, 1);
   });
@@ -1963,24 +1958,24 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice E — proposals 
     assert.strictEqual(stored?.findingId, finding.id);
   });
 
-  it('applies a pending proposal into a task from the review surface and dedups a second apply', () => {
+  it('applies a pending proposal into a plan from the review surface and dedups a second apply', () => {
     const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Reviewer' });
     const proposal = seedPendingProposal(lead.id);
 
     const applied = classificationService.applyProposal(proposal!.id, lead.id);
     assert.strictEqual(applied?.status, 'applied');
-    assert.ok(applied?.appliedTaskId, 'applied proposal carries the created task id');
+    assert.ok(applied?.appliedPlanId, 'applied proposal carries the created plan id');
 
-    const tasks = getDataService().loadTasks();
-    assert.strictEqual(tasks.length, 1);
-    assert.strictEqual(tasks[0].title, 'Handle checkout timeout');
+    const plans = getStores().plans.loadAll();
+    assert.strictEqual(plans.length, 1);
+    assert.strictEqual(planTitleFor(plans[0], ws.root), 'Handle checkout timeout');
     const linked = getStores().findings.getById(proposal!.findingId);
     assert.strictEqual(linked?.status, 'approved');
-    assert.strictEqual(linked?.taskId, applied!.appliedTaskId);
+    assert.strictEqual(linked?.planId, applied!.appliedPlanId);
 
     const second = classificationService.applyProposal(proposal!.id, lead.id);
     assert.strictEqual(second?.status, 'applied', 're-applying an applied proposal is a no-op');
-    assert.strictEqual(getDataService().loadTasks().length, 1, 'no second task is created');
+    assert.strictEqual(getStores().plans.loadAll().length, 1, 'no second plan is created');
   });
 });
 
@@ -1989,7 +1984,6 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
 
   beforeEach(() => {
     ws = makeWorkspace();
-    taskService.getTaskService(ws.root);
   });
 
   afterEach(() => {
@@ -2027,14 +2021,14 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     });
   }
 
-  it('an auto-gated scheduled pass turns findings into proposals and applied tasks', async () => {
+it('an auto-gated scheduled pass turns findings into proposals and applied plans', async () => {
     setApprovalGate('plan-classification', 'auto');
     seedSchedule('classify');
     for (let i = 0; i < 2; i += 1) {
       seedFinding({ title: `Scheduled item ${i}`, runId: `run_sched_${i}`, severity: 'high' });
     }
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
     assert.strictEqual(result.fired.length, 1);
     const fired = result.fired[0];
     assert.strictEqual(fired.mode, 'execute');
@@ -2043,7 +2037,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     assert.strictEqual(fired.classification!.proposed, 2);
     assert.strictEqual(fired.classification!.applied, 2);
 
-    assert.strictEqual(getDataService().loadTasks().length, 2);
+    assert.strictEqual(getStores().plans.loadAll().length, 2);
     assert.strictEqual(getStores().proposals.loadAll().filter(p => p.status === 'applied').length, 2);
     assert.strictEqual(getStores().events.findByType('classification.pass').length, 1);
     assert.strictEqual(getStores().schedules.getById('sched-classify-f')?.runCount, 1);
@@ -2054,10 +2048,10 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     seedSchedule('classify');
     seedFinding({ title: 'Scheduled risky fix', runId: 'run_manual' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
     assert.strictEqual(result.fired.length, 1);
     assert.strictEqual(result.fired[0].classification!.requestedApproval, 1);
-    assert.strictEqual(getDataService().loadTasks().length, 0, 'nothing is applied before approval');
+    assert.strictEqual(getStores().plans.loadAll().length, 0, 'nothing is applied before approval');
 
     const pendingApprovals = getStores().approvals.loadAll().filter(a => a.type === 'plan-classification' && a.status === 'pending');
     assert.strictEqual(pendingApprovals.length, 1);
@@ -2068,7 +2062,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     seedSchedule('classify', { enabled: false });
     seedFinding({ title: 'Must not classify', runId: 'run_disabled' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
     assert.strictEqual(result.fired.length, 0);
     assert.deepStrictEqual(result.skipped, [{ scheduleId: 'sched-classify-f', reason: 'disabled' }]);
     assert.strictEqual(getStores().proposals.loadAll().length, 0);
@@ -2083,31 +2077,31 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
     }
     getStores().queue.saveSettings({ maxProposalsPerPass: 2 });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 16, 8, 0, 0) });
     const fired = result.fired[0];
     assert.strictEqual(fired.classification!.scanned, 5);
     assert.strictEqual(fired.classification!.proposed, 2);
     assert.strictEqual(fired.classification!.applied, 2);
-    assert.strictEqual(getDataService().loadTasks().length, 2);
+    assert.strictEqual(getStores().plans.loadAll().length, 2);
   });
 
-  it('overlapping or back-to-back passes never duplicate proposals or tasks', async () => {
+  it('overlapping or back-to-back passes never duplicate proposals or plans', async () => {
     setApprovalGate('plan-classification', 'auto');
     const now = new Date(2026, 0, 16, 8, 0, 0);
     seedSchedule('classify');
     seedFinding({ title: 'Only once', runId: 'run_once' });
 
-    await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now });
-    assert.strictEqual(getDataService().loadTasks().length, 1);
+    await runSchedulerPass({ stores: getStores(ws.root), now });
+    assert.strictEqual(getStores().plans.loadAll().length, 1);
 
-    const early = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(now.getTime() + 30_000) });
+    const early = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(now.getTime() + 30_000) });
     assert.strictEqual(early.fired.length, 0, 'interval not elapsed → no overlapping pass');
 
-    const after = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(now.getTime() + 120_000) });
+    const after = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(now.getTime() + 120_000) });
     assert.strictEqual(after.fired.length, 1, 'the next occurrence fires again');
     assert.strictEqual(after.fired[0].classification!.proposed, 0, 'no pending findings → no new proposals');
     assert.strictEqual(getStores().proposals.loadAll().length, 1, 'no duplicate proposal');
-    assert.strictEqual(getDataService().loadTasks().length, 1, 'no duplicate task');
+    assert.strictEqual(getStores().plans.loadAll().length, 1, 'no duplicate plan');
   });
 });
 
@@ -2116,7 +2110,6 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal e
 
   beforeEach(() => {
     ws = makeWorkspace();
-    taskService.getTaskService(ws.root);
   });
 
   afterEach(() => {
@@ -2193,12 +2186,12 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal e
 
   it('is a no-op for a non-pending proposal and returns undefined for a missing id', () => {
     const finding = seedFinding({ title: 'Edit applied no-op', runId: 'run_applied_edit' });
-    const proposal = classificationService.createProposal(finding, { title: 'Applied task', type: 'chore', priority: 'low' });
+    const proposal = classificationService.createProposal(finding, { title: 'Applied plan', type: 'chore', priority: 'low' });
     classificationService.applyProposal(proposal!.id);
 
     const applied = classificationService.editProposal(proposal!.id, { title: 'No good' });
     assert.strictEqual(applied?.status, 'applied');
-    assert.strictEqual(applied?.title, 'Applied task');
+    assert.strictEqual(applied?.title, 'Applied plan');
 
     const missing = classificationService.editProposal('missing_id');
     assert.strictEqual(missing, undefined);
@@ -2223,28 +2216,28 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal e
     assert.strictEqual(classificationService.editProposal(fresh!.id, { title: 'System edited' })?.title, 'System edited');
   });
 
-  it('Apply creates a task from the edited payload values', () => {
+  it('Apply creates a plan from the edited payload values', () => {
     const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Apply' });
     const finding = seedFinding({ title: 'Edit then apply', runId: 'run_edit_apply' });
-    const proposal = classificationService.createProposal(finding, { title: 'Original task', type: 'bug', priority: 'high', workflow: 'w_fix' });
+    const proposal = classificationService.createProposal(finding, { title: 'Original plan', type: 'bug', priority: 'high', workflow: 'w_fix' });
 
-    const edited = classificationService.editProposal(proposal!.id, { title: 'Revised task', type: 'chore', priority: 'low', workflow: 'w_ops' }, lead.id);
+    const edited = classificationService.editProposal(proposal!.id, { title: 'Revised plan', type: 'chore', priority: 'low', workflow: 'w_ops' }, lead.id);
     assert.strictEqual(edited?.status, 'pending');
 
     const applied = classificationService.applyProposal(edited!.id, lead.id);
     assert.strictEqual(applied?.status, 'applied');
+    assert.ok(applied?.appliedPlanId, 'applied proposal carries the created plan id');
 
-    const tasks = getDataService().loadTasks();
-    assert.strictEqual(tasks.length, 1);
-    assert.strictEqual(tasks[0].title, 'Revised task');
-    assert.strictEqual(tasks[0].type, 'chore');
-    assert.strictEqual(tasks[0].priority, 'low');
-    assert.strictEqual(tasks[0].workflow, 'w_ops');
+    const plans = getStores().plans.loadAll();
+    assert.strictEqual(plans.length, 1);
+    assert.strictEqual(planTitleFor(plans[0], ws.root), 'Revised plan');
+    assert.strictEqual(plans[0].classification.original.category, 'maintenance');
+    assert.strictEqual(plans[0].classification.original.priority, 'low');
 
     const updatedFinding = getStores().findings.getById(finding.id);
     assert.strictEqual(updatedFinding?.title, 'Edit then apply');
     assert.strictEqual(updatedFinding?.status, 'approved');
-    assert.strictEqual(updatedFinding?.taskId, tasks[0].id);
+    assert.strictEqual(updatedFinding?.planId, applied!.appliedPlanId);
   });
 });
 
@@ -2253,7 +2246,6 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
 
   beforeEach(() => {
     ws = makeWorkspace();
-    taskService.getTaskService(ws.root);
   });
 
   afterEach(() => {
@@ -2359,7 +2351,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
   it('applies a requeued proposal as-is without re-running classification — payload and finding preserved', () => {
     const lead = seedAgent({ role: 'human', teamRole: 'lead', name: 'Lead Requeue Apply' });
     const finding = seedFinding({ title: 'Requeue then apply' });
-    const proposal = classificationService.createProposal(finding, { title: 'Requeue apply task', type: 'bug', priority: 'high', workflow: 'w_fix' });
+    const proposal = classificationService.createProposal(finding, { title: 'Requeue apply plan', type: 'bug', priority: 'high', workflow: 'w_fix' });
     classificationService.rejectProposal(proposal!.id);
 
     const requeued = classificationService.requeueProposal(proposal!.id, lead.id);
@@ -2367,16 +2359,17 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
 
     const applied = classificationService.applyProposal(requeued!.id, lead.id);
     assert.strictEqual(applied?.status, 'applied');
+    assert.ok(applied?.appliedPlanId, 'applied proposal carries the created plan id');
 
     // no fresh classification pass — requeue is a pure status transition
     assert.strictEqual(getStores().events.findByType('classification.pass').length, 0);
 
-    const tasks = getDataService().loadTasks();
-    assert.strictEqual(tasks.length, 1);
-    assert.strictEqual(tasks[0].title, 'Requeue apply task');
-    assert.strictEqual(tasks[0].type, 'bug');
-    assert.strictEqual(tasks[0].priority, 'high');
-    assert.strictEqual(tasks[0].workflow, 'w_fix');
+    const plans = getStores().plans.loadAll();
+    assert.strictEqual(plans.length, 1);
+    assert.strictEqual(planTitleFor(plans[0], ws.root), 'Requeue apply plan');
+    assert.strictEqual(plans[0].classification.original.category, 'bug');
+    assert.strictEqual(plans[0].classification.original.priority, 'high');
+    assert.strictEqual(getStores().findings.getById(finding.id)?.planId, applied!.appliedPlanId);
   });
 });
 

@@ -200,7 +200,6 @@ interface ActivityEventDto {
   links: {
     runId?: string;
     planId?: string;
-    taskId?: string;
     workflowId?: string;
     ruleId?: string;
     findingId?: string;
@@ -232,7 +231,7 @@ interface ProposalDto {
   confidence?: number;
   status: string;
   createdAt: string;
-  appliedTaskId?: string;
+  appliedPlanId?: string;
   reason?: string;
   editedAt?: string;
   editCount?: number;
@@ -263,8 +262,6 @@ interface FindingDto {
   timestamp: string;
   runId: string;
   runStatus?: RunStatus;
-  taskId?: string;
-  taskTitle?: string;
   planId?: string;
   planTitle?: string;
   category?: string;
@@ -1572,7 +1569,6 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 <span style={styles.muted}>Agent: {f.agentName}</span>
                 {f.category && <span style={styles.muted}> · {f.category}</span>}
                 {f.planTitle && <span style={styles.muted}> · Plan: {f.planTitle}</span>}
-                {f.taskTitle && <span style={styles.muted}> · Task: {f.taskTitle}</span>}
                 <span style={styles.muted}> · {formatTime(f.timestamp)}</span>
               </div>
 
@@ -1652,7 +1648,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
               <div style={{ marginTop: 6, fontSize: 12 }}>
                 <span style={styles.muted}>finding {p.findingId.slice(0, 8)}</span>
                 {p.status !== "pending" && p.reason && <span style={styles.muted}> · {p.reason}</span>}
-                {p.appliedTaskId && <span style={styles.muted}> · task {p.appliedTaskId}</span>}
+                {p.appliedPlanId && <span style={styles.muted}> · plan {p.appliedPlanId}</span>}
               </div>
               {p.status === "pending" && (
                 <div style={{ marginTop: 8 }}>
@@ -1831,7 +1827,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
             <div style={{ display: "flex", gap: 10 }}>
               <div style={{ ...styles.field, flex: 1 }}>
                 <label style={styles.label}>Payload key (optional)</label>
-                <input style={styles.input} value={ruleForm.payloadKey} placeholder="e.g. taskId or repo.name" onChange={ev => setRuleFormField("payloadKey", ev.target.value)} />
+                <input style={styles.input} value={ruleForm.payloadKey} placeholder="e.g. planId or repo.name" onChange={ev => setRuleFormField("payloadKey", ev.target.value)} />
               </div>
               <div style={{ ...styles.field, flex: 1 }}>
                 <label style={styles.label}>Payload value (optional)</label>
@@ -2045,7 +2041,6 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 {ev.links.runId && <button style={styles.link} onClick={() => openRun(ev.links.runId!)}>run</button>}
                 {ev.links.findingId && <button style={styles.link} onClick={() => openFinding(ev.links.findingId!)}>finding</button>}
                 {ev.links.planId && <button style={styles.link} onClick={() => openPlan(ev.links.planId!)}>plan</button>}
-                {ev.links.taskId && <button style={styles.link} onClick={() => setTab("plans")}>task</button>}
                 {ev.links.workflowId && <button style={styles.link} onClick={() => openWorkflow(ev.links.workflowId!)}>workflow</button>}
                 {ev.links.ruleId && <button style={styles.link} onClick={() => openRule(ev.links.ruleId!)}>rule</button>}
                 {ev.links.windowId && <button style={styles.link} onClick={() => openWindow(ev.links.windowId!)}>window</button>}

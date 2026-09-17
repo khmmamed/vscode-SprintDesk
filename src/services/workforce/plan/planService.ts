@@ -1,6 +1,6 @@
 import * as path from 'path';
 import matter from 'gray-matter';
-import { getDataService } from '../../../data/DataService';
+import { getWorkspaceRoot } from '../../../services/fileService';
 import { getHost, getFileSystem } from '../../../host';
 import { getStores, Stores } from '../../../data/stores';
 import {
@@ -47,8 +47,7 @@ function resolveRoot(workspaceRoot?: string): string {
   if (workspaceRoot) {
     return workspaceRoot;
   }
-  const dataRoot = getDataService().getWorkspaceRoot();
-  return (dataRoot || getHost().getWorkspaceRoot() || '') as string;
+  return getWorkspaceRoot() || getHost().getWorkspaceRoot() || '';
 }
 
 export function plansDir(workspaceRoot?: string): string {

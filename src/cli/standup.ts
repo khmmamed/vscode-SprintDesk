@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 import * as path from 'path';
 import * as fs from 'fs';
-import { getDataService } from '../data/DataService';
 import { getStores } from '../data/stores';
+import { ProposalType, Plan } from '../data/types';
 import * as workforceService from '../services/workforce/workforceService';
 import * as capability from '../services/workforce/capabilityService';
+import { planTitleFor } from '../services/workforce/plan/planService';
+
+const CLOSED_STATUSES = new Set(['done', 'failed', 'cancelled']);
+const OPEN_SCHEDULE_STATUSES = new Set(['draft', 'ready', 'blocked', 'running']);
 
 function resolveWorkspace(argv: string[]): string {
   const explicit = argv[2];
@@ -13,25 +17,46 @@ function resolveWorkspace(argv: string[]): string {
   return process.cwd();
 }
 
-function statusCounts(tasks: Array<{ status: string }>): Record<string, number> {
+function statusCounts(plans: Array<{ scheduling: { status: string } }>): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const t of tasks) counts[t.status] = (counts[t.status] || 0) + 1;
+  for (const p of plans) counts[p.scheduling.status] = (counts[p.scheduling.status] || 0) + 1;
   return counts;
 }
 
-export function buildStandup(ws: string): string {
-  const ds = getDataService(ws);
-  const stores = getStores(ws);
-  const config = ds.loadConfig();
+function planCategoryToProposalType(category?: string): ProposalType {
+  switch (category) {
+    case 'bug': return 'bug';
+    case 'maintenance': return 'chore';
+    case 'documentation': return 'doc';
+    case 'test': return 'test';
+    case 'feature':
+    case 'research':
+    case 'internal':
+    default:
+      return 'feature';
+  }
+}
 
-  const tasks = ds.loadTasks();
-  const inProgress = tasks.filter(t => t.status === 'in-progress');
-  const unassigned = tasks.filter(t => !t.agent && t.status !== 'done' && t.status !== 'cancelled');
-  const workflowActive = tasks.filter(t =>
-    t.workStatus &&
-    t.workStatus !== 'done' &&
-    t.workStatus !== 'cancelled' &&
-    t.workStatus !== 'waiting'
+function planDisplay(p: Plan): { id: string; title: string; status: string; agent?: string } {
+  const axis = p.classification?.current || p.classification?.original;
+  return {
+    id: p.id,
+    title: planTitleFor(p) || p.id,
+    status: p.scheduling?.status || 'draft',
+    agent: p.execution?.assignedAgent || p.execution?.status
+  };
+}
+
+export function buildStandup(ws: string): string {
+  const stores = getStores(ws);
+
+  const plans = stores.plans.loadAll();
+  const openPlans = plans.filter(p => OPEN_SCHEDULE_STATUSES.has(p.scheduling?.status || 'draft'));
+  const inFlight = plans.filter(p => p.scheduling?.status === 'running' || p.execution?.status === 'running');
+  const unassigned = plans.filter(p =>
+    OPEN_SCHEDULE_STATUSES.has(p.scheduling?.status || 'draft') &&
+    !p.execution?.assignedAgent &&
+    p.execution?.status !== 'running'
   );
 
   const runs = stores.runs.loadAll();
@@ -47,21 +72,21 @@ export function buildStandup(ws: string): string {
 
   stores.skills.seedDefaultSkills();
   const skillCatalogCount = stores.skills.loadAll().length;
-  const openTasks = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
-  const coveragePerTask = openTasks.map(t => {
+  const coveragePerPlan = openPlans.map(p => {
+    const axis = p.classification?.current || p.classification?.original;
     const ranked = capability.rankEmployees(
-      { type: t.type, requiredSkills: t.requiredSkills },
+      { type: planCategoryToProposalType(axis?.category), requiredSkills: undefined },
       { includePartial: true, maxResults: 3 }
     );
-    return { task: t, ranked };
+    return { plan: p, ranked };
   });
-  const fullyMatched = coveragePerTask.filter(c => c.ranked.length > 0 && c.ranked[0].evaluation.coverage >= 1);
-  const partiallyMatched = coveragePerTask.filter(
+  const fullyMatched = coveragePerPlan.filter(c => c.ranked.length > 0 && c.ranked[0].evaluation.coverage >= 1);
+  const partiallyMatched = coveragePerPlan.filter(
     c => c.ranked.length > 0 && c.ranked[0].evaluation.coverage < 1
   );
-  const unmatched = coveragePerTask.filter(c => c.ranked.length === 0);
+  const unmatched = coveragePerPlan.filter(c => c.ranked.length === 0);
   const skillGaps = new Set<string>();
-  for (const c of coveragePerTask) {
+  for (const c of coveragePerPlan) {
     for (const r of c.ranked) {
       for (const missing of r.evaluation.missing) skillGaps.add(missing);
     }
@@ -76,25 +101,26 @@ export function buildStandup(ws: string): string {
   lines.push(`Generated: ${new Date().toLocaleString()}`);
   lines.push('');
   lines.push(`## Scope`);
-  lines.push(`- Prefix: \`${config.projectPrefix}\``);
-  lines.push(`- Tasks: ${tasks.length} · Epics: ${ds.loadEpics().length} · Sprints: ${ds.loadSprints().length}`);
+  lines.push(`- Plans: ${plans.length} · Inputs: ${stores.inputs.count()} · Checkpoints: ${stores.checkpoints.count()}`);
   lines.push('');
-  lines.push(`## Task Status`);
-  for (const [status, count] of Object.entries(statusCounts(tasks))) {
+  lines.push(`## Plan Status`);
+  for (const [status, count] of Object.entries(statusCounts(plans))) {
     lines.push(`- ${status}: ${count}`);
   }
-  if (workflowActive.length > 0) {
+  if (inFlight.length > 0) {
     lines.push('');
     lines.push(`## In Flight`);
-    for (const t of workflowActive.slice(0, 20)) {
-      lines.push(`- \`${t.code}\` ${t.title} — ${t.workStatus} — ${t.agent || 'unassigned'}`);
+    for (const p of inFlight.slice(0, 20)) {
+      const d = planDisplay(p);
+      lines.push(`- \`${d.id}\` ${d.title} — ${d.status} — ${d.agent || 'unassigned'}`);
     }
   }
-  if (inProgress.length > 0) {
+  if (openPlans.length > 0) {
     lines.push('');
-    lines.push(`## In Progress`);
-    for (const t of inProgress.slice(0, 20)) {
-      lines.push(`- \`${t.code}\` ${t.title} — ${t.agent || 'unassigned'}`);
+    lines.push(`## Open Plans`);
+    for (const p of openPlans.slice(0, 20)) {
+      const d = planDisplay(p);
+      lines.push(`- \`${d.id}\` ${d.title} — ${d.status} — ${d.agent || 'unassigned'}`);
     }
   }
   lines.push('');
@@ -115,22 +141,25 @@ export function buildStandup(ws: string): string {
   lines.push('');
   lines.push(`## Matching Readiness`);
   lines.push(`- Skill catalog: ${skillCatalogCount} skills · ${employeesWithCertifiedSkills} employees with certified skills`);
-  lines.push(`- Open tasks: ${openTasks.length} · fully matchable: ${fullyMatched.length} · partial: ${partiallyMatched.length} · uncovered: ${unmatched.length}`);
+  lines.push(`- Open plans: ${openPlans.length} · fully matchable: ${fullyMatched.length} · partial: ${partiallyMatched.length} · uncovered: ${unmatched.length}`);
   if (skillGaps.size > 0) {
     lines.push(`- Skill gaps: ${[...skillGaps].join(', ')}`);
   }
   for (const u of unmatched.slice(0, 5)) {
-    lines.push(`  - ⚠️ uncovered: \`${u.task.code}\` ${u.task.title} (${capability.skillsForTask(u.task).join(', ')})`);
+    const axis = u.plan.classification?.current || u.plan.classification?.original;
+    const d = planDisplay(u.plan);
+    lines.push(`  - ⚠️ uncovered: \`${d.id}\` ${d.title} (${capability.skillsForTask({ type: planCategoryToProposalType(axis?.category), requiredSkills: undefined }).join(', ')})`);
   }
   lines.push('');
   lines.push(`## Attention`);
   if (unassigned.length > 0) {
-    lines.push(`- ⚠️ ${unassigned.length} open task(s) have no agent assigned — runs are gated until assigned.`);
-    for (const t of unassigned.slice(0, 10)) {
-      lines.push(`  - \`${t.code}\` ${t.title}`);
+    lines.push(`- ⚠️ ${unassigned.length} open plan(s) have no agent assigned — runs are gated until assigned.`);
+    for (const p of unassigned.slice(0, 10)) {
+      const d = planDisplay(p);
+      lines.push(`  - \`${d.id}\` ${d.title}`);
     }
   } else {
-    lines.push(`- All open tasks are assigned.`);
+    lines.push(`- All open plans are assigned.`);
   }
 
   if (recentEvents.length > 0) {

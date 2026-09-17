@@ -1,6 +1,5 @@
 import * as fileService from '../../services/fileService';
 import { getStores } from '../../data/stores';
-import { getDataService, DataService } from '../../data/DataService';
 import { AuditEntry } from '../../data/types';
 
 export interface HandlerResult {
@@ -16,27 +15,6 @@ export function res(text: string, isError = false): HandlerResult {
 
 export function getWs(): string | undefined {
   return fileService.getWorkspaceRoot();
-}
-
-export function getDs(): DataService | undefined {
-  const ws = getWs();
-  return ws ? getDataService(ws) : undefined;
-}
-
-export function findTask(ds: DataService, taskId: string) {
-  return ds.getTask(taskId) || ds.loadTasks().find(t => t.code === taskId);
-}
-
-export function findEpic(ds: DataService, epicId: string) {
-  return ds.getEpic(epicId) || ds.loadEpics().find(e => e.code === epicId);
-}
-
-export function findSprint(ds: DataService, sprintId: string) {
-  return ds.getSprint(sprintId) || ds.loadSprints().find(s => s.number.toString() === sprintId);
-}
-
-export function findBacklog(ds: DataService, backlogId: string) {
-  return ds.getBacklog(backlogId) || ds.loadBacklogs().find(b => b.name === backlogId || b.title === backlogId);
 }
 
 export interface ResolvedAgent {

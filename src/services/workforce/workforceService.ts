@@ -1,6 +1,5 @@
 import * as crypto from 'crypto';
 import * as fileService from '../fileService';
-import { getDataService, DataService } from '../../data/DataService';
 import { getStores } from '../../data/stores';
 import { AgentConfig, Approval, Employee, EmployeeModelProfile, EmployeeSkill, EmployeeTeam, EmployeeTeamRole } from '../../data/types';
 import { getHost } from '../../host';
@@ -276,15 +275,6 @@ export function getWorkforceSummary(): {
   };
 }
 
-function dataService(): DataService {
-  return getDataService(fileService.getWorkspaceRoot());
-}
-
-function findClassicTask(taskId: string) {
-  const ds = dataService();
-  return ds.getTask(taskId) || ds.loadTasks().find(t => t.code === taskId);
-}
-
 export function recordWorkforceAudit(entry: {
   actor: string;
   action: string;
@@ -297,31 +287,6 @@ export function recordWorkforceAudit(entry: {
     id: `audit_${Date.now()}`,
     timestamp: new Date().toISOString()
   });
-}
-
-export interface PerformedAssignment {
-  taskId: string;
-  agentId: string;
-}
-
-export function performTaskAssignment(taskId: string, agentId: string, requesterId?: string): PerformedAssignment {
-  const ds = dataService();
-  const task = findClassicTask(taskId);
-  if (!task) throw new Error(`Task not found: ${taskId}`);
-
-  ds.updateTask(task.id, { agent: agentId });
-  const updatedTask = ds.getTask(task.id);
-  if (updatedTask) ds.saveTaskMd(updatedTask);
-
-  recordWorkforceAudit({
-    actor: requesterId || 'workforce',
-    action: 'assign',
-    targetType: 'task',
-    targetId: task.id,
-    details: { agentId, taskCode: task.code }
-  });
-
-  return { taskId: task.id, agentId };
 }
 
 export interface EmployeeConfigChange {

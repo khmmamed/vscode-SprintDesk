@@ -1,7 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { makeWorkspace, makeEmployee, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
-import { getDataService } from '../../src/data/DataService';
 import { Employee, ScheduleRecord } from '../../src/data/types';
 import { CronParseError, matchesCron, parseCron } from '../../src/services/workforce/scheduler/cronParser';
 import {
@@ -165,7 +164,7 @@ describe('C6 deterministic scheduler', () => {
   it('materializes a pending plan for a matching cron schedule without creating runs', async () => {
     makeSchedule('cron-exact', { cron: '30 9 * * *', planTemplate: { name: 'Nightly', title: 'Nightly check', category: 'maintenance', priority: 'low' } });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(30, 9) });
 
     assert.strictEqual(result.fired.length, 1);
     const fired = result.fired[0];
@@ -198,11 +197,11 @@ describe('C6 deterministic scheduler', () => {
   it('is idempotent: the same occurrence never creates a duplicate', async () => {
     makeSchedule('cron-idem', { cron: '30 9 * * *' });
 
-    const first = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+    const first = await runSchedulerPass({ stores: getStores(ws.root), now: at(30, 9) });
     assert.strictEqual(first.fired.length, 1);
     const planCountAfterFirst = getStores(ws.root).plans.count();
 
-    const second = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+    const second = await runSchedulerPass({ stores: getStores(ws.root), now: at(30, 9) });
     assert.strictEqual(second.fired.length, 0);
     assert.ok(
       second.skipped.some(s => s.scheduleId === 'cron-idem'),
@@ -220,7 +219,7 @@ describe('C6 deterministic scheduler', () => {
       lastOccurrenceKey: key
     });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now });
 
     assert.strictEqual(result.fired.length, 0);
     assert.deepStrictEqual(result.skipped, [{ scheduleId: 'guard', reason: 'duplicate-occurrence' }]);
@@ -230,7 +229,7 @@ describe('C6 deterministic scheduler', () => {
   it('skips a cron schedule that does not match, without creating anything', async () => {
     makeSchedule('cron-nomatch', { cron: '30 9 * * *' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 10) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(0, 10) });
 
     assert.strictEqual(result.fired.length, 0);
     assert.deepStrictEqual(result.skipped, [{ scheduleId: 'cron-nomatch', reason: 'no-match' }]);
@@ -241,7 +240,7 @@ describe('C6 deterministic scheduler', () => {
   it('an invalid cron expression is skipped without crashing the pass', async () => {
     makeSchedule('cron-invalid', { cron: '30 9 * *' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(30, 9) });
 
     assert.strictEqual(result.fired.length, 0);
     assert.deepStrictEqual(result.skipped, [{ scheduleId: 'cron-invalid', reason: 'invalid-cron' }]);
@@ -251,7 +250,7 @@ describe('C6 deterministic scheduler', () => {
   it('a disabled schedule is never evaluated', async () => {
     makeSchedule('cron-disabled', { enabled: false, cron: '30 9 * * *' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(30, 9) });
 
     assert.deepStrictEqual(result.skipped, [{ scheduleId: 'cron-disabled', reason: 'disabled' }]);
     assert.strictEqual(getStores(ws.root).plans.count(), 0);
@@ -262,7 +261,7 @@ describe('C6 deterministic scheduler', () => {
     const yesterday = new Date(2026, 0, 14, 9, 30, 0).toISOString();
     makeSchedule('cron-missed', { cron: '30 9 * * *', lastRunAt: yesterday });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 15, 9, 31, 0) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 15, 9, 31, 0) });
 
     assert.strictEqual(result.fired.length, 1);
     assert.strictEqual(result.fired[0].mode, 'execute');
@@ -275,7 +274,7 @@ describe('C6 deterministic scheduler', () => {
     const lastMonth = new Date(2025, 11, 1, 9, 0, 0).toISOString();
     makeSchedule('cron-lookback', { cron: '0 9 1 * *', lastRunAt: lastMonth });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 15, 10, 0, 0) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 15, 10, 0, 0) });
 
     assert.strictEqual(result.fired.length, 0);
     assert.deepStrictEqual(result.skipped, [{ scheduleId: 'cron-lookback', reason: 'no-match' }]);
@@ -285,16 +284,16 @@ describe('C6 deterministic scheduler', () => {
   it('interval schedules fire immediately on first evaluation and catch up missed windows', async () => {
     makeSchedule('int-first', { kind: 'interval', intervalMs: 60_000 });
 
-    const first = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 9) });
+    const first = await runSchedulerPass({ stores: getStores(ws.root), now: at(0, 9) });
     assert.strictEqual(first.fired.length, 1);
     assert.strictEqual(first.fired[0].mode, 'execute');
     assert.strictEqual(getStores(ws.root).schedules.getById('int-first')!.runCount, 1);
 
-    const within = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 15, 9, 0, 30) });
+    const within = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 15, 9, 0, 30) });
     assert.strictEqual(within.fired.length, 0);
     assert.deepStrictEqual(within.skipped, [{ scheduleId: 'int-first', reason: 'interval-not-elapsed' }]);
 
-    const elapsed = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 15, 9, 2, 0) });
+    const elapsed = await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 15, 9, 2, 0) });
     assert.strictEqual(elapsed.fired.length, 1);
     assert.strictEqual(getStores(ws.root).schedules.getById('int-first')!.runCount, 2);
     assert.strictEqual(getStores(ws.root).plans.count(), 2);
@@ -303,12 +302,12 @@ describe('C6 deterministic scheduler', () => {
   it('tracks lastRunAt and updates runCount per successful execution', async () => {
     makeSchedule('int-lastrun', { kind: 'interval', intervalMs: 5 * 60_000 });
 
-    await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 9) });
+    await runSchedulerPass({ stores: getStores(ws.root), now: at(0, 9) });
     const afterFirst = getStores(ws.root).schedules.getById('int-lastrun')!;
     assert.ok(afterFirst.lastRunAt);
     assert.strictEqual(afterFirst.runCount, 1);
 
-    await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: new Date(2026, 0, 15, 9, 5, 0) });
+    await runSchedulerPass({ stores: getStores(ws.root), now: new Date(2026, 0, 15, 9, 5, 0) });
     const afterSecond = getStores(ws.root).schedules.getById('int-lastrun')!;
     assert.strictEqual(afterSecond.runCount, 2);
     assert.ok(Number(new Date(afterSecond.lastRunAt!)) > Number(new Date(afterFirst.lastRunAt!)));
@@ -330,7 +329,7 @@ describe('C6 deterministic scheduler', () => {
     makeSchedule('aut-0', { autonomyLevel: 0, cron: '* * * * *' });
     makeSchedule('aut-1', { autonomyLevel: 1, cron: '* * * * *' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 9) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(0, 9) });
 
     const skippedReasons = result.skipped.map(s => s.reason);
     assert.ok(skippedReasons.includes('autonomy-level-0'));
@@ -356,7 +355,7 @@ describe('C6 deterministic scheduler', () => {
     makeSchedule('aut-2', { autonomyLevel: 2, cron: '* * * * *' });
     makeSchedule('aut-3', { autonomyLevel: 3, cron: '* * * * *' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 9) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(0, 9) });
 
     assert.strictEqual(result.fired.filter(f => f.mode === 'execute').length, 2);
     assert.deepStrictEqual(result.fired.map(f => f.scheduleId).sort(), ['aut-2', 'aut-3']);
@@ -369,7 +368,7 @@ describe('C6 deterministic scheduler', () => {
     makeSchedule('sched-a', { cron: '* * * * *' });
     makeSchedule('sched-b', { cron: '* * * * *' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 9) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(0, 9) });
 
     assert.deepStrictEqual(
       result.fired.map(f => f.scheduleId),
@@ -380,7 +379,7 @@ describe('C6 deterministic scheduler', () => {
   it('never directly creates or starts runs: only schedule events are emitted', async () => {
     makeSchedule('never-exec', { cron: '30 9 * * *' });
 
-    const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+    const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(30, 9) });
 
     assert.ok(result.fired[0].planId);
     assert.strictEqual(getStores(ws.root).runs.count(), 0);
@@ -400,7 +399,6 @@ describe('C6 deterministic scheduler', () => {
 
     const capped = await runSchedulerPass({
       stores: getStores(ws.root),
-      dataService: getDataService(ws.root),
       now: at(30, 9),
       organizerCap: 1
     });
@@ -423,7 +421,7 @@ describe('C6 deterministic scheduler', () => {
     seedPlanningAgent('Gamal');
     makeSchedule('org-nochange', { kind: 'interval', intervalMs: 60_000, action: 'organize' });
 
-    const first = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(0, 9) });
+    const first = await runSchedulerPass({ stores: getStores(ws.root), now: at(0, 9) });
 
     assert.strictEqual(first.fired.length, 0);
     assert.strictEqual(getStores(ws.root).events.findByType('schedule.fired').length, 0);
@@ -442,7 +440,7 @@ describe('C6 deterministic scheduler', () => {
       });
       makeSchedule('pipe-b-organize', { cron: '30 9 * * *', action: 'organize' });
 
-      const result = await runSchedulerPass({ stores: getStores(ws.root), dataService: getDataService(ws.root), now: at(30, 9) });
+      const result = await runSchedulerPass({ stores: getStores(ws.root), now: at(30, 9) });
       assert.strictEqual(result.fired.length, 2);
 
       const runs = getStores(ws.root).runs.loadAll();

@@ -2,10 +2,11 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as yaml from 'js-yaml';
 import * as fileService from '../fileService';
-import { getDataService } from '../../data/DataService';
 import { HistoryEntry, HistoryData } from '../../data/types';
 import { PROJECT_CONSTANTS } from '../../utils/constant';
 import { getHost, getFileSystem } from '../../host';
+import { getStores } from '../../data/stores';
+import { resolvePlanFile } from '../workforce/plan/planService';
 
 const HISTORY_FILE = 'history.yml';
 
@@ -169,22 +170,12 @@ export function getHistoryForItem(itemId: string, itemType: HistoryEntry['itemTy
     .reverse();
 
   let git: GitCommit[] = [];
-  const dataService = getDataService(ws);
 
-  if (itemType === 'task') {
-    const task = dataService.getTask(itemId);
-    if (task?.path) {
-      git = getGitHistoryForItem(task.path, itemType);
-    }
-  } else if (itemType === 'epic') {
-    const epic = dataService.getEpic(itemId);
-    if (epic?.path) {
-      git = getGitHistoryForItem(epic.path, itemType);
-    }
-  } else if (itemType === 'sprint') {
-    const sprint = dataService.getSprint(itemId);
-    if (sprint?.path) {
-      git = getGitHistoryForItem(sprint.path, itemType);
+  if (itemType === 'plan') {
+    const plan = getStores(ws).plans.getById(itemId);
+    const planFile = plan ? resolvePlanFile(plan) : undefined;
+    if (planFile) {
+      git = getGitHistoryForItem(planFile, itemType);
     }
   }
 
