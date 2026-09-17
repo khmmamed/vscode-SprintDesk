@@ -81,7 +81,7 @@ function makeWorkflow(id: string, title: string): WorkflowDefinition {
     name: `Workflow ${id}`,
     version: '1.0.0',
     enabled: true,
-    steps: [{ id: 's1', type: 'task', title, taskType: 'chore', priority: 'low', backlog: 'features' }],
+    steps: [{ id: 's1', type: 'plan', title, category: 'maintenance', priority: 'low' }],
     createdAt: now,
     updatedAt: now
   };

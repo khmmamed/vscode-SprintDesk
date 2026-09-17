@@ -7,14 +7,14 @@ import {
   WorkflowRunResult,
   WorkflowStep,
   WorkflowStepResult,
-  WorkflowTaskStep,
+  WorkflowPlanStep,
   WorkflowToolStep
 } from '../../../data/types';
 import { getStores, Stores } from '../../../data/stores';
 import { emitEvent } from '../events';
 import { callServerTool } from '../mcp/client';
 import { evaluateCondition, interpolate, validateWorkflow } from './dsl';
-import { legacyTaskKindToPlanCategory, materializePlan } from '../plan/planService';
+import { materializePlan } from '../plan/planService';
 
 export interface WorkflowContext {
   workflowId: string;
@@ -49,7 +49,7 @@ function skipped(stepId: string, outputs: Record<string, unknown> = {}): Workflo
   return { stepId, status: 'skipped', outputs };
 }
 
-function taskTitle(step: WorkflowTaskStep, context: WorkflowContext): string {
+function planTitle(step: WorkflowPlanStep, context: WorkflowContext): string {
   const interpolated = interpolate(step.title, context.variables);
   return typeof interpolated === 'string' ? interpolated : step.title;
 }
@@ -73,32 +73,32 @@ function createWorkflowRun(stores: Stores, now: Date, context: WorkflowContext, 
   return run;
 }
 
-// v1.0 Slice D — `task` steps materialize runnable Plans (the queue's execution
-// unit) with provenance `synthetic:workflow:<id>`; step outputs carry planId.
-function executeTaskStep(
-  step: WorkflowTaskStep,
+// v1.0 Slice D/Slice M — `plan` steps materialize runnable Plans (the queue's
+// execution unit) with provenance `synthetic:workflow:<id>`; step outputs carry planId.
+function executePlanStep(
+  step: WorkflowPlanStep,
   context: WorkflowContext,
   now: Date,
   stores: Stores
 ): WorkflowStepResult {
-  const title = taskTitle(step, context);
+  const title = planTitle(step, context);
   try {
     const plan = materializePlan(
       {
         sourceInputId: `synthetic:workflow:${context.workflowId}`,
         title,
         description: context.workflowName,
-        category: legacyTaskKindToPlanCategory(step.taskType),
+        category: step.category,
         priority: step.priority
       },
       { stores }
     );
 
     const run = createWorkflowRun(stores, now, context, plan);
-    return completed(step.id, { planId: plan.id, runId: run.id, backlog: !!step.backlog });
+    return completed(step.id, { planId: plan.id, runId: run.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return failed(step.id, `task step '${step.id}' failed: ${message}`);
+    return failed(step.id, `plan step '${step.id}' failed: ${message}`);
   }
 }
 
@@ -178,8 +178,8 @@ async function executeStep(
   stores: Stores
 ): Promise<WorkflowStepResult> {
   switch (step.type) {
-    case 'task':
-      return executeTaskStep(step, context, now, stores);
+    case 'plan':
+      return executePlanStep(step, context, now, stores);
     case 'loop':
       return executeLoopStep(step, context, now, stores);
     case 'tool':

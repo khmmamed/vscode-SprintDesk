@@ -55,7 +55,7 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
   Worker → Finding → Validation → Decision`, persisted and reviewable after the fact
 - **Event Rules** — `Event → Rule → Workflow → Plan/Run` async automation from the existing event stream,
   idempotent and re-entrancy-safe
-- **Workflow DSL** — declarative `task` / `loop` / `tool` / `condition` workflows; a `task` step materializes a
+- **Workflow DSL** — declarative `plan` / `loop` / `tool` / `condition` workflows; a `plan` step materializes a
   Plan and a queued run (`.SprintDesk/settings/workflows.yml`)
 
 ### Quick Access

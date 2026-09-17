@@ -517,8 +517,8 @@ export interface McpServersData {
   servers: McpServerConfig[];
 }
 
-// v0.9 workflow builder DSL (additive, non-breaking) -------------------------
-export type WorkflowStepType = 'task' | 'loop' | 'tool' | 'condition';
+// v0.9 workflow builder DSL — v1.0 Slice M: the `plan` step is plan-native
+export type WorkflowStepType = 'plan' | 'loop' | 'tool' | 'condition';
 
 export interface WorkflowBaseStep {
   id: string;
@@ -526,12 +526,11 @@ export interface WorkflowBaseStep {
   continueOnError?: boolean;
 }
 
-export interface WorkflowTaskStep extends WorkflowBaseStep {
-  type: 'task';
+export interface WorkflowPlanStep extends WorkflowBaseStep {
+  type: 'plan';
   title: string;
-  taskType: ProposalType;
-  priority: ProposalPriority;
-  backlog?: string;
+  category: PlanCategory;
+  priority: PlanPriority;
   requiredSkills?: string[];
 }
 
@@ -572,7 +571,7 @@ export interface WorkflowConditionStep extends WorkflowBaseStep {
 }
 
 export type WorkflowStep =
-  | WorkflowTaskStep
+  | WorkflowPlanStep
   | WorkflowLoopStep
   | WorkflowToolStep
   | WorkflowConditionStep;

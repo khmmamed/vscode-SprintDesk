@@ -1765,7 +1765,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
       {tab === "workflows" && (
         <div>
           {workflows.length === 0 && (
-            <div style={styles.empty}>No workflows defined yet. A workflow declares the steps (tasks, tools, loops, conditions) a run executes — define one in `.SprintDesk/settings/workflows.yml` or via a future editor.</div>
+            <div style={styles.empty}>No workflows defined yet. A workflow declares the steps (plans, tools, loops, conditions) a run executes — define one in `.SprintDesk/settings/workflows.yml` or via a future editor.</div>
           )}
           {workflows.map(wf => (
             <div key={wf.id} style={workflowFocus === wf.id ? styles.cardFocused : styles.card}>

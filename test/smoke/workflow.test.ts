@@ -9,15 +9,15 @@ import {
   WorkflowDefinition,
   WorkflowLoopStep,
   WorkflowStep,
-  WorkflowTaskStep,
+  WorkflowPlanStep,
   WorkflowToolStep
 } from '../../src/data/types';
 import { executeWorkflow } from '../../src/services/workforce/workflow/engine';
 import { validateWorkflow } from '../../src/services/workforce/workflow/dsl';
 import { planTitleFor } from '../../src/services/workforce/plan/planService';
 
-function taskStep(id: string, title: string, overrides: Partial<WorkflowTaskStep> = {}): WorkflowTaskStep {
-  return { id, type: 'task', title, taskType: 'chore', priority: 'low', backlog: 'features', ...overrides };
+function planStep(id: string, title: string, overrides: Partial<WorkflowPlanStep> = {}): WorkflowPlanStep {
+  return { id, type: 'plan', title, category: 'maintenance', priority: 'low', ...overrides };
 }
 
 function toolStep(id: string, serverId: string, toolName: string, agent: string, overrides: Partial<WorkflowToolStep> = {}): WorkflowToolStep {
@@ -81,7 +81,7 @@ describe('C7 workflow DSL', () => {
   });
 
   it('rejects duplicate step ids', async () => {
-    const def = workflow('dup', [taskStep('same', 'A'), taskStep('same', 'B')]);
+    const def = workflow('dup', [planStep('same', 'A'), planStep('same', 'B')]);
     await assert.rejects(
       () => executeWorkflow(def, { stores: getStores(ws.root) }),
       /duplicate step id 'same'/
@@ -98,7 +98,7 @@ describe('C7 workflow DSL', () => {
 
   it('rejects loops without a positive integer maxIterations', async () => {
     for (const max of [0, -1, 2.5]) {
-      const def = workflow('loop-bad', [loopStep('l', max, [taskStep('a', 'A')])]);
+      const def = workflow('loop-bad', [loopStep('l', max, [planStep('a', 'A')])]);
       await assert.rejects(
         () => executeWorkflow(def, { stores: getStores(ws.root) }),
         /maxIterations/
@@ -116,7 +116,7 @@ describe('C7 workflow DSL', () => {
 
   it('rejects a condition that references a step that does not exist', async () => {
     const def = workflow('cond-ghost', [
-      conditionStep('c', { type: 'step-status', stepId: 'ghost', expectedStatus: 'completed' }, [taskStep('a', 'A')])
+      conditionStep('c', { type: 'step-status', stepId: 'ghost', expectedStatus: 'completed' }, [planStep('a', 'A')])
     ]);
     await assert.rejects(
       () => Promise.resolve().then(() => validateWorkflow(def)),
@@ -124,8 +124,8 @@ describe('C7 workflow DSL', () => {
     );
   });
 
-  it('task steps create runnable plans and queued runs and persist workflow metadata', async () => {
-    const def = workflow('wf-basic', [taskStep('one', 'First Task'), taskStep('two', 'Second Task')]);
+  it('plan steps create runnable plans and queued runs and persist workflow metadata', async () => {
+    const def = workflow('wf-basic', [planStep('one', 'First Task'), planStep('two', 'Second Task')]);
 
     const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
@@ -147,9 +147,9 @@ describe('C7 workflow DSL', () => {
 
   it('executes steps in definition order', async () => {
     const def = workflow('wf-order', [
-      taskStep('a', 'Alpha'),
-      taskStep('b', 'Beta'),
-      taskStep('c', 'Gamma')
+      planStep('a', 'Alpha'),
+      planStep('b', 'Beta'),
+      planStep('c', 'Gamma')
     ]);
 
     const result = await executeWorkflow(def, { stores: getStores(ws.root) });
@@ -162,7 +162,7 @@ describe('C7 workflow DSL', () => {
   });
 
   it('never bypasses the queue: runs stay queued and no approval is requested', async () => {
-    const def = workflow('wf-queue', [taskStep('a', 'Alpha')]);
+    const def = workflow('wf-queue', [planStep('a', 'Alpha')]);
 
     await executeWorkflow(def, { stores: getStores(ws.root) });
 
@@ -175,7 +175,7 @@ describe('C7 workflow DSL', () => {
   });
 
   it('emits run.queued and workflow.completed events sourced as workflow', async () => {
-    const def = workflow('wf-events', [taskStep('a', 'Alpha')]);
+    const def = workflow('wf-events', [planStep('a', 'Alpha')]);
 
     await executeWorkflow(def, { stores: getStores(ws.root) });
 
@@ -187,7 +187,7 @@ describe('C7 workflow DSL', () => {
   });
 
   it('loops run a bounded number of times, terminate, and inject the iterate variable', async () => {
-    const def = workflow('wf-loop', [loopStep('batch', 3, [taskStep('item', 'Batch Item {i}')])]);
+    const def = workflow('wf-loop', [loopStep('batch', 3, [planStep('item', 'Batch Item {i}')])]);
 
     const result = await executeWorkflow(def, { stores: getStores(ws.root) });
 
@@ -218,12 +218,12 @@ describe('C7 workflow DSL', () => {
 
   it('conditions branch to then when a predecessor completed', async () => {
     const def = workflow('wf-cond-then', [
-      taskStep('prep', 'Prep Task'),
+      planStep('prep', 'Prep Task'),
       conditionStep(
         'pick',
         { type: 'step-status', stepId: 'prep', expectedStatus: 'completed' },
-        [taskStep('thenTask', 'Then Task')],
-        [taskStep('elseTask', 'Else Task')]
+        [planStep('thenTask', 'Then Task')],
+        [planStep('elseTask', 'Else Task')]
       )
     ]);
 
@@ -247,8 +247,8 @@ describe('C7 workflow DSL', () => {
       conditionStep(
         'pick',
         { type: 'step-status', stepId: 'probe', expectedStatus: 'completed' },
-        [taskStep('thenTask', 'Should Not Run')],
-        [taskStep('elseTask', 'Fallback Task')]
+        [planStep('thenTask', 'Should Not Run')],
+        [planStep('elseTask', 'Fallback Task')]
       )
     ]);
 
@@ -265,12 +265,12 @@ describe('C7 workflow DSL', () => {
   });
 
   it('static always/never conditions branch deterministically', async () => {
-    const always = workflow('wf-always', [conditionStep('c', { type: 'always' }, [taskStep('a', 'Always Task')])]);
+    const always = workflow('wf-always', [conditionStep('c', { type: 'always' }, [planStep('a', 'Always Task')])]);
     const alwaysResult = await executeWorkflow(always, { stores: getStores(ws.root) });
     assert.strictEqual(alwaysResult.status, 'completed');
     assert.deepStrictEqual(getStores(ws.root).plans.loadAll().map(p => planTitleFor(p, ws.root)), ['Always Task']);
 
-    const never = workflow('wf-never', [conditionStep('c', { type: 'never' }, [taskStep('a', 'Never Task')])]);
+    const never = workflow('wf-never', [conditionStep('c', { type: 'never' }, [planStep('a', 'Never Task')])]);
     const neverResult = await executeWorkflow(never, { stores: getStores(ws.root) });
     assert.strictEqual(neverResult.status, 'completed');
     assert.strictEqual(neverResult.stepResults[0].status, 'skipped');
@@ -318,8 +318,8 @@ describe('C7 workflow DSL', () => {
         conditionStep(
           'after',
           { type: 'step-status', stepId: 'fetch', expectedStatus: 'completed' },
-          [taskStep('next', 'Task After Tool')],
-          [taskStep('fallback', 'Must Not Run')]
+          [planStep('next', 'Task After Tool')],
+          [planStep('fallback', 'Must Not Run')]
         )
       ]);
 
@@ -341,7 +341,7 @@ describe('C7 workflow DSL', () => {
   });
 
   it('stores and loads workflow definitions via WorkflowStore', async () => {
-    const def = workflow('stored', [taskStep('a', 'Stored Task')]);
+    const def = workflow('stored', [planStep('a', 'Stored Task')]);
     getStores(ws.root).workflows.add(def);
 
     assert.strictEqual(getStores(ws.root).workflows.loadAll().length, 1);

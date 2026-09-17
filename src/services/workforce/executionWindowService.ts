@@ -78,7 +78,7 @@ export function createExecutionWindow(input: CreateExecutionWindowInput): Execut
   return window;
 }
 
-// v1.0 Slice D — workflow task steps emit Plans (outputs.planId), which become the
+// v1.0 Slice D — workflow plan steps emit Plans (outputs.planId), which become the
 // window's queued units.
 function collectPlansFromWorkflow(planIds: string[], results: { stepResults: { outputs: Record<string, unknown> }[] }): string[] {
   for (const step of results.stepResults) {

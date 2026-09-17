@@ -6,7 +6,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [1.0.0] - 2026-09-17
 
-**Plan-native replatform (slices A–K).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
+**Plan-native replatform (slices A–M).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
 is no Task compatibility layer underneath it. The legacy Task/Epic/Backlog/Sprint project-management surface is
 removed from the active runtime, and all runtime state lives under `.SprintDesk/database/`.
 
@@ -18,8 +18,8 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
 - **Storage boundary.** `.SprintDesk/database/` holds runtime state; `.SprintDesk/settings/` configuration;
   `.SprintDesk/people/` identity; `.SprintDesk/inputs/` + `.SprintDesk/plans/` artifacts. The `workforce/`
   state root is gone.
-- **Deferred past 1.0 (tracked debt, not shipped):** the workflow DSL `task` step / `taskType` rename to `plan`,
-  the residual dead `Epic` interface and legacy constant strings, and the opt-in `migrateTasksToPlans` archive CLI.
+- **Deferred past 1.0 (tracked debt, not shipped):** the residual dead `Epic` interface and legacy constant
+  strings, and the opt-in `migrateTasksToPlans` archive CLI.
 
 ### v1.0 Slice A — Plan domain, stores & storage layout
 
@@ -116,7 +116,7 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
   and the remaining task-centric consumers — migrating queue/worker/workflow/findings/window/classification to
   the plan-native stores (~2,600 lines removed across 43 files).
 - **Workflow `task` steps now materialize Plans** (the `taskType` enum is mapped through
-  `legacyTaskKindToPlanCategory`); the DSL key itself is unchanged.
+  `legacyTaskKindToPlanCategory`); the DSL key itself is unchanged (superseded by Slice M).
 - **Tracked residuals (not removed in this slice):** the dead `Epic` interface and the legacy
   Epic/Backlog/Sprint constant strings are left as cleanup debt, and the opt-in `migrateTasksToPlans` archive
   CLI was **not** shipped.
@@ -143,6 +143,29 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
   `workforce/<file>` record and migrate it on the next write; new writes always target the new path.
 - **Invariant coverage:** `test/smoke/storageBoundary.test.ts` proves no store creates `workforce/` and that
   each legacy read/write round-trips into `database/`.
+
+### v1.0 Slice L — Release & documentation integrity
+
+- **Release metadata:** `package.json` bumped to `1.0.0` with the Plan-native description; the `[1.0.0]`
+  CHANGELOG section records slices A–K (later A–M), and the v0.12 slice history is preserved under a
+  pre-release-line heading rather than dropped.
+- **Docs rewritten to current behavior:** `docs/current-features.md` and `README.md` describe the Plan-native
+  lifecycle, the `database/` storage boundary and the current commands; the v0.12 proposals carry a
+  historical-status note and `docs/v1.0.0-proposal.md` is marked implemented with section 10 as a
+  pre-implementation grounding snapshot.
+- **Guardrail:** `test/unit/docsConsistency.test.ts` asserts the package version matches the newest CHANGELOG
+  heading, the slices are documented, and the current docs stay free of legacy storage paths.
+
+### v1.0 Slice M — Workflow DSL: `plan`-native step contract
+
+- **The DSL step is plan-native.** `WorkflowStepType` is now `plan | loop | tool | condition`; `WorkflowTaskStep`
+  became `WorkflowPlanStep` with `type: 'plan'`, `category: PlanCategory` and `priority: PlanPriority`. The legacy
+  `taskType: ProposalType` enum, the `backlog` hint and the `legacyTaskKindToPlanCategory` hop inside the engine are
+  gone — a `plan` step materializes a Plan directly (`{ planId, runId }`). Loops, tools and conditions are untouched.
+- **No compatibility shim.** `.SprintDesk/settings/workflows.yml` is user-authored configuration, so the old `task`
+  step / `taskType` keys are not read; workflows are authored with `type: 'plan'` and `category`.
+- **Resolver guarantees unchanged:** `plan` steps still emit `run.queued` as source `workflow`, never bypass
+  `QueueService`, and never let tool/LLM output drive control flow.
 
 ## v0.12 — pre-release development line (shipped in 1.0.0)
 

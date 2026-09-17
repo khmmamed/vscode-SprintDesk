@@ -37,11 +37,11 @@ describe('documentation consistency (v1.0.0)', () => {
     assert.equal(version, latest, 'package.json version must match the newest CHANGELOG release');
   });
 
-  it('CHANGELOG records the v1.0 Plan-native replatform (slices A-K)', () => {
+  it('CHANGELOG records the v1.0 Plan-native replatform (slices A-M)', () => {
     const changelog = read('CHANGELOG.md');
     assert.match(changelog, /^## \[1\.0\.0\]/m, 'CHANGELOG must contain a [1.0.0] release section');
     assert.doesNotMatch(changelog, /^## \[Unreleased\]/m, 'release content must not remain under [Unreleased]');
-    for (const slice of 'ABCDEFGHIJK'.split('')) {
+    for (const slice of 'ABCDEFGHIJKLM'.split('')) {
       assert.match(
         changelog,
         new RegExp(`^### v1\\.0 Slice ${slice} `, 'm'),
@@ -90,6 +90,23 @@ describe('documentation consistency (v1.0.0)', () => {
         `docs/${file} must carry the historical-status note`
       );
     }
+  });
+
+  it('the workflow DSL is plan-native end to end (no legacy task step contract)', () => {
+    const types = read('src/data/types.ts');
+    assert.match(types, /export type WorkflowStepType = 'plan' \| 'loop' \| 'tool' \| 'condition';/);
+    assert.match(types, /export interface WorkflowPlanStep extends WorkflowBaseStep \{/);
+    assert.doesNotMatch(types, /WorkflowTaskStep/, 'the old WorkflowTaskStep type must be gone');
+
+    const workflow = ['src/services/workforce/workflow/engine.ts', 'src/services/workforce/workflow/dsl.ts']
+      .map(read)
+      .join('\n');
+    assert.doesNotMatch(workflow, /taskType/, 'the workflow engine/DSL must not use taskType');
+    assert.doesNotMatch(workflow, /type: 'task'/, 'the workflow engine/DSL must not use a task step');
+    assert.doesNotMatch(workflow, /executeTaskStep/, 'the task-step executor must be renamed');
+
+    const docs = `${read('README.md')}\n${read('docs/current-features.md')}`;
+    assert.doesNotMatch(docs, /`task` \/ `loop`/, 'docs must describe the plan / loop / tool / condition DSL');
   });
 
   it('the v1.0.0 proposal is marked implemented and defers the known debt', () => {

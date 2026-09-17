@@ -52,15 +52,15 @@ export function validateStep(step: WorkflowStep, path: string): void {
   }
 
   switch (step.type) {
-    case 'task': {
+    case 'plan': {
       if (!step.title || step.title.trim().length === 0) {
-        throw new WorkflowValidationError(`${path} (step '${step.id}'): task step requires a title`);
+        throw new WorkflowValidationError(`${path} (step '${step.id}'): plan step requires a title`);
       }
-      if (!step.taskType) {
-        throw new WorkflowValidationError(`${path} (step '${step.id}'): task step requires taskType`);
+      if (!step.category) {
+        throw new WorkflowValidationError(`${path} (step '${step.id}'): plan step requires a category`);
       }
       if (!step.priority) {
-        throw new WorkflowValidationError(`${path} (step '${step.id}'): task step requires priority`);
+        throw new WorkflowValidationError(`${path} (step '${step.id}'): plan step requires priority`);
       }
       return;
     }

@@ -720,7 +720,7 @@ describe('event rules (async automation, v0.11)', () => {
       name: `Workflow ${id}`,
       version: '1.0.0',
       enabled: true,
-      steps: [{ id: 's1', type: 'task', title, taskType: 'chore', priority: 'low', backlog: 'features' }],
+      steps: [{ id: 's1', type: 'plan', title, category: 'maintenance', priority: 'low' }],
       createdAt: now,
       updatedAt: now
     };
@@ -1146,7 +1146,7 @@ describe('execution windows — synchronous work (v0.11)', () => {
       name: 'Research Flow',
       version: '1',
       enabled: true,
-      steps: [{ id: 'tasks', type: 'task', title: 'Research {topic}', taskType: 'feature', priority: 'medium' }],
+      steps: [{ id: 'tasks', type: 'plan', title: 'Research {topic}', category: 'feature', priority: 'medium' }],
       createdAt: now,
       updatedAt: now,
       ...overrides
@@ -1214,7 +1214,7 @@ describe('execution windows — synchronous work (v0.11)', () => {
   it('cancels outstanding runs and marks the window cancelled', async () => {
     const agent = seedAgent({ name: 'Alpha', agentConfig: makeAgentConfig() });
     const wf = seedWorkflow({ name: 'Flow A' });
-    const wf2 = seedWorkflow({ name: 'Flow B', steps: [{ id: 't2', type: 'task', title: 'Second', taskType: 'bug', priority: 'low' }] });
+    const wf2 = seedWorkflow({ name: 'Flow B', steps: [{ id: 't2', type: 'plan', title: 'Second', category: 'bug', priority: 'low' }] });
     const window = executionWindowService.createExecutionWindow({ name: 'Session 3', workflowIds: [wf.id, wf2.id], agentIds: [agent.id] });
 
     const started = await executionWindowService.startExecutionWindow(window.id);
@@ -1329,7 +1329,7 @@ describe('end-to-end lifecycle smoke (v0.11 Slice 8)', () => {
       name: 'Research Flow',
       version: '1',
       enabled: true,
-      steps: [{ id: 'tasks', type: 'task', title: 'Research {topic}', taskType: 'feature', priority: 'medium' }],
+      steps: [{ id: 'tasks', type: 'plan', title: 'Research {topic}', category: 'feature', priority: 'medium' }],
       createdAt: now,
       updatedAt: now,
       ...overrides

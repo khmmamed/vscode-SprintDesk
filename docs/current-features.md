@@ -138,8 +138,8 @@ A single webview (`sprintdesk.openWorkforce`) operates the whole lifecycle with 
 - Event Rules: idempotent, re-entrancy-safe `Event → Rule → Workflow → Plan/Run` async automation.
 
 ### 📋 Workflow DSL
-- Declarative `task` / `loop` / `tool` / `condition` workflows (`settings/workflows.yml`); a `task` step now
-  materializes a Plan (the DSL key rename is tracked debt).
+- Declarative `plan` / `loop` / `tool` / `condition` workflows (`settings/workflows.yml`); a `plan` step
+  materializes a Plan (carrying its `category` / `priority`) and a queued run.
 - Deterministic, bounded engine; `continueOnError` escape hatch; tool steps route through MCP; conditions read
   step status only — LLM/tool output stays data.
 
