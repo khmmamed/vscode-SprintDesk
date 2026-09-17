@@ -1,6 +1,6 @@
 # SprintDesk Current Features
 
-**Version 1.0.1 — Plan-native.** SprintDesk is a Visual Studio Code extension for **autonomous, policy-gated
+**Version 1.1.0 — Plan-native.** SprintDesk is a Visual Studio Code extension for **autonomous, policy-gated
 workforce orchestration**. A **Plan is the only unit that can enter execution**; the legacy
 Task/Epic/Backlog/Sprint project-management surface is removed from the active runtime. All runtime state lives
 under `.SprintDesk/database/`.
@@ -60,6 +60,29 @@ the Organizer) touches the queue.
   being silently rewritten.
 - Driven by `organize` schedules, events (`organizer.trigger`), and the manual **Run Organizer** / MCP
   `organizerRun` path.
+
+---
+
+## Sidebar Control Center (v1.1)
+
+The Activity Bar shows eleven sections, each a **view over existing Plan-centric state** (no second work model, no
+duplicate Plan storage):
+
+- **People** — Humans / Agents / Teams / Runs; agents carry optional `mcps` / `tools` capability refs.
+- **MCP** — external MCP server registry (`mcp/servers.yml`): enable/disable, inspect, remove, add.
+- **Tools** — the `database/tools.yml` catalog (`ToolStore`, five seeded).
+- **Requests** — `.SprintDesk/inputs/*.md` (`InputStore`); create, open, and run an Organizer pass.
+- **Plans** — canonical `PlanStore` rows; open / enqueue / cancel / requeue / reassign.
+- **Findings** — grouped by canonical `planId` (with an `Unlinked` bucket).
+- **Approvals** — all plan- or run-linked approvals, grouped by canonical Plan; approve / reject.
+- **Schedules** — `ScheduleRecord` with resolved plan links; toggle.
+- **Workflows** — `WorkflowDefinition`s plus the existing indirect Plan links; toggle.
+- **Activity** — `EventStore` events, live-refreshed from an event subscription.
+- **History** — the existing git/audit provider.
+
+Categorized views resolve canonical Plan IDs; there is no parallel Plan registry under any categorized section. Every
+context action maps to a verified backend service (requests → `triggerOrganizer`; plans → `plan/dispatcher.ts`;
+approvals → `services/workforce/approvals.ts`).
 
 ---
 
@@ -152,7 +175,7 @@ A single webview (`sprintdesk.openWorkforce`) operates the whole lifecycle with 
   database/        # ALL runtime state
     inputs.yml  plans.yml  executions.yml  checkpoints.yml  cycles.yml
     events.yml  audit.yml  findings.yml  approvals.yml  policy.yml
-    skills.yml  eventRules.yml  classification.yml  executionWindows.yml
+    skills.yml  eventRules.yml  classification.yml  executionWindows.yml  tools.yml
   settings/        # configuration
     queue.yml  schedules.yml  workflows.yml  credentials.secret.json
   people/          # identity
@@ -185,13 +208,21 @@ in Git and are not auto-imported.
 | Sync people from Git | `sprintdesk.syncPeopleFromGit` |
 | Process queue | `sprintdesk.processQueue` |
 | Create input for an agent | `sprintdesk.createInputForEmployee` |
+| New request / open request | `sprintdesk.createRequest` / `sprintdesk.openInput` |
+| Open a plan | `sprintdesk.openPlan` |
+| Enqueue / cancel / requeue / reassign a plan | `sprintdesk.enqueuePlan` / `sprintdesk.cancelPlan` / `sprintdesk.requeuePlan` / `sprintdesk.reassignPlan` |
+| Organize requests | `sprintdesk.runOrganizer` |
+| Approve / reject a pending approval | `sprintdesk.approveApproval` / `sprintdesk.rejectApproval` |
+| Toggle a schedule / workflow | `sprintdesk.toggleSchedule` / `sprintdesk.toggleWorkflow` |
+| Add / toggle / inspect / remove an MCP server | `sprintdesk.addMcpServer` / `sprintdesk.toggleMcpServer` / `sprintdesk.inspectMcpServer` / `sprintdesk.removeMcpServer` |
+| Add / remove a tool | `sprintdesk.addTool` / `sprintdesk.removeTool` |
 | Cancel run | `sprintdesk.cancelRun` |
 | Start MCP server | `sprintdesk.startMcp` |
 | Refresh | `sprintdesk.refresh` |
 
-The sidebar shows the **People & Workforce** and **History** sections; plan- and workforce-driven flows live in
-the Control Center. The v1.0 manifest declares no `sprintdesk.*` extension settings — operational configuration
-lives under `.SprintDesk/settings/`.
+The sidebar shows eleven sections (People, MCP, Tools, Requests, Plans, Findings, Approvals, Schedules, Workflows,
+Activity, History); deeper bulk operations live in the Control Center webview. The v1.0 manifest declares no
+`sprintdesk.*` extension settings — operational configuration lives under `.SprintDesk/settings/`.
 
 ---
 

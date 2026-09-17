@@ -8,13 +8,25 @@ import { registerRefreshCommand } from './commands/refreshCommand';
 import { HistoryTreeDataProvider, historyTreeDataProvider } from './providers/history/HistoryTreeDataProvider';
 import { workforceTreeDataProvider } from './providers/workforce/WorkforceTreeDataProvider';
 import { SprintDeskTreeDataProvider } from './providers/SprintDeskTreeDataProvider';
+import { requestsTreeDataProvider } from './providers/requests/RequestsTreeDataProvider';
+import { plansTreeDataProvider } from './providers/plans/PlansTreeDataProvider';
+import { findingsTreeDataProvider } from './providers/findings/FindingsTreeDataProvider';
+import { approvalsTreeDataProvider } from './providers/approvals/ApprovalsTreeDataProvider';
+import { schedulesTreeDataProvider } from './providers/schedules/SchedulesTreeDataProvider';
+import { workflowsTreeDataProvider } from './providers/workflows/WorkflowsTreeDataProvider';
+import { mcpTreeDataProvider } from './providers/mcp/McpTreeDataProvider';
+import { toolsTreeDataProvider } from './providers/tools/ToolsTreeDataProvider';
+import { activityTreeDataProvider } from './providers/activity/ActivityTreeDataProvider';
 // Services
 import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
 import { registerWorkforceControlCenter } from './commands/workforce/openWorkforceControlCenter';
+import { registerSectionCommands } from './commands/sections/sectionCommands';
 import { installDispatcher } from './services/workforce/plan/dispatcher';
 import { installRecovery } from './services/workforce/plan/recovery';
 import { installValidator } from './services/workforce/plan/validator';
 import { startScheduler } from './services/workforce/scheduler/organizerEngine';
+import { subscribeEvents } from './services/workforce/events';
+import { getStores } from './data/stores';
 // Host boundary
 import { setHost, setFileSystem } from './host';
 import { VSCodeHost } from './host/VSCodeHost';
@@ -30,7 +42,16 @@ export async function activate(context: vscode.ExtensionContext) {
   const workforceProvider = workforceTreeDataProvider;
 
   const sprintDeskProvider = new SprintDeskTreeDataProvider({
-    workforce: workforceProvider as any,
+    people: workforceProvider as any,
+    mcp: mcpTreeDataProvider,
+    tools: toolsTreeDataProvider,
+    requests: requestsTreeDataProvider,
+    plans: plansTreeDataProvider,
+    findings: findingsTreeDataProvider,
+    approvals: approvalsTreeDataProvider,
+    schedules: schedulesTreeDataProvider,
+    workflows: workflowsTreeDataProvider,
+    activity: activityTreeDataProvider,
     history: historyProvider as any
   });
   context.subscriptions.push(sprintDeskProvider);
@@ -49,6 +70,25 @@ export async function activate(context: vscode.ExtensionContext) {
   // Workforce commands
   registerWorkforceCommands(context, workforceProvider);
   registerWorkforceControlCenter(context);
+
+  // v1.0 Slice T — Control Center section commands + live event-driven refresh.
+  registerSectionCommands(context, sprintDeskProvider);
+
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleRefresh = () => {
+    if (refreshTimer) {return;}
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined;
+      sprintDeskProvider.refresh();
+    }, 300);
+  };
+  const disposeEventRefresh = subscribeEvents(scheduleRefresh);
+  context.subscriptions.push({
+    dispose: () => {
+      if (refreshTimer) {clearTimeout(refreshTimer);}
+      disposeEventRefresh();
+    }
+  });
 
   // v1.0 Slice F — organize engine wiring. The Dispatcher translates Organizer
   // decisions into queue work; the scheduler driver honors queueSettings.enabled /
@@ -147,6 +187,7 @@ export async function activate(context: vscode.ExtensionContext) {
       ['findings.yml', 'findings'],
       ['approvals.yml', 'approvals'],
       ['skills.yml', 'skills'],
+      ['tools.yml', 'tools'],
       ['eventRules.yml', 'eventRules'],
       ['classification.yml', 'proposals'],
       ['executionWindows.yml', 'executionWindows']
@@ -157,6 +198,10 @@ export async function activate(context: vscode.ExtensionContext) {
         fs.writeFileSync(dbPath, `${key}: []`, 'utf8');
       }
     }
+
+    // Seed the catalogs the Control Center tools/capability views read from.
+    getStores(ws).tools.seedDefaultTools();
+    getStores(ws).skills.seedDefaultSkills();
 
 // Ensure MCP files exist
     const mcpManifestPath = path.join(sdPath, 'mcp', 'manifest.json');

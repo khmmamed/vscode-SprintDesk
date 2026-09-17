@@ -146,4 +146,34 @@ describe('documentation consistency (v1.0.0)', () => {
     assert.doesNotMatch(docs, /migrateTasksToPlans/, 'no doc may reference the removed migration CLI');
     assert.match(docs, /no Task→Plan migration/i, 'the docs must state that no Task→Plan migration ships');
   });
+
+  it('the sidebar Control Center exposes the v1.1 sections without parallel Plan storage (Slice T)', () => {
+    const changelog = read('CHANGELOG.md');
+    assert.match(changelog, /^## \[1\.1\.0\]/m, 'CHANGELOG must record the [1.1.0] release');
+    assert.match(changelog, /^### v1\.0 Slice T /m, 'CHANGELOG must document v1.0 Slice T');
+
+    const doc = read('docs/current-features.md');
+    for (const section of [
+      'People',
+      'MCP',
+      'Tools',
+      'Requests',
+      'Plans',
+      'Findings',
+      'Approvals',
+      'Schedules',
+      'Workflows',
+      'Activity',
+      'History'
+    ]) {
+      assert.match(doc, new RegExp(`\\*\\*${section}\\*\\*`), `current-features must document the ${section} section`);
+    }
+    assert.doesNotMatch(doc, /findings\/Plans\.yml/, 'docs must not describe parallel Plan storage');
+
+    const pkg = JSON.parse(read('package.json')) as { contributes?: { commands?: Array<{ command: string }> } };
+    const commands = new Set((pkg.contributes?.commands ?? []).map((c) => c.command));
+    for (const command of ['sprintdesk.runOrganizer', 'sprintdesk.openPlan', 'sprintdesk.approveApproval', 'sprintdesk.addTool']) {
+      assert.ok(commands.has(command), `manifest must declare ${command}`);
+    }
+  });
 });

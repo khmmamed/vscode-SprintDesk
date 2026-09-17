@@ -1,7 +1,16 @@
 import * as vscode from 'vscode';
 
-type SourceId =
-  | 'workforce'
+export type SourceId =
+  | 'people'
+  | 'mcp'
+  | 'tools'
+  | 'requests'
+  | 'plans'
+  | 'findings'
+  | 'approvals'
+  | 'schedules'
+  | 'workflows'
+  | 'activity'
   | 'history';
 
 type TreeSource = vscode.TreeDataProvider<vscode.TreeItem>;
@@ -34,8 +43,17 @@ export class SprintDeskTreeDataProvider implements vscode.TreeDataProvider<vscod
   readonly dropMimeTypes: string[];
 
   private readonly sections: Array<{ id: SourceId; label: string; icon: string; description?: string }> = [
-    { id: 'workforce', label: 'People & Workforce', icon: 'organization', description: 'Humans, agents, teams, and operations' },
-    { id: 'history', label: 'History', icon: 'history' }
+    { id: 'people', label: 'People', icon: 'organization', description: 'Humans, agents, teams, and runs' },
+    { id: 'mcp', label: 'MCP', icon: 'server', description: 'Registered MCP servers and their tools' },
+    { id: 'tools', label: 'Tools', icon: 'tools', description: 'Tool catalog referenced by agents' },
+    { id: 'requests', label: 'Requests', icon: 'inbox', description: 'Inputs awaiting organization' },
+    { id: 'plans', label: 'Plans', icon: 'checklist', description: 'Canonical plan registry' },
+    { id: 'findings', label: 'Findings', icon: 'search', description: 'Plan-linked findings' },
+    { id: 'approvals', label: 'Approvals', icon: 'bell', description: 'Plan/run-linked approvals' },
+    { id: 'schedules', label: 'Schedules', icon: 'calendar', description: 'Scheduled plan materialization' },
+    { id: 'workflows', label: 'Workflows', icon: 'project', description: 'Workflow definitions and materialized plans' },
+    { id: 'activity', label: 'Activity', icon: 'pulse', description: 'Live event feed' },
+    { id: 'history', label: 'History', icon: 'history', description: 'Git and audit history' }
   ];
 
   constructor(private readonly sources: Record<SourceId, TreeSource>) {

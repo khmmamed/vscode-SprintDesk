@@ -4,6 +4,34 @@ All notable changes to the "vscode-SprintDesk" extension will be documented in t
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.0] - 2026-09-18
+
+**Plan-native sidebar Control Center (Slice T).** The sidebar grows from two sections to eleven, exposing the
+v1.0 runtime directly in the Activity Bar. Every categorized view is a **view over Plan-centric state** — it
+resolves canonical Plan IDs and introduces no second work model and no duplicate Plan storage.
+
+### v1.0 Slice T — Plan-native sidebar Control Center
+
+- **Eleven sections.** `People`, `MCP`, `Tools`, `Requests`, `Plans`, `Findings`, `Approvals`, `Schedules`,
+  `Workflows`, `Activity`, and `History` replace the former `People & Workforce` + `History` pair; the workflow
+  **nav rows are promoted to top-level sections** and no longer duplicated under Workforce.
+- **Categorized Views over Plans.** Findings resolve `finding.planId` into a canonical plan group (with an
+  `Unlinked` bucket); Approvals group every plan- or run-linked approval by canonical Plan; Schedules resolve
+  plan links from `ScheduleRecord`; Workflows resolve the existing indirect links in `EventRuleTrigger.createdPlanIds`
+  and `ExecutionWindow.{workflowIds,planIds}`. No `findings/Plans.yml`-style parallel Plan storage exists.
+- **Requests.** `inputs/*.md` (`InputStore`) surface as **Requests**, with open, create, and an
+  Organizer pass (`sprintdesk.runOrganizer` → `triggerOrganizer`, never a direct plan write).
+- **Plans.** Canonical `PlanStore` rows with context actions backed by verified services only: open
+  (`planService.resolvePlanFile`), enqueue / cancel / requeue / reassign (`plan/dispatcher.ts`).
+- **Approvals.** Approve / Reject resolve through `services/workforce/approvals.ts` (`approval:review`).
+- **Tools catalog.** New minimal `ToolStore` (`.SprintDesk/database/tools.yml`, mirroring `SkillStore`) with five
+  seeded tools; optional `Employee.mcps` / `Employee.tools` capability refs let agents be scoped to registered MCP
+  servers and tools.
+- **Live Activity.** The `Activity` section renders `EventStore` and refreshes on a debounced `subscribeEvents`
+  subscription; `History` remains the existing git/audit provider.
+- **Manifest.** New `sprintdesk.*` commands and `view/title` + `view/item/context` menu contributions; no
+  `contributes.configuration` is added.
+
 ## [1.0.1] - 2026-09-17
 
 **Final integrity audit (Slice S).** No behavior change: the last dead legacy PM type was removed and the

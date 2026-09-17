@@ -71,8 +71,9 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
 ## Getting Started
 
 1. Open VS Code and click the SprintDesk icon in the sidebar
-2. Open the **People & Workforce** section in the sidebar
-3. Start creating teams, adding people, and running the workforce Control Center
+2. Expand the **People** section to manage humans, agents, and teams
+3. Use the other sections — **Requests**, **Plans**, **Findings**, **Approvals**, **Schedules**, **Workflows**,
+   **Activity**, and **History** — or open the Workforce Control Center for bulk operations
 
 ### Commands
 

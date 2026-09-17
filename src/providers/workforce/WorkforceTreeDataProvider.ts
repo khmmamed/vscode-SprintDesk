@@ -74,11 +74,6 @@ export class WorkforceItem extends vscode.TreeItem {
   }
 }
 
-function assignedPlanCount(): number {
-  const employeeIds = new Set(workforceService.getWorkforce().employees.map(e => e.id));
-  return getStores().plans.loadAll().filter(p => Boolean(p.execution?.assignedAgent) && employeeIds.has(p.execution.assignedAgent as string)).length;
-}
-
 function planTitle(runPlanId: string): string {
   // v1.0 Slice D — runs execute Plans; the title comes from the Plan artifact.
   const plan = getStores().plans.getById(runPlanId);
@@ -116,12 +111,10 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
 
   getChildren(element?: WorkforceItem): Thenable<WorkforceItem[]> {
     if (!element) {
-      return Promise.resolve(this.buildNavRows());
+      return Promise.resolve(this.buildRootRows());
     }
 
     switch (element.contextValue) {
-      case 'workforcePeople':
-        return Promise.resolve(this.buildPeopleRows());
       case 'workforceTeams':
         return Promise.resolve(this.buildTeamRows());
       case 'workforceHumans':
@@ -132,8 +125,6 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
         return Promise.resolve(this.buildMemberRows(element.team));
       case 'workforceUnassigned':
         return Promise.resolve(this.buildMemberRows());
-      case 'workforcePlans':
-        return Promise.resolve(this.buildPlanRows());
       case 'workforceRuns':
         return Promise.resolve(this.buildRunRows());
       default:
@@ -141,128 +132,18 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     }
   }
 
-  private buildNavRows(): WorkforceItem[] {
-    const employees = workforceService.getWorkforce().employees;
-    const teams = workforceService.getWorkforce().teams;
-    const pendingApprovals = getStores().approvals.loadAll().filter(a => a.status === 'pending').length;
-    const pendingFindings = getStores().findings.pending().length;
-    const schedules = getStores().schedules.loadAll().length;
-    const workflows = getStores().workflows.loadAll().length;
-    const eventRules = getStores().eventRules.loadAll();
-    const eventRulesActive = eventRules.filter(r => r.enabled).length;
+  private buildRootRows(): WorkforceItem[] {
+    const { employees, teams } = workforceService.getWorkforce();
+    const humans = employees.filter(person => person.role === 'human').length;
+    const agents = employees.filter(person => person.role === 'agent').length;
     const running = getStores().runs.loadAll().filter(r => r.status === 'running').length;
-    const lastEvent = getStores().events.latest(1)[0];
-    const assignedPlans = assignedPlanCount();
 
     return [
-      new WorkforceItem(
-        `People (${employees.length})`,
-        vscode.TreeItemCollapsibleState.Expanded,
-        'workforcePeople',
-        undefined, undefined, undefined, undefined, undefined,
-        'organization',
-        `${employees.filter(person => person.role === 'human').length} humans · ${employees.filter(person => person.role === 'agent').length} agents · ${teams.length} teams`
-      ),
-      new WorkforceItem(
-        `Plans (${assignedPlans})`,
-        vscode.TreeItemCollapsibleState.Expanded,
-        'workforcePlans',
-        undefined, undefined, undefined, undefined,
-        'plans',
-        'checklist',
-        undefined,
-        'Open assigned plans in the Control Center'
-      ),
-      new WorkforceItem(
-        `Runs (${running} running)`,
-        vscode.TreeItemCollapsibleState.Expanded,
-        'workforceRuns'
-      ),
-      new WorkforceItem(
-        `Findings (${pendingFindings})`,
-        vscode.TreeItemCollapsibleState.None,
-        'workforceFindings',
-        undefined, undefined, undefined, undefined,
-        'findings',
-        'search',
-        undefined,
-        'Review workforce findings in the Control Center'
-      ),
-      new WorkforceItem(
-        `Approvals (${pendingApprovals})`,
-        vscode.TreeItemCollapsibleState.None,
-        'workforceApprovals',
-        undefined, undefined, undefined, undefined,
-        'approvals',
-        'checklist',
-        undefined,
-        'Manage approval gates and pending requests in the Control Center'
-      ),
-      new WorkforceItem(
-        `Schedules (${schedules})`,
-        vscode.TreeItemCollapsibleState.None,
-        'workforceSchedules',
-        undefined, undefined, undefined, undefined,
-        'schedules',
-        'calendar',
-        undefined,
-        'Manage schedules in the Control Center'
-      ),
-      new WorkforceItem(
-        `Workflows (${workflows})`,
-        vscode.TreeItemCollapsibleState.None,
-        'workforceWorkflows',
-        undefined, undefined, undefined, undefined,
-        'workflows',
-        'project',
-        undefined,
-        'Manage workflows in the Control Center'
-      ),
-      new WorkforceItem(
-        `Event Rules (${eventRulesActive} active)`,
-        vscode.TreeItemCollapsibleState.None,
-        'workforceEventRules',
-        undefined, undefined, undefined, undefined,
-        'event-rules',
-        'zap',
-        undefined,
-        'Automate workflows from emitted events in the Control Center'
-      ),
-      new WorkforceItem(
-        'Activity',
-        vscode.TreeItemCollapsibleState.None,
-        'workforceActivity',
-        undefined, undefined, undefined, undefined,
-        'activity',
-        'history',
-        lastEvent ? new Date(lastEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'no activity',
-        'Open the activity feed in the Control Center'
-      )
+      new WorkforceItem(`Humans (${humans})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceHumans', undefined, undefined, undefined, undefined, undefined, 'account-group'),
+      new WorkforceItem(`Agents (${agents})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceAgents', undefined, undefined, undefined, undefined, undefined, 'robot'),
+      new WorkforceItem(`Teams (${teams.length})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceTeams', undefined, undefined, undefined, undefined, undefined, 'organization'),
+      new WorkforceItem(`Runs (${running} running)`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceRuns', undefined, undefined, undefined, undefined, undefined, 'play')
     ];
-  }
-
-  private buildPlanRows(): WorkforceItem[] {
-    const employeeIds = new Set(workforceService.getWorkforce().employees.map(e => e.id));
-    const assigned = getStores().plans.loadAll()
-      .filter(p => Boolean(p.execution?.assignedAgent) && employeeIds.has(p.execution.assignedAgent as string))
-      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-
-    if (assigned.length === 0) {
-      return [new WorkforceItem('No assigned plans', vscode.TreeItemCollapsibleState.None, 'workforceEmpty')];
-    }
-
-    return assigned.map(p => new WorkforceItem(
-      planTitleFor(p) || p.id,
-      vscode.TreeItemCollapsibleState.None,
-      'workforcePlan',
-      undefined,
-      undefined,
-      undefined,
-      p,
-      undefined,
-      'checklist',
-      `${p.id} · ${p.scheduling?.status}${(p.classification?.current || p.classification?.original)?.priority && (p.classification.current || p.classification.original)?.priority !== 'medium' ? ` · ${(p.classification.current || p.classification.original)?.priority}` : ''}`
-    ));
   }
 
   private buildTeamRows(): WorkforceItem[] {
@@ -291,17 +172,6 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     }
 
     return items;
-  }
-
-  private buildPeopleRows(): WorkforceItem[] {
-    const { employees, teams } = workforceService.getWorkforce();
-    const humans = employees.filter(person => person.role === 'human').length;
-    const agents = employees.filter(person => person.role === 'agent').length;
-    return [
-      new WorkforceItem(`Humans (${humans})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceHumans', undefined, undefined, undefined, undefined, undefined, 'account-group'),
-      new WorkforceItem(`Agents (${agents})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceAgents', undefined, undefined, undefined, undefined, undefined, 'robot'),
-      new WorkforceItem(`Teams (${teams.length})`, vscode.TreeItemCollapsibleState.Collapsed, 'workforceTeams', undefined, undefined, undefined, undefined, undefined, 'organization')
-    ];
   }
 
   private buildPeopleRowsByRole(role: Employee['role']): WorkforceItem[] {

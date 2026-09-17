@@ -156,6 +156,11 @@ export interface Employee {
 
   // v0.7 provider semantics (additive, non-breaking)
   modelProfile?: EmployeeModelProfile;
+
+  // v1.0 Slice T — agent capability references (additive, non-breaking). These
+  // are ids/names resolved against the MCP registry and the ToolStore catalog.
+  mcps?: string[];
+  tools?: string[];
 }
 
 export type EmployeeSkillLevel = 1 | 2 | 3;
@@ -173,6 +178,21 @@ export interface Skill {
   category?: string;
   description?: string;
   aliases?: string[];
+}
+
+// v1.0 Slice T — Tool catalog (additive, non-breaking). Tools are the concrete
+// executables/integrations an agent may hold a reference to (Employee.tools);
+// distinct from Skills (competencies) and MCP tools (discovered at runtime).
+export interface Tool {
+  id: string;
+  name: string;
+  category?: string;
+  description?: string;
+  aliases?: string[];
+}
+
+export interface ToolsData {
+  tools: Tool[];
 }
 
 export type PermissionId = string;
