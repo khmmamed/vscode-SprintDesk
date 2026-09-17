@@ -148,7 +148,7 @@ export function buildStandup(ws: string): string {
   for (const u of unmatched.slice(0, 5)) {
     const axis = u.plan.classification?.current || u.plan.classification?.original;
     const d = planDisplay(u.plan);
-    lines.push(`  - ⚠️ uncovered: \`${d.id}\` ${d.title} (${capability.skillsForTask({ type: planCategoryToProposalType(axis?.category), requiredSkills: undefined }).join(', ')})`);
+    lines.push(`  - ⚠️ uncovered: \`${d.id}\` ${d.title} (${capability.skillsFor({ type: planCategoryToProposalType(axis?.category), requiredSkills: undefined }).join(', ')})`);
   }
   lines.push('');
   lines.push(`## Attention`);

@@ -117,7 +117,7 @@ export const EVENT_TOOLS = [
     inputSchema: {
       type: 'object' as const,
       properties: {
-        type: { type: 'string', description: 'Event type (e.g., task.created)' },
+        type: { type: 'string', description: 'Event type (e.g., finding.created)' },
         source: { type: 'string', description: 'Event source (e.g., mcp, agent, manual)' },
         payload: { type: 'object', description: 'Optional event payload' },
       },
@@ -247,7 +247,7 @@ export const WORKFORCE_TOOLS = [
   },
   {
     name: 'sprintdesk_activitySummary',
-    description: 'Overall workforce activity snapshot: employee/run/task counts, queue settings, and the latest 20 events',
+    description: 'Overall workforce activity snapshot: employee/run/plan counts, queue settings, and the latest 20 events',
     inputSchema: {
       type: 'object' as const,
       properties: {},

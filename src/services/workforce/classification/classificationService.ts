@@ -1,6 +1,6 @@
 import { getHost } from '../../../host';
 import { getStores } from '../../../data/stores';
-import { Finding, PlanPriority, ProposalType, ProposalPriority, TaskProposal, TaskProposalEdit, TaskProposalTaskPayload } from '../../../data/types';
+import { Finding, PlanPriority, ProposalType, ProposalPriority, Proposal, ProposalEdit, ProposalPayload } from '../../../data/types';
 import { getWorkspaceRoot } from '../../../services/fileService';
 import { requireEmployeePermission } from '../capabilityService';
 import { emitEvent } from '../events';
@@ -8,10 +8,10 @@ import { gateMode, requestApproval } from '../gates';
 import * as findingsService from '../findingsService';
 import { classifyFinding as llmClassifyFinding, ClassificationOutcome } from '../worker/classifier';
 import { LLMProvider } from '../llm/types';
-import { materializePlan, planTitleFor, legacyTaskKindToPlanCategory } from '../plan/planService';
+import { materializePlan, planTitleFor, legacyProposalKindToPlanCategory } from '../plan/planService';
 
-export const TASK_TYPES: ProposalType[] = ['feature', 'bug', 'chore', 'doc', 'test'];
-export const TASK_PRIORITIES: ProposalPriority[] = ['high', 'medium', 'low'];
+export const PROPOSAL_TYPES: ProposalType[] = ['feature', 'bug', 'chore', 'doc', 'test'];
+export const PROPOSAL_PRIORITIES: ProposalPriority[] = ['high', 'medium', 'low'];
 
 export interface ProposalClassification {
   title?: string;
@@ -76,7 +76,7 @@ function proposalId(): string {
 }
 
 export function hasDeterministicSuggestion(finding: Finding): boolean {
-  return typeof finding.suggestedTaskType === 'string' && TASK_TYPES.includes(finding.suggestedTaskType);
+  return typeof finding.suggestedType === 'string' && PROPOSAL_TYPES.includes(finding.suggestedType);
 }
 
 export function hasProposal(findingId: string): boolean {
@@ -84,14 +84,14 @@ export function hasProposal(findingId: string): boolean {
 }
 
 export function invalidSuggestionReason(finding: Finding): string | undefined {
-  if (finding.suggestedTaskType !== undefined && !TASK_TYPES.includes(finding.suggestedTaskType)) {
-    return `invalid suggestedTaskType '${finding.suggestedTaskType}'`;
+  if (finding.suggestedType !== undefined && !PROPOSAL_TYPES.includes(finding.suggestedType)) {
+    return `invalid suggestedType '${finding.suggestedType}'`;
   }
-  if (finding.suggestedPriority !== undefined && !TASK_PRIORITIES.includes(finding.suggestedPriority)) {
+  if (finding.suggestedPriority !== undefined && !PROPOSAL_PRIORITIES.includes(finding.suggestedPriority)) {
     return `invalid suggestedPriority '${finding.suggestedPriority}'`;
   }
   if (!hasDeterministicSuggestion(finding)) {
-    return 'no usable suggestedTaskType';
+    return 'no usable suggestedType';
   }
   return undefined;
 }
@@ -105,7 +105,7 @@ export function validateSuggestion(
     ok: true,
     value: {
       title: finding.title.trim() || 'Untitled finding',
-      type: finding.suggestedTaskType as ProposalType,
+      type: finding.suggestedType as ProposalType,
       priority: finding.suggestedPriority || severityToPriority(finding.severity),
       ...(finding.suggestedWorkflow && finding.suggestedWorkflow.trim().length > 0
         ? { workflow: finding.suggestedWorkflow.trim() }
@@ -114,13 +114,13 @@ export function validateSuggestion(
   };
 }
 
-export function createProposal(finding: Finding, classification?: ProposalClassification, proposedBy?: string, failedReason?: string): TaskProposal | undefined {
+export function createProposal(finding: Finding, classification?: ProposalClassification, proposedBy?: string, failedReason?: string): Proposal | undefined {
   const existing = getStores().proposals.byFindingId(finding.id);
   if (existing) {return existing;}
 
   const resolved = resolveClassification(finding, classification);
 
-  const proposal: TaskProposal = {
+  const proposal: Proposal = {
     id: proposalId(),
     findingId: finding.id,
     runId: finding.source?.runId || '',
@@ -147,7 +147,7 @@ export function createProposal(finding: Finding, classification?: ProposalClassi
 
   getStores().proposals.add(proposal);
 
-  emitEvent('task.proposal.created', 'classification', {
+  emitEvent('proposal.created', 'classification', {
     proposalId: proposal.id,
     findingId: finding.id,
     title: proposal.title,
@@ -177,8 +177,8 @@ function resolveClassification(finding: Finding, classification?: ProposalClassi
   }
 
   const type: ProposalType | undefined =
-    classification.type && TASK_TYPES.includes(classification.type) ? classification.type
-    : finding.suggestedTaskType && TASK_TYPES.includes(finding.suggestedTaskType) ? finding.suggestedTaskType
+    classification.type && PROPOSAL_TYPES.includes(classification.type) ? classification.type
+    : finding.suggestedType && PROPOSAL_TYPES.includes(finding.suggestedType) ? finding.suggestedType
     : undefined;
 
   if (!type) {
@@ -186,9 +186,9 @@ function resolveClassification(finding: Finding, classification?: ProposalClassi
   }
 
   const priority: ProposalPriority =
-    classification.priority && TASK_PRIORITIES.includes(classification.priority)
+    classification.priority && PROPOSAL_PRIORITIES.includes(classification.priority)
       ? classification.priority
-      : finding.suggestedPriority && TASK_PRIORITIES.includes(finding.suggestedPriority)
+      : finding.suggestedPriority && PROPOSAL_PRIORITIES.includes(finding.suggestedPriority)
         ? finding.suggestedPriority
         : severityToPriority(finding.severity);
 
@@ -201,7 +201,7 @@ function resolveClassification(finding: Finding, classification?: ProposalClassi
   };
 }
 
-export function applyProposal(proposalIdInput: string, actorId?: string): TaskProposal | undefined {
+export function applyProposal(proposalIdInput: string, actorId?: string): Proposal | undefined {
   const gate = requireEmployeePermission('classification:apply', actorId);
   if (!gate.ok) {throw new Error(gate.error);}
 
@@ -219,7 +219,7 @@ export function applyProposal(proposalIdInput: string, actorId?: string): TaskPr
     sourceInputId: `proposal:${proposal.id}`,
     title: proposal.title,
     description: proposal.reason,
-    category: legacyTaskKindToPlanCategory(proposal.type),
+    category: legacyProposalKindToPlanCategory(proposal.type),
     priority: ProposalPriorityToPlanPriority(proposal.priority)
   }, { workspaceRoot: proposalRoot() });
 
@@ -249,7 +249,7 @@ export function applyProposal(proposalIdInput: string, actorId?: string): TaskPr
   return getStores().proposals.getById(proposal.id);
 }
 
-export function rejectProposal(proposalIdInput: string, actorId?: string): TaskProposal | undefined {
+export function rejectProposal(proposalIdInput: string, actorId?: string): Proposal | undefined {
   const gate = requireEmployeePermission('classification:review', actorId);
   if (!gate.ok) {throw new Error(gate.error);}
 
@@ -260,7 +260,7 @@ export function rejectProposal(proposalIdInput: string, actorId?: string): TaskP
   const now = new Date().toISOString();
   getStores().proposals.update(proposal.id, { status: 'rejected', reason: 'rejected by review' });
 
-  emitEvent('task.proposal.rejected', 'classification', {
+  emitEvent('proposal.rejected', 'classification', {
     proposalId: proposal.id,
     findingId: proposal.findingId,
     actorId
@@ -279,7 +279,7 @@ export function rejectProposal(proposalIdInput: string, actorId?: string): TaskP
   return getStores().proposals.getById(proposal.id);
 }
 
-export function requeueProposal(proposalIdInput: string, actorId?: string): TaskProposal | undefined {
+export function requeueProposal(proposalIdInput: string, actorId?: string): Proposal | undefined {
   const gate = requireEmployeePermission('classification:review', actorId);
   if (!gate.ok) {throw new Error(gate.error);}
   const proposal = getStores().proposals.getById(proposalIdInput);
@@ -289,7 +289,7 @@ export function requeueProposal(proposalIdInput: string, actorId?: string): Task
   const now = new Date().toISOString();
   getStores().proposals.update(proposal.id, { status: 'pending', reason: undefined, requeuedAt: now });
 
-  emitEvent('task.proposal.requeued', 'classification', {
+  emitEvent('proposal.requeued', 'classification', {
     proposalId: proposal.id,
     findingId: proposal.findingId,
     actorId
@@ -315,7 +315,7 @@ export interface ProposalEditChanges {
   workflow?: string;
 }
 
-function mergeProposalPayload(before: TaskProposalTaskPayload, changes: ProposalEditChanges): TaskProposalTaskPayload {
+function mergeProposalPayload(before: ProposalPayload, changes: ProposalEditChanges): ProposalPayload {
   let title = before.title;
   if (changes.title !== undefined) {
     title = changes.title.trim();
@@ -324,13 +324,13 @@ function mergeProposalPayload(before: TaskProposalTaskPayload, changes: Proposal
 
   let type: ProposalType = before.type;
   if (changes.type !== undefined) {
-    if (!TASK_TYPES.includes(changes.type as ProposalType)) {throw new Error(`invalid proposal type '${changes.type}'`);}
+    if (!PROPOSAL_TYPES.includes(changes.type as ProposalType)) {throw new Error(`invalid proposal type '${changes.type}'`);}
     type = changes.type as ProposalType;
   }
 
   let priority: ProposalPriority = before.priority;
   if (changes.priority !== undefined) {
-    if (!TASK_PRIORITIES.includes(changes.priority as ProposalPriority)) {throw new Error(`invalid proposal priority '${changes.priority}'`);}
+    if (!PROPOSAL_PRIORITIES.includes(changes.priority as ProposalPriority)) {throw new Error(`invalid proposal priority '${changes.priority}'`);}
     priority = changes.priority as ProposalPriority;
   }
 
@@ -348,7 +348,7 @@ function mergeProposalPayload(before: TaskProposalTaskPayload, changes: Proposal
   };
 }
 
-export function editProposal(proposalIdInput: string, changes: ProposalEditChanges = {}, actorId?: string): TaskProposal | undefined {
+export function editProposal(proposalIdInput: string, changes: ProposalEditChanges = {}, actorId?: string): Proposal | undefined {
   const gate = requireEmployeePermission('classification:review', actorId);
   if (!gate.ok) {throw new Error(gate.error);}
 
@@ -356,7 +356,7 @@ export function editProposal(proposalIdInput: string, changes: ProposalEditChang
   if (!proposal) {return undefined;}
   if (proposal.status !== 'pending') {return proposal;}
 
-  const before: TaskProposalTaskPayload = {
+  const before: ProposalPayload = {
     title: proposal.title,
     type: proposal.type,
     priority: proposal.priority,
@@ -365,7 +365,7 @@ export function editProposal(proposalIdInput: string, changes: ProposalEditChang
   const after = mergeProposalPayload(before, changes);
 
   const now = new Date().toISOString();
-  const edit: TaskProposalEdit = { at: now, ...(actorId ? { by: actorId } : {}), before, after };
+  const edit: ProposalEdit = { at: now, ...(actorId ? { by: actorId } : {}), before, after };
   const edits = [...(proposal.edits || []), edit];
 
   getStores().proposals.update(proposal.id, {
@@ -378,7 +378,7 @@ export function editProposal(proposalIdInput: string, changes: ProposalEditChang
     edits
   });
 
-  emitEvent('task.proposal.edited', 'classification', {
+  emitEvent('proposal.edited', 'classification', {
     proposalId: proposal.id,
     findingId: proposal.findingId,
     actorId

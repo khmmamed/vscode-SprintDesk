@@ -5,8 +5,8 @@ import { ChatMessage, LLMProvider, profileToRequest } from '../llm/types';
 import { DEFAULT_OLLAMA_BASEURL } from '../llm/ollamaProvider';
 import { ProposalClassification } from '../classification/classificationService';
 
-const TASK_TYPES = ['feature', 'bug', 'chore', 'doc', 'test'] as const;
-const TASK_PRIORITIES = ['high', 'medium', 'low'] as const;
+const PROPOSAL_TYPES = ['feature', 'bug', 'chore', 'doc', 'test'] as const;
+const PROPOSAL_PRIORITIES = ['high', 'medium', 'low'] as const;
 
 export type ClassificationOutcome =
   | { ok: true; value: ProposalClassification }
@@ -30,7 +30,7 @@ export function buildClassificationPrompt(finding: Finding): ChatMessage[] {
     `Severity: ${finding.severity}`,
     finding.category ? `Category: ${finding.category}` : '',
     finding.evidence ? `Evidence: ${finding.evidence}` : '',
-    finding.suggestedTaskType ? `Suggested type: ${finding.suggestedTaskType}` : '',
+    finding.suggestedType ? `Suggested type: ${finding.suggestedType}` : '',
     finding.suggestedWorkflow ? `Suggested workflow: ${finding.suggestedWorkflow}` : '',
     finding.suggestedPriority ? `Suggested priority: ${finding.suggestedPriority}` : ''
   ]
@@ -38,8 +38,8 @@ export function buildClassificationPrompt(finding: Finding): ChatMessage[] {
     .join('\n');
 
   const system = [
-    'You are a task classifier for an autonomous workforce control center.',
-    'Classify the finding into a task proposal. Respond with a single JSON object only, of the shape:',
+    'You are a proposal classifier for an autonomous workforce control center.',
+    'Classify the finding into a proposal. Respond with a single JSON object only, of the shape:',
     '{"title": string, "type": "feature"|"bug"|"chore"|"doc"|"test", "priority": "high"|"medium"|"low", "workflow": string (optional), "confidence": number 0-1 (optional)}.',
     'Do not include any text outside the JSON object.'
   ].join(' ');
@@ -68,10 +68,10 @@ export function parseClassification(output: string): ClassificationOutcome {
   }
 
   const title = typeof parsed.title === 'string' ? parsed.title.trim() : undefined;
-  const type = typeof parsed.type === 'string' && (TASK_TYPES as readonly string[]).includes(parsed.type)
+  const type = typeof parsed.type === 'string' && (PROPOSAL_TYPES as readonly string[]).includes(parsed.type)
     ? parsed.type as ProposalType
     : undefined;
-  const priority = typeof parsed.priority === 'string' && (TASK_PRIORITIES as readonly string[]).includes(parsed.priority)
+  const priority = typeof parsed.priority === 'string' && (PROPOSAL_PRIORITIES as readonly string[]).includes(parsed.priority)
     ? parsed.priority as ProposalPriority
     : undefined;
   const workflow = typeof parsed.workflow === 'string' && parsed.workflow.trim().length > 0

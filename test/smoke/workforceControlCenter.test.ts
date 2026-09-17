@@ -1616,7 +1616,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
       runId: 'run_seed',
       agent: 'emp_none',
       severity: 'medium',
-      suggestedTaskType: 'bug',
+      suggestedType: 'bug',
       suggestedPriority: 'high',
       suggestedWorkflow: 'w_fix',
       ...overrides
@@ -1722,7 +1722,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice C)', () => {
   });
 
   it('marks an invalid suggestion as failed without creating a plan', () => {
-    const finding = seedFinding({ suggestedTaskType: 'suggestion' as any });
+    const finding = seedFinding({ suggestedType: 'suggestion' as any });
     const proposal = classificationService.createProposal(finding);
 
     assert.strictEqual(proposal?.status, 'failed');
@@ -2014,7 +2014,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice F — scheduled 
       runId: 'run_sched_seed',
       agent: 'emp_none',
       severity: 'medium',
-      suggestedTaskType: 'bug',
+      suggestedType: 'bug',
       suggestedPriority: 'high',
       suggestedWorkflow: 'w_fix',
       ...overrides
@@ -2128,7 +2128,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal e
       runId: 'run_edit_seed',
       agent: 'emp_none',
       severity: 'medium',
-      suggestedTaskType: 'bug',
+      suggestedType: 'bug',
       suggestedPriority: 'high',
       suggestedWorkflow: 'w_fix',
       ...overrides
@@ -2168,7 +2168,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice G — proposal e
     const audits = getStores().audit.loadAll().filter(a => a.action === 'classification.edit');
     assert.strictEqual(audits.length, 1);
     assert.strictEqual(audits[0].targetId, proposal!.id);
-    assert.strictEqual(getStores().events.findByType('task.proposal.edited').length, 1);
+    assert.strictEqual(getStores().events.findByType('proposal.edited').length, 1);
   });
 
   it('throws on invalid edits and persists nothing', () => {
@@ -2264,7 +2264,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
       runId: 'run_requeue',
       agent: 'emp_requeue',
       severity: 'medium',
-      suggestedTaskType: 'bug',
+      suggestedType: 'bug',
       suggestedPriority: 'high',
       suggestedWorkflow: 'w_fix',
       ...overrides
@@ -2306,7 +2306,7 @@ describe('v0.12 Proposal 2 — autonomous classification (Slice H — requeue re
     const audits = getStores().audit.loadAll().filter(a => a.action === 'classification.requeue');
     assert.strictEqual(audits.length, 1);
     assert.strictEqual(audits[0].targetId, proposal!.id);
-    assert.strictEqual(getStores().events.findByType('task.proposal.requeued').length, 1);
+    assert.strictEqual(getStores().events.findByType('proposal.requeued').length, 1);
     assert.strictEqual(getStores().events.findByType('classification.pass').length, 0);
   });
 

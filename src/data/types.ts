@@ -47,29 +47,29 @@ export interface FindingAgentReview {
 
 export type FindingAgentReviewState = 'requested' | 'validated';
 
-// v0.12 autonomous classification: task proposals (additive, non-breaking)
-export type TaskProposalStatus = 'pending' | 'applied' | 'duplicate' | 'skipped' | 'failed' | 'rejected';
+// v0.12 autonomous classification: proposals (additive, non-breaking)
+export type ProposalStatus = 'pending' | 'applied' | 'duplicate' | 'skipped' | 'failed' | 'rejected';
 
 // Classification vocab pulled off the legacy Task domain so proposals, findings,
 // and workflow steps no longer depend on the Task type (removed Slice I).
 export type ProposalType = 'feature' | 'bug' | 'chore' | 'doc' | 'test';
 export type ProposalPriority = 'high' | 'medium' | 'low';
 
-export interface TaskProposalTaskPayload {
+export interface ProposalPayload {
   title: string;
   type: ProposalType;
   priority: ProposalPriority;
   workflow?: string;
 }
 
-export interface TaskProposalEdit {
+export interface ProposalEdit {
   at: string;
   by?: string;
-  before: Partial<TaskProposalTaskPayload>;
-  after: Partial<TaskProposalTaskPayload>;
+  before: Partial<ProposalPayload>;
+  after: Partial<ProposalPayload>;
 }
 
-export interface TaskProposal {
+export interface Proposal {
   id: string;
   findingId: string;
   runId: string;
@@ -80,7 +80,7 @@ export interface TaskProposal {
   priority: ProposalPriority;
   workflow?: string;
   confidence?: number;
-  status: TaskProposalStatus;
+  status: ProposalStatus;
   proposedBy?: string;
   appliedPlanId?: string;
   appliedAt?: string;
@@ -88,7 +88,7 @@ export interface TaskProposal {
   createdAt: string;
   editedAt?: string;
   editedBy?: string;
-  edits?: TaskProposalEdit[];
+  edits?: ProposalEdit[];
   requeuedAt?: string;
 }
 
@@ -104,7 +104,7 @@ export interface Finding {
   severity: FindingSeverity;
   confidence?: number;
   category?: string;
-  suggestedTaskType?: ProposalType;
+  suggestedType?: ProposalType;
   suggestedWorkflow?: string;
   suggestedPriority?: ProposalPriority;
   status: FindingStatus;
@@ -191,12 +191,12 @@ export interface Policy {
 
 export const DEFAULT_POLICY: Policy = {
   roles: {
-    lead: ['task:assign', 'task:claim', 'run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:propose', 'classification:review', 'classification:apply', 'plan:deploy'],
-    developer: ['task:claim', 'run:create'],
-    reviewer: ['task:assign', 'task:claim', 'finding:validate', 'classification:review'],
+    lead: ['run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:propose', 'classification:review', 'classification:apply', 'plan:deploy'],
+    developer: ['run:create'],
+    reviewer: ['finding:validate', 'classification:review'],
     observer: [],
-    agent: ['run:create', 'run:update', 'run:cancel', 'task:claim', 'mcp:list', 'mcp:call', 'classification:propose'],
-    human: ['task:assign', 'task:claim', 'approval:review', 'approval:configure', 'event-rule:manage', 'classification:review', 'classification:apply', 'plan:deploy']
+    agent: ['run:create', 'run:update', 'run:cancel', 'mcp:list', 'mcp:call', 'classification:propose'],
+    human: ['approval:review', 'approval:configure', 'event-rule:manage', 'classification:review', 'classification:apply', 'plan:deploy']
   },
   overrides: []
 };
@@ -467,9 +467,9 @@ export interface FindingsData {
   findings: Finding[];
 }
 
-// v0.12 autonomous classification: persisted task proposals (additive, non-breaking)
+// v0.12 autonomous classification: persisted proposals (additive, non-breaking)
 export interface ProposalsData {
-  proposals: TaskProposal[];
+  proposals: Proposal[];
 }
 
 // v0.11 event rules: event-based asynchronous automation (additive, non-breaking)

@@ -21,18 +21,18 @@ export interface RecommendOptions {
   includePartial?: boolean;
 }
 
-// Standalone capability input (formerly Pick<Task, 'type' | 'requiredSkills'>):
-// the classification vocabulary plus explicit skill requirements.
-export interface SkillTaskSpec {
+// Standalone capability input: the proposal classification vocabulary plus
+// explicit skill requirements.
+export interface SkillSpec {
   type: ProposalType;
   requiredSkills?: string[];
 }
 
-export function skillsForTask(task: SkillTaskSpec): string[] {
-  if (task.requiredSkills && task.requiredSkills.length > 0) {
-    return task.requiredSkills;
+export function skillsFor(spec: SkillSpec): string[] {
+  if (spec.requiredSkills && spec.requiredSkills.length > 0) {
+    return spec.requiredSkills;
   }
-  return DEFAULT_TYPE_SKILLS[task.type] || [];
+  return DEFAULT_TYPE_SKILLS[spec.type] || [];
 }
 
 export function getEffectiveSkills(employee: Employee): Map<string, number> {
@@ -62,8 +62,8 @@ export function getEffectiveSkills(employee: Employee): Map<string, number> {
   return map;
 }
 
-export function evaluate(task: SkillTaskSpec, employee: Employee): SkillEvaluation {
-  const required = skillsForTask(task);
+export function evaluate(spec: SkillSpec, employee: Employee): SkillEvaluation {
+  const required = skillsFor(spec);
   const effective = getEffectiveSkills(employee);
 
   const matched = required.filter(s => effective.has(s.toLowerCase()));
@@ -87,11 +87,11 @@ function statusRank(status: Employee['status']): number {
   return status === 'idle' ? 0 : status === 'busy' ? 1 : 2;
 }
 
-export function rankEmployees(task: SkillTaskSpec, options: RecommendOptions = {}): EmployeeScore[] {
+export function rankEmployees(spec: SkillSpec, options: RecommendOptions = {}): EmployeeScore[] {
   const all = getStores().people.loadAll();
   const evaluated = all
     .map(employee => {
-      const evaluation = evaluate(task, employee);
+      const evaluation = evaluate(spec, employee);
       const load = getConcurrentLoad(employee);
       return { employee, evaluation, load };
     })
@@ -127,11 +127,11 @@ export function rankEmployees(task: SkillTaskSpec, options: RecommendOptions = {
 }
 
 export function recommendEmployees(
-  task: SkillTaskSpec,
+  spec: SkillSpec,
   options: RecommendOptions = {}
 ): EmployeeScore[] {
-  const results = rankEmployees(task, options);
-  recordRecommendation(task, results);
+  const results = rankEmployees(spec, options);
+  recordRecommendation(spec, results);
   return results;
 }
 
@@ -162,15 +162,15 @@ export function requireEmployeePermission(permission: PermissionId, agentIdOrNam
   return { ok: true, employee };
 }
 
-function recordRecommendation(task: SkillTaskSpec, results: EmployeeScore[]): void {
+function recordRecommendation(spec: SkillSpec, results: EmployeeScore[]): void {
   const entry: AuditEntry = {
     id: `audit_${Date.now()}`,
     actor: 'system',
     action: 'recommendEmployees',
     targetType: 'proposal',
     details: {
-      taskType: task.type,
-      required: skillsForTask(task),
+      type: spec.type,
+      required: skillsFor(spec),
       rankings: results.map((r, i) => ({
         rank: i + 1,
         employeeId: r.employee.id,

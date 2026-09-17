@@ -254,7 +254,7 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
     return assigned.map(p => new WorkforceItem(
       planTitleFor(p) || p.id,
       vscode.TreeItemCollapsibleState.None,
-      'workforceTask',
+      'workforcePlan',
       undefined,
       undefined,
       undefined,

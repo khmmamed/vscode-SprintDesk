@@ -41,7 +41,7 @@ function makeSchedule(ws: TestWorkspace, id: string, overrides: Partial<Schedule
   return schedule;
 }
 
-// maintenance category → chore task-type → DEFAULT_TYPE_SKILLS['chore'] = ['planning']
+// maintenance category → chore proposal type → DEFAULT_TYPE_SKILLS['chore'] = ['planning']
 function seedAgent(ws: TestWorkspace, name: string): void {
   const employee = makeEmployee({
     role: 'agent',

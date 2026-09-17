@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeWorkspace, TestWorkspace } from '../helpers/workspace';
 import { getStores } from '../../src/data/stores';
-import { Approval, EventRule, ExecutionWindow, Finding, TaskProposal } from '../../src/data/types';
+import { Approval, EventRule, ExecutionWindow, Finding, Proposal } from '../../src/data/types';
 
 type Stores = ReturnType<typeof getStores>;
 
@@ -49,7 +49,7 @@ function makeEventRule(id: string): EventRule {
   };
 }
 
-function makeProposal(id: string): TaskProposal {
+function makeProposal(id: string): Proposal {
   return {
     id,
     findingId: 'fnd_1',

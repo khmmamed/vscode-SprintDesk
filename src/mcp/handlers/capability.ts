@@ -49,7 +49,7 @@ function handle_sprintdesk_policyGet(args: any): HandlerResult {
 }
 
 function handle_sprintdesk_recommendEmployees(args: any): HandlerResult {
-  let task: capability.SkillTaskSpec | undefined;
+  let spec: capability.SkillSpec | undefined;
 
   if (args.planId) {
     const plan = getStores().plans.getById(args.planId);
@@ -65,14 +65,14 @@ function handle_sprintdesk_recommendEmployees(args: any): HandlerResult {
       research: 'feature'
     };
     const proposalType = type ? typeToProposal[type] : undefined;
-    task = { type: proposalType || 'feature', requiredSkills: args.requiredSkills };
+    spec = { type: proposalType || 'feature', requiredSkills: args.requiredSkills };
   } else if (args.type) {
-    task = { type: args.type as ProposalType, requiredSkills: args.requiredSkills };
+    spec = { type: args.type as ProposalType, requiredSkills: args.requiredSkills };
   } else {
     return res('Provide either planId or type', true);
   }
 
-  const results = capability.recommendEmployees(task, {
+  const results = capability.recommendEmployees(spec, {
     includePartial: !!args.includePartial,
     maxResults: args.maxResults
   }).map(r => ({
@@ -87,7 +87,7 @@ function handle_sprintdesk_recommendEmployees(args: any): HandlerResult {
     coverage: r.evaluation.coverage
   }));
 
-  return res(JSON.stringify({ task, candidates: results }, null, 2));
+  return res(JSON.stringify({ spec, candidates: results }, null, 2));
 }
 
 export const WORKFORCE_HANDLERS: Record<string, Handler> = {

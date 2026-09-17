@@ -227,9 +227,9 @@ function listsEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-type TaskTypeShim = 'feature' | 'bug' | 'doc' | 'test' | 'chore';
+type ProposalTypeShim = 'feature' | 'bug' | 'doc' | 'test' | 'chore';
 
-const CATEGORY_TASK_TYPE = new Map<PlanCategory, TaskTypeShim>([
+const CATEGORY_PROPOSAL_TYPE = new Map<PlanCategory, ProposalTypeShim>([
   ['feature', 'feature'],
   ['bug', 'bug'],
   ['documentation', 'doc'],
@@ -255,12 +255,12 @@ function depSatisfied(dep: Plan): boolean {
 }
 
 // Selects an agent against the seeded people/skills directories. Plan dimensions
-// map onto the existing capability ranking (category → task-type → default skills).
+// map onto the existing capability ranking (category → proposal type → default skills).
 // The organizer records the decision; the Dispatcher (Slice E) enqueues the Run.
 export function selectAgent(
   category: PlanCategory
 ): { agent: Employee; reason: PlanAssignmentReason } | undefined {
-  const type = CATEGORY_TASK_TYPE.get(category) || 'chore';
+  const type = CATEGORY_PROPOSAL_TYPE.get(category) || 'chore';
   const [top] = rankEmployees(
     { type, requiredSkills: DEFAULT_TYPE_SKILLS[type] },
     { maxResults: 1, includePartial: false }

@@ -16,7 +16,7 @@ import * as workforceService from '../../services/workforce/workforceService';
 import * as eventRulesService from '../../services/workforce/eventRulesService';
 import * as executionWindowService from '../../services/workforce/executionWindowService';
 import { subscribeEvents } from '../../services/workforce/events';
-import { Approval, Checkpoint, Cycle, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, InputRecord, Plan, Run, ScheduleRecord, TaskProposal, WorkerMode } from '../../data/types';
+import { Approval, Checkpoint, Cycle, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, InputRecord, Plan, Run, ScheduleRecord, Proposal, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
@@ -502,7 +502,6 @@ EVENT_LABELS['run.cancelled'] = 'Run cancelled';
 EVENT_LABELS['workflow.started'] = 'Workflow started';
 EVENT_LABELS['workflow.completed'] = 'Workflow completed';
 EVENT_LABELS['workflow.failed'] = 'Workflow failed';
-EVENT_LABELS['task.assigned'] = 'Task assigned';
 EVENT_LABELS['finding.created'] = 'Finding created';
 EVENT_LABELS['finding.validation.requested'] = 'Agent validation requested';
 EVENT_LABELS['finding.validated'] = 'Agent validated finding';
@@ -580,7 +579,7 @@ function approvalDtoById(id: string): ApprovalDto | undefined {
   return approval ? toApprovalDto(approval) : undefined;
 }
 
-function toProposalDto(p: TaskProposal): ProposalDto {
+function toProposalDto(p: Proposal): ProposalDto {
   return {
     id: p.id,
     findingId: p.findingId,
@@ -614,7 +613,7 @@ function scheduleDtos(): ScheduleDto[] {
     enabled: s.enabled,
     kind: s.kind,
     autonomyLevel: s.autonomyLevel,
-    action: s.action ?? 'task',
+    action: s.action ?? 'plan',
     cron: s.cron,
     intervalMs: s.intervalMs,
     lastRunAt: s.lastRunAt,
@@ -631,7 +630,7 @@ function pushRun(panelRef: vscode.WebviewPanel, run: Run): void {
   }
 }
 
-function pushProposalPatch(panelRef: vscode.WebviewPanel, proposal: TaskProposal): void {
+function pushProposalPatch(panelRef: vscode.WebviewPanel, proposal: Proposal): void {
   try {
     panelRef.webview.postMessage({ command: 'PROPOSAL_UPDATED', payload: { proposal: toProposalDto(proposal) } });
   } catch {
@@ -1044,7 +1043,7 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
         const proposalId: string | undefined = message?.payload?.proposalId;
         try {
           if (!proposalId) {throw new Error('proposalId is required');}
-          let proposal: TaskProposal | undefined;
+          let proposal: Proposal | undefined;
           let done: string;
           if (command === 'WORKFORCE_APPLY_PROPOSAL') {
             proposal = classificationService.applyProposal(proposalId);

@@ -108,11 +108,11 @@ export interface MaterializePlanInput {
   executionMode?: PlanExecutionMode;
 }
 
-// Maps the residual legacy task-kind vocabulary (Task.type / ScheduleTaskTemplate.type)
-// onto the Plan classification axis.
-export type LegacyTaskKind = 'feature' | 'bug' | 'chore' | 'doc' | 'test';
+// Maps the residual proposal-type vocabulary (Proposal.type) onto the Plan
+// classification axis.
+export type LegacyProposalKind = 'feature' | 'bug' | 'chore' | 'doc' | 'test';
 
-export function legacyTaskKindToPlanCategory(kind: LegacyTaskKind): PlanCategory {
+export function legacyProposalKindToPlanCategory(kind: LegacyProposalKind): PlanCategory {
   switch (kind) {
     case 'feature': return 'feature';
     case 'bug': return 'bug';

@@ -62,7 +62,7 @@ export interface CreateFindingInput {
   severity?: FindingSeverity;
   confidence?: number;
   category?: string;
-  suggestedTaskType?: Finding['suggestedTaskType'];
+  suggestedType?: Finding['suggestedType'];
   suggestedWorkflow?: string;
   suggestedPriority?: Finding['suggestedPriority'];
   evidence?: string;
@@ -86,7 +86,7 @@ export function createFinding(input: CreateFindingInput): Finding {
     ...(input.planId ? { planId: input.planId } : {}),
     ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
     ...(input.category ? { category: input.category } : {}),
-    ...(input.suggestedTaskType ? { suggestedTaskType: input.suggestedTaskType } : {}),
+    ...(input.suggestedType ? { suggestedType: input.suggestedType } : {}),
     ...(input.suggestedWorkflow ? { suggestedWorkflow: input.suggestedWorkflow } : {}),
     ...(input.suggestedPriority ? { suggestedPriority: input.suggestedPriority } : {}),
     ...(input.evidence ? { evidence: input.evidence } : {})

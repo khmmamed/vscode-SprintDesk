@@ -6,7 +6,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [1.0.0] - 2026-09-17
 
-**Plan-native replatform (slices A–O).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
+**Plan-native replatform (slices A–P).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
 is no Task compatibility layer underneath it. The legacy Task/Epic/Backlog/Sprint project-management surface is
 removed from the active runtime, and all runtime state lives under `.SprintDesk/database/`.
 
@@ -184,6 +184,22 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
   and every reader for it were removed in Slice I, so no supported legacy workspace format remains.
 - **Architecture note:** v1.0 starts from the Plan-native storage model (`.SprintDesk/plans/PLAN-*.md` +
   `.SprintDesk/database/plans.yml`); legacy workspaces keep their history in Git and are not auto-imported.
+
+### v1.0 Slice P — Task-vocabulary cleanup in the active surface
+
+- **Proposal domain types renamed.** `TaskProposal`/`TaskProposalStatus`/`TaskProposalTaskPayload`/
+  `TaskProposalEdit` became `Proposal`/`ProposalStatus`/`ProposalPayload`/`ProposalEdit`; the persisted
+  `ProposalsData.proposals` entries and the capability/classification services follow.
+- **Classification vocabulary de-tasked.** `Finding.suggestedTaskType` → `suggestedType`; the
+  `classification.recommend` audit detail `taskType` → `type`; `TASK_TYPES`/`TASK_PRIORITIES` →
+  `PROPOSAL_TYPES`/`PROPOSAL_PRIORITIES`; `LegacyTaskKind`/`legacyTaskKindToPlanCategory` →
+  `LegacyProposalKind`/`legacyProposalKindToPlanCategory`; the `TaskType` store alias is gone.
+- **Events renamed.** `task.proposal.created|rejected|requeued|edited` → `proposal.created|rejected|requeued|edited`.
+- **Capability input renamed.** `SkillTaskSpec` → `SkillSpec` and `skillsForTask` → `skillsFor`; the
+  `sprintdesk_capabilityRecommend` MCP response key changes from `task` to `spec`.
+- **Dead Task strings removed.** The orphaned `task:assign`/`task:claim` policy permissions and the
+  unreferenced `task.assigned` control-center event label are deleted. Schedule records fall back to the
+  `plan` action (not `task`), and the schedules tab renders the record's real action.
 
 ## v0.12 — pre-release development line (shipped in 1.0.0)
 

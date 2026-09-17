@@ -133,7 +133,7 @@ describe('C6 deterministic scheduler', () => {
     return schedule;
   }
 
-  // maintenance category → chore task-type → DEFAULT_TYPE_SKILLS['chore'] = ['planning']
+  // maintenance category → chore proposal type → DEFAULT_TYPE_SKILLS['chore'] = ['planning']
   function seedPlanningAgent(name = 'Pat'): Employee {
     const employee = makeEmployee({
       role: 'agent',
