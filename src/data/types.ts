@@ -336,6 +336,9 @@ title: string;
 
 export interface AgentConfig {
   tool: 'opencode' | 'ollama' | 'claude-code' | 'custom';
+  /** For `tool: 'custom'`: the command line to run. Substituted placeholders are
+   *  `{plan_path}` (the plan artifact), `{plan_dir}` (its directory), `{plan_file}`
+   *  (its filename) and `{description}` (the full agent prompt). */
   command?: string;
   model?: string;
 }

@@ -37,11 +37,11 @@ describe('documentation consistency (v1.0.0)', () => {
     assert.equal(version, latest, 'package.json version must match the newest CHANGELOG release');
   });
 
-  it('CHANGELOG records the v1.0 Plan-native replatform (slices A-P)', () => {
+  it('CHANGELOG records the v1.0 Plan-native replatform (slices A-Q)', () => {
     const changelog = read('CHANGELOG.md');
     assert.match(changelog, /^## \[1\.0\.0\]/m, 'CHANGELOG must contain a [1.0.0] release section');
     assert.doesNotMatch(changelog, /^## \[Unreleased\]/m, 'release content must not remain under [Unreleased]');
-    for (const slice of 'ABCDEFGHIJKLMNOP'.split('')) {
+    for (const slice of 'ABCDEFGHIJKLMNOPQ'.split('')) {
       assert.match(
         changelog,
         new RegExp(`^### v1\\.0 Slice ${slice} `, 'm'),

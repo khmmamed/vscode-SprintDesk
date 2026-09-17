@@ -6,7 +6,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [1.0.0] - 2026-09-17
 
-**Plan-native replatform (slices A–P).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
+**Plan-native replatform (slices A–Q).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
 is no Task compatibility layer underneath it. The legacy Task/Epic/Backlog/Sprint project-management surface is
 removed from the active runtime, and all runtime state lives under `.SprintDesk/database/`.
 
@@ -200,6 +200,20 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
 - **Dead Task strings removed.** The orphaned `task:assign`/`task:claim` policy permissions and the
   unreferenced `task.assigned` control-center event label are deleted. Schedule records fall back to the
   `plan` action (not `task`), and the schedules tab renders the record's real action.
+
+### v1.0 Slice Q — Agent command contract: plan-native placeholders
+
+- **Custom-command placeholders renamed.** `{task_path}`/`{task_dir}`/`{task_file}` became
+  `{plan_path}`/`{plan_dir}`/`{plan_file}`; `{description}` is unchanged. The generated command line resolves
+  to the same executable, arguments and plan artifact path — only the placeholder names differ.
+- **Prompt terminology.** The `opencode`/`ollama`/custom prompts now read `Plan: <title>` instead of
+  `Task: <title>`. The `claude-code` `--task` flag is a Claude Code CLI contract, not SprintDesk vocabulary,
+  and is unchanged.
+- **Contract documented.** `AgentConfig.command` documents the supported placeholders, and the MCP
+  `agentConfig` description states the real shape instead of the never-implemented `workingDir`/`promptTemplate`.
+- **Coverage:** new `test/smoke/agentCommand.test.ts` pins the exact `{ command, args }` for every `tool`.
+- **No compatibility shim.** `.SprintDesk/settings/agents.yml` is user-authored configuration (same rule as
+  Slice M), so the old `{task_*}` placeholders are not read.
 
 ## v0.12 — pre-release development line (shipped in 1.0.0)
 

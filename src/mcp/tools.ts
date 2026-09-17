@@ -421,7 +421,7 @@ export const APPROVAL_TOOLS = [
       properties: {
         employeeId: { type: 'string', description: 'Employee id or name' },
         modelProfile: { type: 'object', description: 'Model profile: { name, provider (ollama|openai), model, baseUrl?, apiKeyRef?, options? }' },
-        agentConfig: { type: 'object', description: 'Agent config: { tool, command?, model?, workingDir?, promptTemplate? }' },
+        agentConfig: { type: 'object', description: 'Agent config: { tool, command?, model? }. For tool=custom, command supports {plan_path}, {plan_dir}, {plan_file} and {description}.' },
         capabilities: { type: 'array', items: { type: 'string' }, description: 'Replacement capability list' },
         actorId: { type: 'string', description: 'Acting employee id or name' },
       },

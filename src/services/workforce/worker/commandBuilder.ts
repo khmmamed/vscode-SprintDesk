@@ -7,18 +7,18 @@ export function sanitizeBranchName(name: string): string {
 
 export function buildAgentCommand(
   config: AgentConfig | undefined,
-  taskPath: string,
-  taskDescription: string,
-  taskTitle: string,
+  planPath: string,
+  planDescription: string,
+  planTitle: string,
   agentName: string
 ): { command: string; args: string[] } {
   if (!config) {
     return { command: '', args: [] };
   }
-  const taskDir = taskPath && taskPath !== 'undefined' ? path.dirname(taskPath) : process.cwd();
-  const taskFile = path.basename(taskPath);
+  const planDir = planPath && planPath !== 'undefined' ? path.dirname(planPath) : process.cwd();
+  const planFile = path.basename(planPath);
 
-  const fullPrompt = `[${agentName}] ${taskDescription}\n\nTask: ${taskTitle}\nWork in: ${taskDir}`;
+  const fullPrompt = `[${agentName}] ${planDescription}\n\nPlan: ${planTitle}\nWork in: ${planDir}`;
 
   switch (config.tool) {
     case 'opencode': {
@@ -26,17 +26,17 @@ export function buildAgentCommand(
     }
     case 'ollama': {
       const model = config.model || 'llama3';
-      const prompt = `Task: ${taskTitle}\nWork in: ${taskDir}`;
+      const prompt = `Plan: ${planTitle}\nWork in: ${planDir}`;
       return { command: 'ollama', args: ['run', model, prompt] };
     }
     case 'claude-code': {
-      return { command: 'claude', args: ['code', '--task', taskPath] };
+      return { command: 'claude', args: ['code', '--task', planPath] };
     }
     case 'custom': {
       const cmd = (config.command || '')
-        .replace(/\{task_path\}/g, taskPath)
-        .replace(/\{task_dir\}/g, taskDir)
-        .replace(/\{task_file\}/g, taskFile)
+        .replace(/\{plan_path\}/g, planPath)
+        .replace(/\{plan_dir\}/g, planDir)
+        .replace(/\{plan_file\}/g, planFile)
         .replace(/\{description\}/g, fullPrompt);
       const parts = cmd.split(' ');
       return { command: parts[0], args: parts.slice(1) };
