@@ -7,7 +7,6 @@ import * as workforceService from '../services/workforce/workforceService';
 import * as capability from '../services/workforce/capabilityService';
 import { planTitleFor } from '../services/workforce/plan/planService';
 
-const CLOSED_STATUSES = new Set(['done', 'failed', 'cancelled']);
 const OPEN_SCHEDULE_STATUSES = new Set(['draft', 'ready', 'blocked', 'running']);
 
 function resolveWorkspace(argv: string[]): string {
@@ -38,7 +37,6 @@ function planCategoryToProposalType(category?: string): ProposalType {
 }
 
 function planDisplay(p: Plan): { id: string; title: string; status: string; agent?: string } {
-  const axis = p.classification?.current || p.classification?.original;
   return {
     id: p.id,
     title: planTitleFor(p) || p.id,

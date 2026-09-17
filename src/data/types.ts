@@ -318,22 +318,6 @@ export interface EmployeeTeam {
   updatedAt: string;
 }
 
-export interface Epic {
-  id: string;
-  number: number;
-  code: string;
-  name: string;
-title: string;
-  category: string;
-  description: string;
-  status: 'planned' | 'in-progress' | 'completed' | 'blocked';
-  priority: 'high' | 'medium' | 'low';
-  tasks: string[];
-  createdAt: string;
-  updatedAt: string;
-  path?: string;
-}
-
 export interface AgentConfig {
   tool: 'opencode' | 'ollama' | 'claude-code' | 'custom';
   /** For `tool: 'custom'`: the command line to run. Substituted placeholders are

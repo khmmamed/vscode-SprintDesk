@@ -110,6 +110,11 @@ describe('documentation consistency (v1.0.0)', () => {
     assert.doesNotMatch(docs, /`task` \/ `loop`/, 'docs must describe the plan / loop / tool / condition DSL');
   });
 
+  it('removes the dead legacy Epic interface (Slice S)', () => {
+    const types = read('src/data/types.ts');
+    assert.doesNotMatch(types, /export interface Epic \{/, 'the unused Epic interface must stay removed');
+  });
+
   it('the extension manifest declares no legacy sprintdesk.* settings (Slice N)', () => {
     const pkg = JSON.parse(read('package.json')) as {
       contributes?: { configuration?: { properties?: Record<string, unknown> } };

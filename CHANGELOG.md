@@ -18,9 +18,9 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
 - **Storage boundary.** `.SprintDesk/database/` holds runtime state; `.SprintDesk/settings/` configuration;
   `.SprintDesk/people/` identity; `.SprintDesk/inputs/` + `.SprintDesk/plans/` artifacts. The `workforce/`
   state root is gone.
-- **Deferred past 1.0 (tracked debt, not shipped):** the residual dead `Epic` interface. There is **no
-  Task→Plan migration utility**: v1.0 starts from the Plan-native storage model and no supported legacy
-  workspace format remains to import (Slice O).
+- **No tracked domain debt remains.** The residual dead `Epic` interface was removed in the Slice S final
+  integrity audit. There is **no Task→Plan migration utility**: v1.0 starts from the Plan-native storage model
+  and no supported legacy workspace format remains to import (Slice O).
 
 ### v1.0 Slice A — Plan domain, stores & storage layout
 
@@ -119,8 +119,9 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
 - **Workflow `task` steps now materialize Plans** (the `taskType` enum is mapped through
   `legacyTaskKindToPlanCategory`); the DSL key itself is unchanged (superseded by Slice M).
 - **Tracked residuals (not removed in this slice):** the dead `Epic` interface and the legacy
-  Epic/Backlog/Sprint constant strings are left as cleanup debt; the migration CLI was not shipped and is
-  resolved as **not required** in Slice O.
+  Epic/Backlog/Sprint constant strings were left as cleanup debt (the constants removed in Slice R, the `Epic`
+  interface removed in Slice S); the migration CLI was not shipped and is resolved as **not required** in
+  Slice O.
 
 ### v1.0 Slice J — Validator → checkpoint → deploy wiring
 
@@ -236,6 +237,17 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
   (`source.id === runId`, or the deterministic `inputs/replan-<runId>.md` name) instead of its transient
   `status === 'new'`, so an already-consumed replan can no longer be requested twice. The replan objective
   resolves the plan's real title through `planService.planTitleFor` rather than an id-only helper.
+
+### v1.0 Slice S — Final integrity audit
+
+- **Dead domain type removed.** The `Epic` interface — the last surviving legacy PM type, referenced by no
+  consumer — is deleted from `src/data/types.ts`; `docsConsistency.test.ts` now guards against its return.
+- **Full-surface audit (no behavior change).** Plan/Input/Run/Checkpoint lifecycle, the Organizer → Dispatcher
+  → Worker → Validator → Checkpoint wiring, recovery/replan idempotence, always-manual deploy authorization,
+  event + scheduler behavior, the `database/` storage boundary, the MCP registry and its generated artifacts,
+  the CLI entrypoints and extension activation, the workflow DSL, the agent command contract, and the absence
+  of retired Task/Epic/Backlog/Sprint runtime concepts were all re-verified green (typecheck, lint, tests,
+  packages).
 
 ## v0.12 — pre-release development line (shipped in 1.0.0)
 
