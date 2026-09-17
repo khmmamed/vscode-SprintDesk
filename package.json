@@ -2,8 +2,8 @@
   "name": "vscode-sprintdesk",
   "publisher": "khmamed",
   "displayName": "vscode-SprintDesk",
-  "description": "A Visual Studio Code extension for managing sprints and tasks in an agile development workflow",
-"version": "0.11.0",
+  "description": "Plan-native autonomous workforce orchestration for Visual Studio Code",
+  "version": "1.0.0",
   "repository": {
     "url": "https://github.com/khmmamed/vscode-SprintDesk.git",
     "type": "git"

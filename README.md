@@ -1,45 +1,43 @@
 # vscode-SprintDesk
 
-A productivity extension for managing sprints, tasks, epics, backlogs, and teams directly within Visual Studio Code. SprintDesk helps you organize your agile development workflow right in your editor.
+A Visual Studio Code extension for **plan-native autonomous workforce orchestration**. SprintDesk turns dropped
+inputs into Plans, organizes and executes them through a policy-gated workforce runtime, and makes every step
+reviewable. A **Plan is the only unit that can enter execution**.
 
 ---
 
 ## Features
 
-### Organize Your Work
-- **Tasks** - Create and track individual tasks with automatic IDs
-- **Epics** - Group related tasks together
-- **Backlogs** - Organize upcoming work into categories like features, bugs, or improvements
-- **Sprints** - Plan and manage active development cycles
-
-### Work Your Way
-- Drag and drop tasks between sprints, epics, and backlogs
-- Set task status: waiting, in progress, under review, or complete
-- Set priority: low, medium, high, or critical
-- Visual sprint calendar to plan your sprint
+### Plan-Native Work
+- **Inputs** - Drop `inputs/*.md` (or use the Create Input form); the Orchestrator turns them into Plans
+- **Plans** - `plans/PLAN-*.md` artifacts with a runtime registry tracking classification, dependencies,
+  scheduling, execution, and lineage
+- **Organizer** - re-classifies and prioritizes existing plans, detects dependencies, and selects the execution
+  mode and agent without ever rewriting plan content
+- **Cycles & Checkpoints** - each ingest opens a Cycle; a passing validation writes a Checkpoint and closes it
+- **Deploy authorization** - checkpoints are deployed only after an explicit human decision
 
 ### Team Collaboration
-- Add team members manually
-- Automatically sync team from Git commit history
-- Add AI agents to help with tasks
-- Track all changes with history view
+- Add people (humans and AI agents) manually
+- Automatically sync people from Git commit history
+- Track all changes with the History view
 
 ### Workforce & Autonomous Work
 SprintDesk ships a **workforce runtime**: a deterministic, policy-gated pipeline that maps
-employees → skills → tools → permissions → tasks, with an LLM executing run work (ollama/openai). The whole
+people → skills → tools → permissions → plans, with an LLM executing run work (ollama/openai). The whole
 pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWorkforce`). See
-[`docs/v0.9-workforce-guide.md`](docs/v0.9-workforce-guide.md) for the runtime architecture and
-[`docs/v0.11-upcomming.md`](docs/v0.11-upcomming.md) for the product model.
+[`docs/current-features.md`](docs/current-features.md) for the full feature list and
+[`docs/v1.0.0-proposal.md`](docs/v1.0.0-proposal.md) for the canonical architecture.
 
-- **Control Center (v0.11)** — a single webview that operates the entire lifecycle with no YAML/CLI/MCP:
-  `Human / Schedule / Event Rule → Workflow → Execution Window / Run → Queue → Worker → Finding → Agent
-  Validation → Human Approval → Activity`. Default **Runs** tab with live event ticker, clickable cross
-  navigation (Run ↔ Finding ↔ Window ↔ Workflow ↔ Rule ↔ Task ↔ Agent), and empty/loading/error states
-  throughout.
-- **Employees & workforce** — human/agent members with certified skills, RBAC roles, and lifecycle gates
+- **Control Center (v1.0)** — a single webview that operates the entire lifecycle with no YAML/CLI/MCP:
+  `Input → Plan → Organize → Dispatch → Run → Finding → Validation → Checkpoint → Deploy`. Tabs for Employees,
+  Plans, Inputs, Checkpoints, Cycles, Runs, Findings, Plan Classifications, Approvals, Schedules, Workflows,
+  Event Rules, Execution Windows, and Activity, with a live event ticker, clickable cross navigation, and
+  empty/loading/error states throughout.
+- **People & workforce** — human/agent members with certified skills, RBAC roles, and lifecycle gates
   (skills/policy in `.SprintDesk/database/`; people in `.SprintDesk/people/`); agents are configured
   (provider/model/capabilities) from the UI
-- **Tasks → Runs → Queue → Worker** — a task drives a `run`; queued runs are claimed by the queue
+- **Plans → Runs → Queue → Worker** — a plan drives a `run`; queued runs are claimed by the queue
   (manual pass or event-driven) and executed by headless/terminal/noop/ollama workers; every state change
   flows through `startRun` / `finishRun` / `cancelRun`
 - **LLM providers** — ollama/openai model profiles per employee (model output is *data today*, never authority)
@@ -47,16 +45,18 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
 - **Findings** — the agent's primary output: materialized from the `Findings:` section of completed runs into
   first-class persisted objects with severity/confidence and a review journey
 - **Validation & approvals** — agents validate findings (`recommend-approve/reject/request-revision`, confidence,
-  reason); humans decide; `auto`/`manual` approval gates for task-assignment, run-execution, and config-change
+  reason); humans decide; `auto`/`manual` approval gates for plan-classification, run-execution, config-change,
+  and deploy (human-gated)
 - **Retry policy** — `maxRunRetries`, `retryBackoffMs`, `runTimeoutMs`, failure classification and
   `availableAt` backoff gating
-- **Scheduler & autonomy** — deterministic cron/interval scheduler with autonomy levels `0–3` (default `1`)
-- **Execution Windows** — deliberate synchronous batches: `Human → Window → Workflow → Task/Run → Queue →
+- **Scheduler & autonomy** — deterministic cron/interval scheduler (`plan` / `classify` / `organize` actions)
+  with autonomy levels `0–3` (default `1`)
+- **Execution Windows** — deliberate synchronous batches: `Human → Window → Workflow → Plan/Run → Queue →
   Worker → Finding → Validation → Decision`, persisted and reviewable after the fact
-- **Event Rules** — `Event → Rule → Workflow → Task/Run` async automation from the existing event stream,
+- **Event Rules** — `Event → Rule → Workflow → Plan/Run` async automation from the existing event stream,
   idempotent and re-entrancy-safe
-- **Workflow DSL** — declarative `task` / `loop` / `tool` / `condition` workflows that create queued runs
-  (`.SprintDesk/settings/workflows.yml`)
+- **Workflow DSL** — declarative `task` / `loop` / `tool` / `condition` workflows; a `task` step materializes a
+  Plan and a queued run (`.SprintDesk/settings/workflows.yml`)
 
 ### Quick Access
 - Open the Workforce Control Center from the command palette or the sidebar
@@ -91,17 +91,12 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
 
 ## Settings
 
-You can customize how SprintDesk works:
+Operational configuration is **data-driven** and lives in the workspace under `.SprintDesk/settings/`
+(`queue.yml`, `schedules.yml`, `workflows.yml`, `credentials.secret.json`). Approval gates
+(`run-execution`, `config-change`, `plan-classification`, `deploy`) are configured in `queue.yml`.
 
-| Setting | Default | What It Does |
-|---------|---------|--------------|
-| `sprintdesk.projectPrefix` | SPD | Project code prefix |
-| `sprintdesk.taskPrefix` | task_ | Task ID prefix |
-| `sprintdesk.taskStartNumber` | 100 | Starting task number |
-| `sprintdesk.sprintPrefix` | sprint_ | Sprint prefix |
-| `sprintdesk.defaultBacklog` | features | Default backlog name |
-| `sprintdesk.defaultStatus` | waiting | Default task status |
-| `sprintdesk.defaultPriority` | medium | Default priority |
+The legacy `sprintdesk.*` settings in the extension manifest are retained for backward compatibility but are not
+consumed by the v1.0 runtime.
 
 ---
 

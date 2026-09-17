@@ -1,168 +1,206 @@
 # SprintDesk Current Features
 
-## Core Features
+**Version 1.0.0 — Plan-native.** SprintDesk is a Visual Studio Code extension for **autonomous, policy-gated
+workforce orchestration**. A **Plan is the only unit that can enter execution**; the legacy
+Task/Epic/Backlog/Sprint project-management surface is removed from the active runtime. All runtime state lives
+under `.SprintDesk/database/`.
 
-### 📋 Task Management
-- Create and manage tasks as Markdown files
-- Task status tracking (Planned, In Progress, Completed, Blocked)
-- Task prioritization
-- Quick task creation via "Add Quickly" command
-- Task linking and relationships
-- Task metadata tracking (creation date, updates, owner)
+See [`v1.0.0-proposal.md`](v1.0.0-proposal.md) for the canonical architecture and slice plan, and
+[`v0.9-workforce-guide.md`](v0.9-workforce-guide.md) / [`v0.11-upcomming.md`](v0.11-upcomming.md) for the
+workforce runtime lineage (these v0.9–v0.12 documents are historical; where they mention Tasks, the v1.0
+equivalent is a Plan).
 
-### 📊 Project Organization
-- Epics management for grouping related tasks
-- Backlog organization and tracking
-- Sprint planning and management
-- Project structure scanning and visualization
-- Hierarchical task organization
+---
 
-### 🔄 Sprint Management
-- Sprint creation and planning
-- Sprint calendar visualization
-- Add existing tasks to sprints
-- Sprint progress tracking
-- Sprint file management
-- Sprint status updates
+## Plan-Native Core (v1.0)
 
-### 📈 Epic Management
-- Epic creation and organization
-- Epic status tracking
-- Epic color coding
-- Task grouping under epics
-- Epic progress visualization
-- Epic metadata management
+### 🔄 The lifecycle
 
-### 📱 User Interface
-- Dedicated sidebar view
-- Project structure tree view
-- Tasks table view
-- Backlogs view
-- Epics view
-- Sprints view
-- Context menu integration
-- Command palette integration
+```
+Input → Plan → Organize → Dispatch → Run → Finding → Validate → Checkpoint → Deploy
+```
 
-### 🔗 Integration Features
-- Git flow integration
-  - Feature branch creation from tasks
-  - Task status updates with git actions
-- VS Code native integration
-  - File system integration
-  - Workspace management
-  - Command palette support
-  - Context menu support
+- **Orchestrator** ("what work should exist?") ingests `inputs/*.md` and writes semantic `plans/PLAN-*.md`
+  artifacts with an initial classification.
+- **Organizer** ("what is this, how urgent, who, when?") re-evaluates existing plans only — re-classification,
+  priority, dependencies, execution mode, and agent selection — and writes the registry, never plan content.
+- **Dispatcher** enqueues an organized, ready plan through `queueService.createRun(planId, agentId)`.
+- **Validator** turns a completed run into a `PlanValidation` record and, on a pass, creates a **Checkpoint** and
+  closes the cycle. **Deploy** is a separate, human-authorized step.
 
-### 📝 Documentation Support
-- Markdown-based documentation
-- Auto-generated task templates
-- Linked documentation structure
-- Task relationship documentation
-- Project documentation management
+Two custody rules are enforced by tests: the Organizer never writes `plans/*.md`, and only the Dispatcher (never
+the Organizer) touches the queue.
 
-### 💼 Project Management
-- Multiple project support
-- Project structure visualization
-- Project metadata tracking
-- Project status monitoring
-- Project organization tools
+### 📥 Inputs
+- Drop `inputs/*.md` (Basket 1) or use the Control Center **Create Input** form.
+- `listInputs()` discovers inputs not yet registered (mtime + content-hash dedup); `ingestInput()` creates an
+  `InputRecord` and opens a `Cycle`.
+- `orchestrate()` decomposes an input into one or more plans, capped by `maxPlansPerPass` (default 5) and deduped
+  by normalized objective. Emits `plan.created` / `input.planned` / `cycle.opened`.
 
-## Workforce & Autonomous Work (v0.7–v0.11)
+### 🗂 Plans
+- `plans/PLAN-*.md` artifacts (front-matter `id`/`version`/`lineage`; body Objective / Implementation / Acceptance
+  Criteria / Constraints) written only by the Orchestrator content path.
+- Registry `database/plans.yml`: six-axis classification (`original` and `current`), organization status/version,
+  scheduling, execution, validation, and lineage.
+- Control Center **Plans** tab; MCP `plansList` / `plansGet` / `plansReplan`.
 
-> Operated end-to-end from the **Workforce Control Center** (`sprintdesk.openWorkforce`), which now covers
-> the full lifecycle — Employee lookups, Agent configuration, Findings, Runs + Queue, Execution Windows,
-> Event Rules, Workflows, Schedules, Approvals, and a live Activity stream — with no YAML/CLI/MCP required for
-> daily operation. See [`v0.9-workforce-guide.md`](v0.9-workforce-guide.md) and
-> [`v0.11-upcomming.md`](v0.11-upcomming.md).
+### 🔁 Cycles & Checkpoints
+- `database/cycles.yml` opens on ingest and closes on a passing validation (`closed-pass`) or escalation.
+- `database/checkpoints.yml` records `CHK-####` (planId, artifacts, status `ready | deployed`).
+- **Deploy authorization** is human-gated by default (`deploy` gate `manual`, `plan:deploy` permission, approval
+  op `authorize-deploy`); there is never an automatic deploy path. MCP `checkpointsList` /
+  `checkpointsApproveDeploy` / `checkpointsRejectDeploy`; events `deploy.authorized|rejected`,
+  `checkpoint.deployed`.
 
-### 🎛 Control Center (v0.10–v0.11)
-- Webview panel with Employees / Runs / Create Task & Run / Findings / Event Rules / Execution Windows /
-  Workflows / Schedules / Approvals / Tasks / Activity tabs
-- Live dashboard strip + event ticker; clickable counters and cross-entity navigation (no dead ends)
-- Run actions (Cancel / Retry / Run Again / Process Queue), finding actions (Validate / Approve / Reject),
-  window actions (Execute / Cancel), inline success & error feedback
-- States handled deliberately: loading (banner until first snapshot), empty (per-tab guidance),
-  error/in-progress/completed
+### 🧭 Organizer engine
+- `runOrganizerPass()` reconciles classification, dependencies, runnability, execution mode, and assignment
+  (`rankEmployees`); convergent — a no-change pass emits nothing.
+- A fundamentally wrong plan emits `plan.replanning.requested` (recovery turns it into a new input) instead of
+  being silently rewritten.
+- Driven by `organize` schedules, events (`organizer.trigger`), and the manual **Run Organizer** / MCP
+  `organizerRun` path.
 
-### 👥 Employees & Workforce
-- Human/agent employees with certified skills (`.SprintDesk/database/skills.yml`, seeded catalog of 8)
-- Teams with lead/member assignment and Git-history sync
-- Skill catalog, aliases, and task-type → required-skill mapping
-- Deterministic `rankEmployees` assignee recommendations (coverage → load → status → name → id)
+---
+
+## Workforce Control Center (v1.0)
+
+A single webview (`sprintdesk.openWorkforce`) operates the whole lifecycle with no YAML/CLI/MCP required.
+
+- **Tabs:** Employees / Plans / Inputs / Checkpoints / Cycles / Runs / Findings / Plan Classifications /
+  Approvals / Schedules / Workflows / Event Rules / Execution Windows / Activity / Create Input.
+- **Dashboard strip + live event ticker** with clickable counters and cross-entity navigation (no dead ends).
+- **Actions:** run Cancel / Retry / Run Again / Process Queue, finding Validate / Approve / Reject, window
+  Execute / Cancel, deploy Approve / Reject, and organizer force-run — each with inline success/error feedback.
+- **Deliberate states:** loading (banner until first snapshot), empty (per-tab guidance), error, in-progress, and
+  completed.
+
+---
+
+## Workforce & Runtime
+
+### 👥 People & Employees
+- Role-split identity under `.SprintDesk/people/` — `humans.yml`, `agents.yml`, `teams.yml`.
+- Skill catalog with aliases and required-skill mapping (`database/skills.yml`, 8 seeded).
+- Deterministic `rankEmployees` recommendations (coverage → load → status → name → id); teams from manual setup or
+  Git-history sync.
 
 ### 🔐 RBAC & Policy
-- Role → permission matrix (`lead` / `developer` / `reviewer` / `observer` / `agent` / `human`)
-- Per-employee allow/deny overrides (`.SprintDesk/database/policy.yml`)
-- Lifecycle gates on assignment, claim, run start, run execution, and config change
+- Role → permission matrix (`lead` / `developer` / `reviewer` / `observer` / `agent` / `human`) with per-employee
+  allow/deny overrides (`database/policy.yml`, created on demand).
 
-### 🔄 Queue, Runs & Worker
-- Task → Run → Queue → Worker pipeline (`.SprintDesk/database/executions.yml`)
-- Deterministic queue pass: `createdAt asc → attempts asc → id asc`, explicit skip reasons
-- Single transition path `startRun` / `finishRun` / `cancelRun` with audit events
-- Headless (spawn), terminal, noop, and ollama worker runtimes
+### 🔄 Queue, Runs & Workers
+- Plan → Run → Queue → Worker pipeline (`database/executions.yml`, internal key `runs`).
+- Deterministic queue pass (`createdAt asc → attempts asc → id asc`) with explicit skip reasons
+  (`plan-not-found`, `plan-not-runnable`, …).
+- Single transition path `startRun` / `finishRun` / `cancelRun` with audit events.
+- Worker runtimes: headless (spawn), terminal, noop, and ollama.
 
-### 🔁 Retry Policy
-- `maxRunRetries`, `retryBackoffMs` backoff gating, `runTimeoutMs` per-run timeout
-- Failure classification and `availableAt` requeue gating
+### 🔁 Retry policy
+- `maxRunRetries`, `retryBackoffMs` backoff gating, `runTimeoutMs` per-run timeout, failure classification, and
+  `availableAt` requeue gating.
 
 ### 📅 Scheduler & Autonomy
-- Deterministic cron and interval schedules (`.SprintDesk/settings/schedules.yml`)
-- Idempotent firing; autonomy levels `0–3` (default `1`) bound classified work
+- Deterministic cron/interval schedules (`settings/schedules.yml`) with `ScheduleAction` `plan` | `classify` |
+  `organize`; idempotent firing.
+- An interval driver honors `queueSettings.enabled` / `pollIntervalMs` (default `enabled: false`, so nothing runs
+  until opted in); headless `npm run scheduler` CLI.
+- Autonomy levels `0–3` (default `1`) bound classified work.
 
 ### 🧠 LLM Providers
-- ollama / openai clients behind a credential facade
-- Per-employee `modelProfile` selection; agents configured with provider/model/capabilities from the UI
-- Model output today is data, never authorization
+- ollama / openai clients behind a credential facade (`settings/credentials.secret.json`).
+- Per-employee `modelProfile` selection; agents configured with provider/model/capabilities from the UI.
+- Model output is data, never authorization.
 
 ### 🔌 MCP Servers & Toolset
-- Built-in `sprintdesk_*` toolset over HTTP/stdio
-- External MCP server registry (`.SprintDesk/mcp/servers.yml`) with capability-gated `mcpCall`
+- Built-in `sprintdesk_*` toolset over HTTP/stdio (43 tools across Agents, Runs, Queue, Events, History, Audit,
+  Context, Workforce, MCP, Approvals, Inputs, Plans, Checkpoints, Cycles, Organizer).
+- External MCP server registry (`mcp/servers.yml`) with capability-gated `mcpCall`.
 
-### 📦 Execution Windows (v0.11)
-- Deliberate synchronous batches: `Human → Window → Workflow → Task/Run → Queue → Worker → Finding →
-  Validation → Human Decision` (`.SprintDesk/database/executionWindows.yml`)
-- Auto-advance to completion via run events; cancellation; persisted completion summary
-
-### 📡 Events & Event Rules (v0.11)
-- Lifecycle event emission (`.SprintDesk/database/events.yml`) on run / queue / employee transitions
-- Event Rules: idempotent, re-entrancy-safe `Event → Rule → Workflow → Task/Run` async automation
-- Activity summary, audit trail, and history tracking
-
-### 📝 Findings & Validation (v0.11)
-- Findings materialized from completed-run output as first-class persisted objects with
-  severity/confidence/category/suggested workflow
-- Agent validation (recommendation, confidence, reason; `finding:validate` authorized) then human decision
-  (`approval:review`) — agents recommend, humans decide
+### 📝 Findings & Validation
+- Findings materialized from completed-run output as first-class persisted objects
+  (`database/findings.yml`) with severity/confidence/category/suggested workflow and a `planId` reference.
+- Agent validation (recommendation, confidence, reason; `finding:validate`) then human decision
+  (`approval:review`) — agents recommend, humans decide.
 
 ### ✅ Reviews & Approval Gates
-- `auto` / `manual` gates for task-assignment, run-execution, config-change
-- Pending approvals (`.SprintDesk/database/approvals.yml`) with approve/reject tools
+- `auto` / `manual` gates configured in `settings/queue.yml` (`approvalGates`):
+  `runExecution` (`auto`), `configChange` (`auto`), `planClassification` (`auto`), `deploy` (`manual`).
+- Pending approvals (`database/approvals.yml`) with approve/reject tools and inline Control Center decisions.
+
+### 📦 Execution Windows
+- Deliberate synchronous batches: `Human → Window → Workflow → Plan/Run → Queue → Worker → Finding → Validation
+  → Human Decision` (`database/executionWindows.yml`).
+- Auto-advance to completion via run events; cancellation; persisted completion summary.
+
+### 📡 Events & Event Rules
+- Lifecycle events (`database/events.yml`) on run / queue / plan / finding transitions.
+- Event Rules: idempotent, re-entrancy-safe `Event → Rule → Workflow → Plan/Run` async automation.
 
 ### 📋 Workflow DSL
-- Declarative `task` / `loop` / `tool` / `condition` workflows (`.SprintDesk/settings/workflows.yml`)
-- Deterministic, bounded engine; `continueOnError` escape hatch; tool steps route through MCP
-- Conditions read step status only — LLM/tool output stays data
+- Declarative `task` / `loop` / `tool` / `condition` workflows (`settings/workflows.yml`); a `task` step now
+  materializes a Plan (the DSL key rename is tracked debt).
+- Deterministic, bounded engine; `continueOnError` escape hatch; tool steps route through MCP; conditions read
+  step status only — LLM/tool output stays data.
+
+---
+
+## Storage Layout (v1.0 invariant)
+
+```
+.SprintDesk/
+  database/        # ALL runtime state
+    inputs.yml  plans.yml  executions.yml  checkpoints.yml  cycles.yml
+    events.yml  audit.yml  findings.yml  approvals.yml  policy.yml
+    skills.yml  eventRules.yml  classification.yml  executionWindows.yml
+  settings/        # configuration
+    queue.yml  schedules.yml  workflows.yml  credentials.secret.json
+  people/          # identity
+    humans.yml  agents.yml  teams.yml
+  inputs/          # input artifacts (Basket 1)
+  plans/           # semantic Plan artifacts (PLAN-*.md)
+  mcp/             # servers.yml, manifest.json, README.md
+  project.mcp.json # generated MCP manifest
+```
+
+`plans/*.md` is semantic content written only by the Orchestrator; `database/*.yml` is runtime state written by
+the services. The former `workforce/` state root is gone (one-way legacy read fallback only).
+
+---
+
+## Commands
+
+| Do This | Use This Command |
+|---------|------------------|
+| Open the Workforce Control Center | `sprintdesk.openWorkforce` |
+| View workforce | `sprintdesk.viewWorkforce` |
+| Add a person | `sprintdesk.addEmployee` |
+| Create team | `sprintdesk.createTeam` |
+| Assign to team / Set team lead | `sprintdesk.assignToTeam` / `sprintdesk.setTeamLead` |
+| Set employee status / Remove employee | `sprintdesk.setEmployeeStatus` / `sprintdesk.removeEmployee` |
+| Sync people from Git | `sprintdesk.syncPeopleFromGit` |
+| Process queue | `sprintdesk.processQueue` |
+| Cancel run | `sprintdesk.cancelRun` |
+| Start MCP server | `sprintdesk.startMcp` |
+| Refresh | `sprintdesk.refresh` |
+
+The sidebar shows the **People & Workforce** and **History** sections; plan- and workforce-driven flows live in
+the Control Center. The legacy `sprintdesk.*` settings in the extension manifest are retained for backward
+compatibility but are not consumed by the v1.0 runtime — operational configuration lives under
+`.SprintDesk/settings/`.
+
+---
 
 ## Technical Features
 
 ### 🛠 System Integration
-- File system management
-- Git integration
-- VS Code extension API utilization
-- Workspace folder management
-- File watching and updates
+- File system management, Git integration (including checkpoint git-ref metadata), VS Code extension API
+  utilization, workspace folder management, file watching and updates.
 
 ### 🔧 Configuration
-- Project-specific settings
-- Template customization
-- Metadata configuration
-- Status types configuration
-- Priority levels configuration
+- Data-driven configuration under `.SprintDesk/settings/` (queue, schedules, workflows), template
+  customization, and metadata configuration.
 
 ### 🎨 UI/UX Features
-- Intuitive sidebar interface
-- Context-aware commands
-- Quick action buttons
-- Status icons and indicators
-- Progress visualization
-- Tree view navigation
+- Sidebar tree navigation, Control Center webview, context-aware commands, quick actions, status icons and
+  indicators, progress visualization.

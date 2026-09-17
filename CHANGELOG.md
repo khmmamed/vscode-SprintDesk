@@ -4,7 +4,94 @@ All notable changes to the "vscode-SprintDesk" extension will be documented in t
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-09-17
+
+**Plan-native replatform (slices A–K).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
+is no Task compatibility layer underneath it. The legacy Task/Epic/Backlog/Sprint project-management surface is
+removed from the active runtime, and all runtime state lives under `.SprintDesk/database/`.
+
+- **Two control layers.** An **Orchestrator** turns `inputs/*.md` into semantic `plans/PLAN-*.md` artifacts; an
+  **Organizer** reconciles the plan registry (classification, dependencies, scheduling, execution, assignment)
+  without ever rewriting plan content.
+- **One execution path.** Organizer → **Dispatcher** → `queueService.createRun(planId, agentId)` → Worker →
+  Findings → Validator → **Checkpoint** → deploy authorization. Output is data, never authority.
+- **Storage boundary.** `.SprintDesk/database/` holds runtime state; `.SprintDesk/settings/` configuration;
+  `.SprintDesk/people/` identity; `.SprintDesk/inputs/` + `.SprintDesk/plans/` artifacts. The `workforce/`
+  state root is gone.
+- **Deferred past 1.0 (tracked debt, not shipped):** the workflow DSL `task` step / `taskType` rename to `plan`,
+  the residual dead `Epic` interface and legacy constant strings, and the opt-in `migrateTasksToPlans` archive CLI.
+
+### v1.0 Slice A — Plan domain, stores & storage layout
+
+- **Plan/Input/Cycle/Checkpoint domain:** new `Plan`, `PlanOrganizationStatus`, six-axis
+  `PlanClassificationAxis`, `PlanScheduling`, `PlanExecution`, `PlanValidation`, `PlanLineage`, `PlansData`,
+  plus `InputRecord`/`InputsData`, `Cycle`/`CyclesData`, `Checkpoint`/`CheckpointsData` types.
+- **New `database/` stores:** `PlanStore` (`plans.yml`), `InputStore` (`inputs.yml`), `CycleStore`
+  (`cycles.yml`), `CheckpointStore` (`checkpoints.yml`); `RunStore` relocated from `data/runs.yml` to
+  `database/executions.yml` (internal key stays `runs`); `EventStore`/`AuditStore` relocated to `database/`.
+- **Plan markdown round-trip:** `planService.writePlanMd` / `readPlanMd` using `gray-matter`; front-matter
+  carries `id`/`version`/`lineage`, the body holds Objective/Implementation/Acceptance Criteria/Constraints.
+  The `.md` is only ever written by the Orchestrator content path — no registry mirror.
+
+### v1.0 Slice B — Orchestrator (inputs → plans)
+
+- **`orchestrator.ts`:** `listInputs()` discovers `inputs/*.md` not yet registered (mtime + content-hash dedup);
+  `ingestInput()` creates an `InputRecord` and opens a `Cycle`; `orchestrate()` decomposes an input
+  deterministically (front-matter/defaults) or via the LLM classifier calling convention.
+- **Bounded and idempotent:** each generated unit becomes a `plans/PLAN-####.md` artifact + seeded
+  `classification.original` in the registry; capped by `maxPlansPerPass` (default 5) and deduped against
+  existing plans by normalized objective. Emits `plan.created`, `input.planned`, `cycle.opened`; never writes
+  `classification.current`.
+
+### v1.0 Slice C — Organizer core (reconciliation)
+
+- **`plan/organizer.ts` + `runOrganizerPass()`:** reconciles each non-terminal plan — classification
+  (`original → current` with `classifiedBy` + reason), dependency detection (`dependsOn`), runnability,
+  `executionMode` selection, and agent selection via `rankEmployees` against plan dimensions.
+- **Custody rule:** writes only `database/plans.yml` (`organization.*`, `classification.current`,
+  `scheduling.*`, `execution.*`) and **never** rewrites plan content. A fundamentally wrong plan emits
+  `plan.replanning.requested` instead of being silently rewritten.
+- **Convergent emission:** a no-change pass emits nothing; `organizer.pass.completed` and decision-change
+  `plan.execution.*` events only.
+
+### v1.0 Slice D — Plan execution identity (critical seam)
+
+- **`Run.planId` required, `Run.taskId` removed** (the Run key stays `runs` in `database/executions.yml`);
+  `queueService.createRun(planId, agentId)` derives agent/workload/status from the plan registry.
+- **Queue/worker/findings are plan-native:** `processQueue` skip reasons `plan-not-found`/`plan-not-runnable`;
+  the worker request drives `plan.title`/`plan.path`; findings link to `planId`. The task-based test fixtures
+  were rewritten atomically in the same slice.
+
+### v1.0 Slice E — Dispatcher + execution events
+
+- **`plan/dispatcher.ts`:** enqueues a plan whose registry state is organized ∧ scheduled-ready ∧
+  execution-eligible via `queueService.createRun`, emitting `plan.execution.requested`; handles `delayed`
+  (scheduled mode), `reassigned`, `cancelled`, and `requeued`.
+- **New event types:** `plan.execution.requested|delayed|reassigned|cancelled|requeued`,
+  `plan.replanning.requested`, `organizer.trigger`, `organizer.pass.completed`, `plan.created`,
+  `input.planned`, `cycle.opened` — wired into the event-rule matcher surface (additive).
+
+### v1.0 Slice F — Organizer engine wiring (scheduler → production)
+
+- **`ScheduleAction = 'plan' | 'classify' | 'organize'`:** `runSchedulerPass` drives `runOrganizerPass()` for
+  `organize` schedules; the legacy `task` schedule action is replaced by `plan`.
+- **The scheduler driver is now live:** activation installs an interval driver honoring
+  `queueSettings.enabled` / `pollIntervalMs` (default `enabled: false`, so nothing runs until opted in); a
+  headless `npm run scheduler` CLI mirrors `cli/worker.ts`.
+- **Manual force-run** via the Control Center, `sprintdesk_organizerRun`, and the CLI flag; agent idle/offline
+  and `execution.completed`/`dependency.completed` raise `organizer.trigger` over the existing event stream.
+
+### v1.0 Slice G — Recovery, Checkpoint & Deploy authorization
+
+- **Recovery (`plan/recovery.ts`):** `classifyFailure`/`decideRecovery`/`recoverFailure` turn a failed run or
+  validator revision into either a backoff `plan.requeued` or a `plan.replanning.requested` → new
+  `inputs/*.md` record. The Organizer never writes content; `cycle.outcome` is set on escalation.
+- **Checkpoint (`plan/checkpointService.ts`):** a validator pass writes `database/checkpoints.yml`
+  (`CHK-####`, planId, artifacts, status `ready`), closes the `Cycle`, and emits `checkpoint.created` /
+  `cycle.closed`.
+- **Deploy authorization:** the new `deploy` gate (default `manual`) plus `plan:deploy` permission; approval
+  flows through the existing resolver (`op: 'authorize-deploy'`). `sprintdesk_checkpointsApproveDeploy` /
+  `RejectDeploy` and Control Center actions emit `deploy.authorized|rejected` and `checkpoint.deployed`.
 
 ### v1.0 Slice H — Control Center, MCP & command rework
 
@@ -21,6 +108,43 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   Repositories tree providers, the legacy `App.tsx` / TasksTable / EpicsList webview surfaces, and the dead
   `MigrationService`. The sidebar now shows People & Workforce + History sections only; the Control Center
   handles the plan- and workforce-driven flows.
+
+### v1.0 Slice I — Legacy data layer removal + plan-native consumers
+
+- **Removed the legacy PM data layer:** the `Task`/`Backlog`/`Sprint` types and their services
+  (`taskService`, `epicService`, `backlogService`, `sprintService`), the legacy `DataService` markdown writers,
+  and the remaining task-centric consumers — migrating queue/worker/workflow/findings/window/classification to
+  the plan-native stores (~2,600 lines removed across 43 files).
+- **Workflow `task` steps now materialize Plans** (the `taskType` enum is mapped through
+  `legacyTaskKindToPlanCategory`); the DSL key itself is unchanged.
+- **Tracked residuals (not removed in this slice):** the dead `Epic` interface and the legacy
+  Epic/Backlog/Sprint constant strings are left as cleanup debt, and the opt-in `migrateTasksToPlans` archive
+  CLI was **not** shipped.
+
+### v1.0 Slice J — Validator → checkpoint → deploy wiring
+
+- **`plan/validator.ts`:** `deriveValidationRecord` / `validateCompletedRun` turn a completed run into a
+  `PlanValidation` record; `installValidator()` auto-validates completed runs and, on a passing validation,
+  creates a checkpoint and closes the cycle. `requestDeployForCheckpoint` drives the `authorize-deploy`
+  approval under `plan:deploy`.
+- **MCP parity:** `sprintdesk_checkpointsApproveDeploy` / `RejectDeploy` resolve the deploy decision through
+  the same checkpoint service the Control Center uses; the full pipeline is covered by
+  `test/smoke/validationPipeline.test.ts`.
+
+### v1.0 Slice K — Storage boundary: runtime state under `database/`
+
+- **Final storage boundary:** every runtime state file lives under `.SprintDesk/database/` —
+  `inputs/plans/executions/checkpoints/cycles/events/audit/findings/approvals/policy/skills/eventRules/
+  classification/executionWindows`. `.SprintDesk/settings/` holds configuration (`queue.yml`, `schedules.yml`,
+  `workflows.yml`, `credentials.secret.json`), `.SprintDesk/people/` holds identity, and the `workforce/` state
+  root is removed.
+- **One-way legacy read fallback:** relocated stores (`FindingStore`, `ApprovalStore`, `EventRuleStore`,
+  `ExecutionWindowStore`, `SkillStore`, `ProposalStore`, `PolicyStore`, credentials) still *read* a legacy
+  `workforce/<file>` record and migrate it on the next write; new writes always target the new path.
+- **Invariant coverage:** `test/smoke/storageBoundary.test.ts` proves no store creates `workforce/` and that
+  each legacy read/write round-trips into `database/`.
+
+## v0.12 — pre-release development line (shipped in 1.0.0)
 
 ### v0.12 Slice A — Approvals resolve (Approve / Reject)
 
