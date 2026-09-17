@@ -11,7 +11,7 @@ import {
   RunFailureClassification
 } from '../queueService';
 import { ingestInput } from '../orchestrator';
-import { readPlanMd, resolvePlanFile } from './planService';
+import { planTitleFor, readPlanMd, resolvePlanFile } from './planService';
 
 const EVENT_SOURCE = 'recovery';
 
@@ -21,8 +21,9 @@ const EVENT_SOURCE = 'recovery';
 //   - replan: a fresh `inputs/*.md` + InputRecord for a new lifecycle round.
 // The Organizer never writes content; recovery writes the replan input artifact
 // directly from the failed plan's objective (re-decomposition input only).
-// Idempotence: a run is recovered at most once (run status + persisted replan
-// InputRecord keyed by `source.id === runId`).
+// Idempotence: a run is recovered at most once, keyed on the persisted replan
+// InputRecord's durable identity (`source.id === runId`, artifact
+// `inputs/replan-<runId>.md`) — never on its transient ingestion status.
 
 export type RecoveryDecision = 'none' | 'requeue' | 'replan';
 export type FailureClassification = 'retryable' | 'non-retryable';
@@ -75,8 +76,16 @@ function replanInputName(runId: string): string {
   return `replan-${runId}.md`;
 }
 
-function titleOf(plan: Plan): string {
-  return plan.id;
+// The plan's human-facing title is its artifact Objective, resolved through the
+// canonical planService resolver; only a plan with no readable Objective falls
+// back to its id. Kept defensive because a malformed artifact must never block
+// recovery escalation.
+function planTitle(plan: Plan, root: string): string {
+  try {
+    return planTitleFor(plan, root) || plan.id;
+  } catch {
+    return plan.id;
+  }
 }
 
 function planObjective(plan: Plan, root: string): { objective: string; implementation: string } {
@@ -85,14 +94,14 @@ function planObjective(plan: Plan, root: string): { objective: string; implement
     if (getFileSystem().exists(file)) {
       const { sections } = readPlanMd(file);
       return {
-        objective: sections.objective || titleOf(plan),
+        objective: sections.objective || planTitle(plan, root),
         implementation: sections.implementation || ''
       };
     }
   } catch {
-    // unreadable artifact — fall through to id-based fallback
+    // unreadable artifact — fall through to the title resolver
   }
-  return { objective: titleOf(plan), implementation: '' };
+  return { objective: planTitle(plan, root), implementation: '' };
 }
 
 // A replan request is an input artifact, never a plan write. The Organizer will
@@ -206,10 +215,16 @@ export function recoverFailure(request: RecoverFailureInput): RecoveryOutcome {
     return { ...base, decision: 'none', reason: 'not-recoverable' };
   }
 
-  // Idempotence — a replan input keyed by source.id === runId must exist at most once.
+  // Idempotence — a replan input for this run must exist at most once. Match the
+  // durable identity (source.id === runId) or its deterministic artifact name,
+  // independent of the ingestion status the Organizer has since advanced.
+  const replanFile = `inputs/${replanInputName(run.id)}`;
   const existingReplan = stores.inputs
     .loadAll()
-    .find(i => i.source?.type === 'agent' && i.source.id === run.id && i.status === 'new');
+    .find(i =>
+      (i.source?.type === 'agent' && i.source.id === run.id) ||
+      i.file.replace(/\\/g, '/') === replanFile
+    );
   if (existingReplan) {
     return {
       ...base,

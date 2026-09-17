@@ -1,211 +1,99 @@
 # SprintDesk MCP Server
 
-Local MCP server for integrating SprintDesk with AI agents like Copilot, Claude, etc.
-
-## Overview
-
-This MCP exposes all SprintDesk task management operations to AI agents through JSON-RPC 2.0 protocol. AI agents can use these tools to perform CRUD operations on tasks, epics, sprints, and backlogs.
-
-## Connection
-
-### HTTP Server (when VSCode extension is running)
-- **URL**: `http://localhost:3847/mcp`
-- **Port**: 3847
-- Auto-starts when VSCode extension loads
-
-### stdio Server (standalone)
-```bash
-cd <workspace-root>
-npm run mcp
-```
-
-## Quick Start
-
-### Using curl
-```bash
-# List all tools
-curl -X POST http://localhost:3847/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
-
-# Create a task
-curl -X POST http://localhost:3847/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sprintdesk_createTask","arguments":{"title":"My task","type":"feature"}}}'
-
-# List tasks
-curl -X POST http://localhost:3847/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"sprintdesk_listTasks","arguments":{}}}'
-
-# Health check
-curl http://localhost:3847/health
-```
+Local MCP server (v1.1.0) for integrating SprintDesk with AI agents like Copilot, Claude, etc.
 
 ## Available Tools
 
-### Task Tools
-| Tool | Description |
-|------|-------------|
-| `sprintdesk_createTask` | Create a new task |
-| `sprintdesk_getTask` | Get task by ID or code |
-| `sprintdesk_updateTask` | Update task fields |
-| `sprintdesk_deleteTask` | Delete a task |
-| `sprintdesk_listTasks` | List all tasks (with optional status filter) |
-| `sprintdesk_searchTasks` | Search tasks by title |
+The server exposes 43 tools across 15 groups.
 
-### Epic Tools
-| Tool | Description |
-|------|-------------|
-| `sprintdesk_createEpic` | Create a new epic |
-| `sprintdesk_getEpic` | Get epic by ID or code |
-| `sprintdesk_updateEpic` | Update epic fields |
-| `sprintdesk_deleteEpic` | Delete an epic |
-| `sprintdesk_listEpics` | List all epics |
-| `sprintdesk_getTasksByEpic` | Get all tasks in an epic |
-| `sprintdesk_addTaskToEpic` | Add task to an epic |
+### agent
 
-### Sprint Tools
-| Tool | Description |
-|------|-------------|
-| `sprintdesk_createSprint` | Create a new sprint |
-| `sprintdesk_getSprint` | Get sprint by ID or number |
-| `sprintdesk_updateSprint` | Update sprint fields |
-| `sprintdesk_deleteSprint` | Delete a sprint |
-| `sprintdesk_listSprints` | List all sprints |
-| `sprintdesk_getTasksBySprint` | Get all tasks in a sprint |
-| `sprintdesk_addTaskToSprint` | Add task to a sprint |
+- `sprintdesk_agentsList` — List available agents (from people/agents.yml)
+- `sprintdesk_agentsGet` — Get a single agent by ID
 
-### Backlog Tools
-| Tool | Description |
-|------|-------------|
-| `sprintdesk_createBacklog` | Create a new backlog |
-| `sprintdesk_getBacklog` | Get backlog by ID or name |
-| `sprintdesk_listBacklogs` | List all backlogs |
-| `sprintdesk_addTaskToBacklog` | Add task to a backlog |
+### run
 
-### Move Tools
-| Tool | Description |
-|------|-------------|
-| `sprintdesk_moveTaskToEpic` | Move task to epic (auto-renames task code) |
-| `sprintdesk_moveTaskToSprint` | Move task to sprint |
-| `sprintdesk_moveTaskToBacklog` | Move task to backlog |
+- `sprintdesk_runsCreate` — Create a new run record for a plan (queued; no autonomous execution)
+- `sprintdesk_runsList` — List run records, optionally filtered by planId or status
+- `sprintdesk_runsGet` — Get a run record by ID
+- `sprintdesk_runsCancel` — Cancel a queued or running run (delegates transition to the queue service)
+- `sprintdesk_runsUpdate` — Report worker completion for a running run (completed|failed; delegates final transition to the queue service)
 
-### Team Tools
-| Tool | Description |
-|------|-------------|
-| `sprintdesk_listTeam` | List all team members |
-| `sprintdesk_syncTeamFromGit` | Sync team from git authors |
-| `sprintdesk_addTeamMember` | Add a team member |
-| `sprintdesk_removeTeamMember` | Remove a team member |
+### queue
 
-### History Tools
-| Tool | Description |
-|------|-------------|
-| `sprintdesk_getHistory` | Get history for an item or all items |
-| `sprintdesk_trackChange` | Track a change (internal) |
+- `sprintdesk_queueGet` — Read-only snapshot of the workforce queue: settings, capacity, queued/running runs, next claims and skip reasons for the next pass
+- `sprintdesk_queueProcess` — Run one synchronous queue pass: claim + start eligible queued runs, then execute each via the worker boundary (headless/terminal/noop). No implicit auto-assignment.
 
-## Example AI Prompts
+### event
 
-### Create a task
-```
-"Create a new task 'Implement login form' in the SPD-101 epic"
-```
+- `sprintdesk_eventsPublish` — Publish an event record
+- `sprintdesk_eventsList` — List recent events, optionally filtered
 
-### Get tasks by epic
-```
-"Show me all tasks in the SPD-101 epic"
-```
+### audit
 
-### Move a task
-```
-"Move task SPD-101.2 to epic SPD-102"
-```
+- `sprintdesk_auditList` — List audit entries, optionally filtered by actor or target
 
-### Update task status
-```
-"Mark task SPD-101.1 as done"
-```
+### context
 
-### List all in-progress tasks
-```
-"Show me all in-progress tasks"
-```
+- `sprintdesk_projectContext` — Get a compact snapshot of the project: counts, statuses, active runs, recent events
 
-## JSON-RPC API
+### workforce
 
-### Initialize
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "1",
-  "method": "initialize",
-  "params": {}
-}
-```
+- `sprintdesk_skillsList` — List the skill catalog (workforce/skills.yml), including aliases used for matching
+- `sprintdesk_skillsUpsert` — Add or update a skill in the catalog (matched by id; falls back to name)
+- `sprintdesk_policyGet` — Get effective permissions for a role or an employee (RBAC matrix + allow/deny overrides)
+- `sprintdesk_recommendEmployees` — Deterministically rank employees for a plan or classification type by skill coverage -> lower load -> idle -> name -> id
+- `sprintdesk_activitySummary` — Overall workforce activity snapshot: employee/run/plan counts, queue settings, and the latest 20 events
 
-### List Tools
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "2",
-  "method": "tools/list",
-  "params": {}
-}
-```
+### history
 
-### Call Tool
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "3",
-  "method": "tools/call",
-  "params": {
-    "name": "sprintdesk_listTasks",
-    "arguments": {}
-  }
-}
-```
+- `sprintdesk_getHistory` — Get change history for an item, or all recent history
+- `sprintdesk_trackChange` — Record a change-history entry
 
-## Response Format
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "3",
-  "result": {
-    "content": [
-      {
-        "type": "text",
-        "text": "[{\"id\": \"...\", ...}]"
-      }
-    ]
-  }
-}
-```
+### mcp
 
-## Integration with AI Agents
+- `sprintdesk_mcpServersList` — List registered MCP servers
+- `sprintdesk_mcpServersAdd` — Register an MCP server (stdio or http)
+- `sprintdesk_mcpServersUpdate` — Update a registered MCP server
+- `sprintdesk_mcpServersRemove` — Remove a registered MCP server
+- `sprintdesk_mcpToolsList` — List tools exposed by an MCP server (requires mcp:list permission and mcp.<server>.list capability for the acting employee)
+- `sprintdesk_mcpCheck` — Dry-run safety check for a future MCP tool call (capability + permission + server state)
+- `sprintdesk_mcpCall` — Invoke a tool on an MCP server through the safety chain (agent capability + employee permission)
 
-The MCP server is automatically available when this VS Code extension is active. AI agents can connect via:
+### approvals
 
-1. **HTTP** to `http://localhost:3847/mcp`
-2. **stdio** by running `npm run mcp` in the workspace
+- `sprintdesk_gatesGet` — Read the current approval gate modes (plan-classification, run-execution, config-change, deploy-authorization): auto or manual
+- `sprintdesk_gatesSet` — Set an approval gate mode (requires approval:configure)
+- `sprintdesk_approvalsList` — List approval requests by status (default pending)
+- `sprintdesk_approvalsApprove` — Approve a pending approval request and perform its deferred operation (requires approval:review)
+- `sprintdesk_approvalsReject` — Reject a pending approval request (requires approval:review)
+- `sprintdesk_employeeConfigure` — Update an employee modelProfile/agentConfig/capabilities (deferred to approval queue when config-change gate is manual)
 
-### Using with Claude Desktop
+### input
 
-Add this to your Claude Desktop config:
+- `sprintdesk_inputsList` — List all inputs (raw work requests flowing through the plan pipeline)
+- `sprintdesk_inputsIngest` — Ingest a new raw input into the plan pipeline
 
-```json
-{
-  "mcpServers": {
-    "sprintdesk": {
-      "command": "npm",
-      "args": ["run", "mcp"],
-      "cwd": "<path-to-your-workspace>"
-    }
-  }
-}
-```
+### plan
 
-### Using with VSCode Copilot
+- `sprintdesk_plansList` — List plans in the plan registry
+- `sprintdesk_plansGet` — Get a plan by ID or code
+- `sprintdesk_plansReplan` — Replan a failed or stale plan (creates a new cycle + queued run)
 
-The extension exposes MCP tools directly. Just prompt the agent to use SprintDesk tools.
+### checkpoint
+
+- `sprintdesk_checkpointsList` — List checkpoints for a run or plan
+- `sprintdesk_checkpointsApproveDeploy` — Approve a checkpoint deploy authorization (resolves pending deploy-authorization approval)
+- `sprintdesk_checkpointsRejectDeploy` — Reject a checkpoint deploy authorization
+
+### cycle
+
+- `sprintdesk_cyclesList` — List execution cycles for a plan or input
+
+### organizer
+
+- `sprintdesk_organizerRun` — Run one organizer pass: classify inputs → create/update plans → queue runs
+
+## Usage
+
+AI agents can discover and use these tools through the MCP protocol when this extension is active.

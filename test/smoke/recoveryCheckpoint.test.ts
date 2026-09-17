@@ -340,6 +340,31 @@ describe('v1.0.0 Slice G — Recovery/Checkpoint/Deploy', () => {
     }
   });
 
+  it('8c — replan idempotence is keyed on durable identity, not ingestion status', () => {
+    const agent = seedAgent(ws, 'Ada');
+    const { plan, run } = workable(ws, agent, 'Durable replan identity');
+    failRun(ws, run.id, 'exit-nonzero');
+    getStores(ws.root).runs.update(run.id, { attempts: 2 });
+
+    const first = recoverFailure({ planId: plan.id, runId: run.id, classification: 'exit-nonzero' });
+    assert.strictEqual(first.decision, 'replan');
+    assert.ok(first.inputId, 'a replan input should be minted');
+
+    // The Organizer consumes the replan input: its status leaves 'new'.
+    getStores(ws.root).inputs.update(first.inputId as string, { status: 'planned' });
+
+    const second = recoverFailure({ planId: plan.id, runId: run.id, classification: 'exit-nonzero' });
+    assert.strictEqual(second.decision, 'none');
+    assert.strictEqual(second.reason, 'already-replanned');
+    assert.strictEqual(second.inputId, first.inputId);
+    assert.strictEqual(eventsOf(ws, 'plan.replanning.requested').length, 1, 'no second replan request');
+
+    const replans = getStores(ws.root).inputs
+      .loadAll()
+      .filter(i => i.source?.type === 'agent' && i.source.id === run.id);
+    assert.strictEqual(replans.length, 1, 'exactly one replan input for the run');
+  });
+
   it('9 — deploy requires human gate: manual approval must pass before a checkpoint deploys', () => {
     const agent = seedAgent(ws, 'Ada');
     const human = seedHuman(ws, 'Hana');

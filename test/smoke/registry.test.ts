@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { ALL_TOOLS, getAllToolNames } from '../../src/mcp/tools';
 import { HANDLERS } from '../../src/mcp/handlers';
-import { buildMcpManifest } from '../../src/mcp/manifest';
+import { buildMcpManifest, buildMcpReadme } from '../../src/mcp/manifest';
 
 describe('MCP tool registry hygiene', () => {
   it('exposes unique tool names', () => {
@@ -36,5 +36,13 @@ describe('MCP tool registry hygiene', () => {
     const registry = getAllToolNames().sort();
     assert.deepStrictEqual(manifestTools, registry);
     assert.strictEqual(manifest.toolCount, registry.length);
+  });
+
+  it('the generated README documents every registered tool exactly once', () => {
+    const readme = buildMcpReadme();
+    for (const name of getAllToolNames()) {
+      const mentions = readme.split(`\`${name}\``).length - 1;
+      assert.strictEqual(mentions, 1, `README should document ${name} exactly once, found ${mentions}`);
+    }
   });
 });

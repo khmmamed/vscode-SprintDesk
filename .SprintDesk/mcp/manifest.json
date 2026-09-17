@@ -1,7 +1,7 @@
 {
   "name": "sprintdesk-mcp",
-  "version": "1.0.0",
-  "description": "MCP server for SprintDesk task management - exposes CRUD and query operations for AI agents",
+  "version": "1.1.0",
+  "description": "MCP server for SprintDesk controlled autonomous workforce - exposes plan, run, queue, event, checkpoint, input, cycle, organizer, agent, approval and workforce operations for AI agents",
   "author": "SprintDesk",
   "repository": "https://github.com/khmmamed/vscode-SprintDesk",
   "homepage": "https://github.com/khmmamed/vscode-SprintDesk",
@@ -21,58 +21,85 @@
       "cwd": "<workspace-root>"
     }
   },
+  "toolCount": 43,
   "tools": {
-    "task": [
-      "sprintdesk_createTask",
-      "sprintdesk_getTask",
-      "sprintdesk_updateTask",
-      "sprintdesk_deleteTask",
-      "sprintdesk_listTasks",
-      "sprintdesk_searchTasks"
+    "agent": [
+      "sprintdesk_agentsList",
+      "sprintdesk_agentsGet"
     ],
-    "epic": [
-      "sprintdesk_createEpic",
-      "sprintdesk_getEpic",
-      "sprintdesk_updateEpic",
-      "sprintdesk_deleteEpic",
-      "sprintdesk_listEpics",
-      "sprintdesk_getTasksByEpic",
-      "sprintdesk_addTaskToEpic"
+    "run": [
+      "sprintdesk_runsCreate",
+      "sprintdesk_runsList",
+      "sprintdesk_runsGet",
+      "sprintdesk_runsCancel",
+      "sprintdesk_runsUpdate"
     ],
-    "sprint": [
-      "sprintdesk_createSprint",
-      "sprintdesk_getSprint",
-      "sprintdesk_updateSprint",
-      "sprintdesk_deleteSprint",
-      "sprintdesk_listSprints",
-      "sprintdesk_getTasksBySprint",
-      "sprintdesk_addTaskToSprint"
+    "queue": [
+      "sprintdesk_queueGet",
+      "sprintdesk_queueProcess"
     ],
-    "backlog": [
-      "sprintdesk_createBacklog",
-      "sprintdesk_getBacklog",
-      "sprintdesk_listBacklogs",
-      "sprintdesk_addTaskToBacklog"
+    "event": [
+      "sprintdesk_eventsPublish",
+      "sprintdesk_eventsList"
     ],
-    "team": [
-      "sprintdesk_listTeam",
-      "sprintdesk_syncTeamFromGit",
-      "sprintdesk_addTeamMember",
-      "sprintdesk_removeTeamMember"
+    "audit": [
+      "sprintdesk_auditList"
+    ],
+    "context": [
+      "sprintdesk_projectContext"
+    ],
+    "workforce": [
+      "sprintdesk_skillsList",
+      "sprintdesk_skillsUpsert",
+      "sprintdesk_policyGet",
+      "sprintdesk_recommendEmployees",
+      "sprintdesk_activitySummary"
     ],
     "history": [
       "sprintdesk_getHistory",
       "sprintdesk_trackChange"
     ],
-    "move": [
-      "sprintdesk_moveTaskToEpic",
-      "sprintdesk_moveTaskToSprint",
-      "sprintdesk_moveTaskToBacklog"
+    "mcp": [
+      "sprintdesk_mcpServersList",
+      "sprintdesk_mcpServersAdd",
+      "sprintdesk_mcpServersUpdate",
+      "sprintdesk_mcpServersRemove",
+      "sprintdesk_mcpToolsList",
+      "sprintdesk_mcpCheck",
+      "sprintdesk_mcpCall"
+    ],
+    "approvals": [
+      "sprintdesk_gatesGet",
+      "sprintdesk_gatesSet",
+      "sprintdesk_approvalsList",
+      "sprintdesk_approvalsApprove",
+      "sprintdesk_approvalsReject",
+      "sprintdesk_employeeConfigure"
+    ],
+    "input": [
+      "sprintdesk_inputsList",
+      "sprintdesk_inputsIngest"
+    ],
+    "plan": [
+      "sprintdesk_plansList",
+      "sprintdesk_plansGet",
+      "sprintdesk_plansReplan"
+    ],
+    "checkpoint": [
+      "sprintdesk_checkpointsList",
+      "sprintdesk_checkpointsApproveDeploy",
+      "sprintdesk_checkpointsRejectDeploy"
+    ],
+    "cycle": [
+      "sprintdesk_cyclesList"
+    ],
+    "organizer": [
+      "sprintdesk_organizerRun"
     ]
   },
   "usage": {
     "http_curl": "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}'",
-    "http_call": "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_listTasks\",\"arguments\":{}}}'",
+    "http_call": "curl -X POST http://localhost:3847/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sprintdesk_plansList\",\"arguments\":{}}}'",
     "stdio": "cd <workspace> && npm run mcp"
   }
 }

@@ -6,7 +6,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [1.0.0] - 2026-09-17
 
-**Plan-native replatform (slices A–Q).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
+**Plan-native replatform (slices A–R).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
 is no Task compatibility layer underneath it. The legacy Task/Epic/Backlog/Sprint project-management surface is
 removed from the active runtime, and all runtime state lives under `.SprintDesk/database/`.
 
@@ -18,9 +18,9 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
 - **Storage boundary.** `.SprintDesk/database/` holds runtime state; `.SprintDesk/settings/` configuration;
   `.SprintDesk/people/` identity; `.SprintDesk/inputs/` + `.SprintDesk/plans/` artifacts. The `workforce/`
   state root is gone.
-- **Deferred past 1.0 (tracked debt, not shipped):** the residual dead `Epic` interface and legacy constant
-  strings. There is **no Task→Plan migration utility**: v1.0 starts from the Plan-native storage model and no
-  supported legacy workspace format remains to import (Slice O).
+- **Deferred past 1.0 (tracked debt, not shipped):** the residual dead `Epic` interface. There is **no
+  Task→Plan migration utility**: v1.0 starts from the Plan-native storage model and no supported legacy
+  workspace format remains to import (Slice O).
 
 ### v1.0 Slice A — Plan domain, stores & storage layout
 
@@ -214,6 +214,28 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
 - **Coverage:** new `test/smoke/agentCommand.test.ts` pins the exact `{ command, args }` for every `tool`.
 - **No compatibility shim.** `.SprintDesk/settings/agents.yml` is user-authored configuration (same rule as
   Slice M), so the old `{task_*}` placeholders are not read.
+
+### v1.0 Slice R — Legacy artifact & hardening cleanup
+
+- **Command renamed to its real behavior.** `sprintdesk.createTaskForEmployee` (the contributed command and
+  the `employeeAgent` context-menu entry) is now `sprintdesk.createInputForEmployee` ("Create Input for
+  Agent"); it opens the Control Center create-input tab for the selected agent, exactly as before.
+- **Dead legacy constants removed.** `src/utils/constant.ts` is reduced to the live `PROJECT_CONSTANTS`
+  (`.SprintDesk`/`data`) and `WEBVIEW_CONSTANTS`. The unreferenced `COMMON_EMOJI`/`STATUS_EMOJI`/
+  `PRIORITY_EMOJI`/`TASK_CONSTANTS`/`EPIC_CONSTANTS`/`BACKLOG_CONSTANTS`/`SPRINT_CONSTANTS`/`UI_CONSTANTS`/
+  `SAMPLE_CONSTANTS`/`GIT_CONSTANTS` groups — including `TASK_LINK` and the `# 🧩 Task:` template — are gone.
+- **Global legacy namespace deleted.** `src/types/global.d.ts` (`SprintDesk.*` task/epic/backlog/sprint
+  table-row types) existed only for those dead constants and is removed with them.
+- **Dead workspace artifacts removed.** `.SprintDesk/data/{tasks,backlogs,epics,sprints}.yml` and
+  `.SprintDesk/Tasks/` are deleted; no code path read them (runtime state lives under `database/`).
+- **MCP artifacts can no longer drift.** `buildMcpReadme()` is generated from the same `TOOL_GROUPS` as
+  `buildMcpManifest()`, and activation rewrites `.SprintDesk/mcp/README.md` on every load instead of seeding
+  it once; the committed README and manifest are regenerated (43 tools across 15 groups). The old hardcoded,
+  task-era README is gone.
+- **Recovery idempotence hardened.** A replan is deduped on the persisted input's durable identity
+  (`source.id === runId`, or the deterministic `inputs/replan-<runId>.md` name) instead of its transient
+  `status === 'new'`, so an already-consumed replan can no longer be requested twice. The replan objective
+  resolves the plan's real title through `planService.planTitleFor` rather than an id-only helper.
 
 ## v0.12 — pre-release development line (shipped in 1.0.0)
 

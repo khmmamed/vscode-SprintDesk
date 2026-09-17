@@ -162,7 +162,7 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
       provider.refresh();
     }),
 
-    vscode.commands.registerCommand('sprintdesk.createTaskForEmployee', async (item: WorkforceItem) => {
+    vscode.commands.registerCommand('sprintdesk.createInputForEmployee', async (item: WorkforceItem) => {
       const employee = item?.employee || (await (async () => {
         const agents = workforceService.getWorkforce().employees.filter(e => e.role === 'agent');
         const picked = await vscode.window.showQuickPick(

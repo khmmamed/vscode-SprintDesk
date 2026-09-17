@@ -103,8 +103,8 @@
         "icon": "$(window)"
       },
       {
-        "command": "sprintdesk.createTaskForEmployee",
-        "title": "SprintDesk: Create Task & Run",
+        "command": "sprintdesk.createInputForEmployee",
+        "title": "SprintDesk: Create Input for Agent",
         "icon": "$(add)"
       },
       {
@@ -170,7 +170,7 @@
           "group": "inline@1"
         },
         {
-          "command": "sprintdesk.createTaskForEmployee",
+          "command": "sprintdesk.createInputForEmployee",
           "when": "view == sprintdesk-main && viewItem == employeeAgent",
           "group": "inline@0"
         },

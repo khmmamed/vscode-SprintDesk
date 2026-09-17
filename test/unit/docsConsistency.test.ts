@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { buildMcpManifest, buildMcpReadme } from '../../src/mcp/manifest';
 
 function findRepoRoot(start: string): string {
   let dir = start;
@@ -37,11 +38,11 @@ describe('documentation consistency (v1.0.0)', () => {
     assert.equal(version, latest, 'package.json version must match the newest CHANGELOG release');
   });
 
-  it('CHANGELOG records the v1.0 Plan-native replatform (slices A-Q)', () => {
+  it('CHANGELOG records the v1.0 Plan-native replatform (slices A-R)', () => {
     const changelog = read('CHANGELOG.md');
     assert.match(changelog, /^## \[1\.0\.0\]/m, 'CHANGELOG must contain a [1.0.0] release section');
     assert.doesNotMatch(changelog, /^## \[Unreleased\]/m, 'release content must not remain under [Unreleased]');
-    for (const slice of 'ABCDEFGHIJKLMNOPQ'.split('')) {
+    for (const slice of 'ABCDEFGHIJKLMNOPQR'.split('')) {
       assert.match(
         changelog,
         new RegExp(`^### v1\\.0 Slice ${slice} `, 'm'),
@@ -124,6 +125,13 @@ describe('documentation consistency (v1.0.0)', () => {
     assert.match(proposal, /no Task→Plan migration/i, 'proposal must record that no Task→Plan migration ships');
     assert.doesNotMatch(proposal, /migrateTasksToPlans/, 'the fictitious migration CLI must be gone');
     assert.doesNotMatch(proposal, /^## 10\. Reference grounding \(verified\)/m, 'baseline grounding must not claim to be current');
+  });
+
+  it('the committed MCP artifacts match the generated registry (Slice R)', () => {
+    const committedReadme = read('.SprintDesk/mcp/README.md').replace(/\r\n/g, '\n');
+    assert.equal(committedReadme, buildMcpReadme(), '.SprintDesk/mcp/README.md is stale; regenerate it');
+    const committedManifest = JSON.parse(read('.SprintDesk/mcp/manifest.json')) as unknown;
+    assert.deepEqual(committedManifest, buildMcpManifest(), '.SprintDesk/mcp/manifest.json is stale; regenerate it');
   });
 
   it('no document requires a Task→Plan migration utility (Slice O)', () => {

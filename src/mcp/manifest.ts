@@ -20,7 +20,7 @@ import {
 
 interface McpManifestToolGroup {
   group: string;
-  tools: Array<{ name: string }>;
+  tools: Array<{ name: string; description: string }>;
 }
 
 const TOOL_GROUPS: McpManifestToolGroup[] = [
@@ -70,4 +70,29 @@ export function buildMcpManifest(): Record<string, unknown> {
 
 export function getAllToolGroupNames(): string[] {
   return TOOL_GROUPS.map(g => g.group);
+}
+
+// v1.0 Slice R — single source of truth for the human-readable MCP README,
+// derived from the same TOOL_GROUPS the manifest uses so the two cannot drift.
+export function buildMcpReadme(): string {
+  const groups = TOOL_GROUPS.map(group => {
+    const tools = group.tools.map(tool => `- \`${tool.name}\` — ${tool.description}`);
+    return [`### ${group.group}`, '', ...tools, ''].join('\n');
+  }).join('\n');
+  return [
+    '# SprintDesk MCP Server',
+    '',
+    `Local MCP server (v${SERVER_INFO.version}) for integrating SprintDesk with AI agents like Copilot, Claude, etc.`,
+    '',
+    '## Available Tools',
+    '',
+    `The server exposes ${ALL_TOOLS.length} tools across ${TOOL_GROUPS.length} groups.`,
+    '',
+    groups.trimEnd(),
+    '',
+    '## Usage',
+    '',
+    'AI agents can discover and use these tools through the MCP protocol when this extension is active.',
+    ''
+  ].join('\n');
 }

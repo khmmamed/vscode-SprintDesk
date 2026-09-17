@@ -19,7 +19,7 @@ import { startScheduler } from './services/workforce/scheduler/organizerEngine';
 import { setHost, setFileSystem } from './host';
 import { VSCodeHost } from './host/VSCodeHost';
 import { NodeFileSystem } from './host/NodeFileSystem';
-import { buildMcpManifest } from './mcp/manifest';
+import { buildMcpManifest, buildMcpReadme } from './mcp/manifest';
 
 export async function activate(context: vscode.ExtensionContext) {
   // Initialize host boundary (VSCode host + synchronous file system)
@@ -163,51 +163,9 @@ export async function activate(context: vscode.ExtensionContext) {
     const mcpManifest = buildMcpManifest();
     fs.writeFileSync(mcpManifestPath, JSON.stringify(mcpManifest, null, 2), 'utf8');
 
+    // Rewritten on every activation so the artifact tracks the live registry.
     const mcpReadmePath = path.join(sdPath, 'mcp', 'README.md');
-    if (!fs.existsSync(mcpReadmePath)) {
-      const readme = `# SprintDesk MCP Server
-
-Local MCP server for integrating SprintDesk with AI agents like Copilot, Claude, etc.
-
-## Available Tools
-
-### Input Tools
-- sprintdesk_inputsList, sprintdesk_inputsIngest
-
-### Plan Tools
-- sprintdesk_plansList, sprintdesk_plansReplan, sprintdesk_plansGet
-
-### Organizer Tools
-- sprintdesk_organizerRun
-
-### Checkpoint Tools
-- sprintdesk_checkpointsList, sprintdesk_checkpointsApproveDeploy, sprintdesk_checkpointsRejectDeploy
-
-### Cycle Tools
-- sprintdesk_cyclesList
-
-### Workforce Tools
-- sprintdesk_agentsList, sprintdesk_agentsGet
-
-### Run Tools
-- sprintdesk_runsCreate, sprintdesk_runsList, sprintdesk_runsGet
-- sprintdesk_runsCancel, sprintdesk_runsUpdate
-
-### Queue Tools
-- sprintdesk_queueGet, sprintdesk_queueProcess
-
-### Event & Audit Tools
-- sprintdesk_eventsPublish, sprintdesk_eventsList, sprintdesk_auditList
-
-### Context Tools
-- sprintdesk_projectContext
-
-## Usage
-
-AI agents can discover and use these tools through the MCP protocol when this extension is active.
-`;
-      fs.writeFileSync(mcpReadmePath, readme, 'utf8');
-    }
+    fs.writeFileSync(mcpReadmePath, buildMcpReadme(), 'utf8');
 
     vscode.window.showInformationMessage("📦 SprintDesk ready!");
   } catch (err) {

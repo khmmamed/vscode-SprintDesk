@@ -184,6 +184,7 @@ in Git and are not auto-imported.
 | Set employee status / Remove employee | `sprintdesk.setEmployeeStatus` / `sprintdesk.removeEmployee` |
 | Sync people from Git | `sprintdesk.syncPeopleFromGit` |
 | Process queue | `sprintdesk.processQueue` |
+| Create input for an agent | `sprintdesk.createInputForEmployee` |
 | Cancel run | `sprintdesk.cancelRun` |
 | Start MCP server | `sprintdesk.startMcp` |
 | Refresh | `sprintdesk.refresh` |
