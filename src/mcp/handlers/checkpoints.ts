@@ -1,4 +1,5 @@
 import { getStores } from '../../data/stores';
+import { Approval } from '../../data/types';
 import * as approvals from '../../services/workforce/approvals';
 import { Handler, HandlerResult, res } from './helpers';
 
@@ -22,6 +23,15 @@ function handle_sprintdesk_checkpointsList(args: any): HandlerResult {
   return res(JSON.stringify(filtered, null, 2));
 }
 
+// v1.0 Slice J — the deploy authorization is keyed by the checkpointId carried on
+// the pending op, not by the human-readable `target` string. Matching on target
+// never found the real approval, so approve/reject always failed.
+function pendingDeployApproval(checkpointId: string): Approval | undefined {
+  return getStores().approvals.pending().find(
+    p => p.pending?.op === 'authorize-deploy' && p.pending.checkpointId === checkpointId
+  );
+}
+
 function handle_sprintdesk_checkpointsApproveDeploy(args: any): HandlerResult {
   const stores = getStores();
   const checkpoint = stores.checkpoints.getById(args.checkpointId);
@@ -31,9 +41,7 @@ function handle_sprintdesk_checkpointsApproveDeploy(args: any): HandlerResult {
     return res(`Checkpoint ${args.checkpointId} is not awaiting deploy authorization (current: ${checkpoint.status})`, true);
   }
 
-  const pending = stores.approvals.pending().find(
-    p => p.status === 'pending' && p.target === checkpoint.id && p.pending?.op === 'authorize-deploy'
-  );
+  const pending = pendingDeployApproval(checkpoint.id);
 
   if (!pending) {
     return res(`No pending deploy authorization found for checkpoint ${args.checkpointId}`, true);
@@ -54,9 +62,7 @@ function handle_sprintdesk_checkpointsRejectDeploy(args: any): HandlerResult {
     return res(`Checkpoint ${args.checkpointId} is not awaiting deploy authorization (current: ${checkpoint.status})`, true);
   }
 
-  const pending = stores.approvals.pending().find(
-    p => p.status === 'pending' && p.target === checkpoint.id && p.pending?.op === 'authorize-deploy'
-  );
+  const pending = pendingDeployApproval(checkpoint.id);
 
   if (!pending) {
     return res(`No pending deploy authorization found for checkpoint ${args.checkpointId}`, true);

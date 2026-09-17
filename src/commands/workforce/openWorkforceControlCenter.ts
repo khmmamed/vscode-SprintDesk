@@ -815,7 +815,7 @@ export function openWorkforceControlCenter(section?: WorkforceSection, focusAgen
             } else {
               const pending = getStores()
                 .approvals.pending()
-                .find(p => p.status === 'pending' && p.target === checkpoint.id && p.pending?.op === 'authorize-deploy');
+                .find(p => p.pending?.op === 'authorize-deploy' && p.pending.checkpointId === checkpoint.id);
               if (!pending) {
                 postResponse(newPanel, message?.requestId, undefined, `No pending deploy authorization found for checkpoint ${checkpointId}`);
               } else {

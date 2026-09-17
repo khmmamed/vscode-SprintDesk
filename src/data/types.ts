@@ -742,6 +742,12 @@ export interface PlanValidation {
   decision: PlanValidationDecision;
   errors: string[];
   artifacts: string[];
+  // v1.0 Slice J — lineage/idempotence marker recorded by the Validator stage.
+  // Freshly materialized plans omit it; a value means the run whose outcome
+  // produced this decision has already been validated (duplicate
+  // `execution.completed` events must not re-validate or re-checkpoint).
+  runId?: string;
+  recordedAt?: string;
 }
 
 export interface PlanLineage {

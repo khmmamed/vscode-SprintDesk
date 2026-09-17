@@ -62,7 +62,9 @@ export function recordValidation(planId: string, record: ValidationRecord): Plan
     validation: {
       decision: record.decision,
       errors: record.errors || [],
-      artifacts: record.artifacts || []
+      artifacts: record.artifacts || [],
+      runId: plan.execution.runId,
+      recordedAt: now
     },
     updatedAt: now
   });

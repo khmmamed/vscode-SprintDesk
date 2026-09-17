@@ -13,6 +13,7 @@ import { registerWorkforceCommands } from './commands/workforce/workforceCommand
 import { registerWorkforceControlCenter } from './commands/workforce/openWorkforceControlCenter';
 import { installDispatcher } from './services/workforce/plan/dispatcher';
 import { installRecovery } from './services/workforce/plan/recovery';
+import { installValidator } from './services/workforce/plan/validator';
 import { startScheduler } from './services/workforce/scheduler/organizerEngine';
 // Host boundary
 import { setHost, setFileSystem } from './host';
@@ -53,11 +54,16 @@ export async function activate(context: vscode.ExtensionContext) {
   // decisions into queue work; the scheduler driver honors queueSettings.enabled /
   // pollIntervalMs and installs event-path organizer triggers. Both are inert until
   // the user opts in (queueSettings.enabled defaults to false).
+  // v1.0 Slice J — the Validator is the last runtime stage: it turns a
+  // completed execution into a validation decision + checkpoint, then requests
+  // the human deploy authorization. checkpointService owns those transitions.
   const disposeDispatcher = installDispatcher();
   const disposeRecovery = installRecovery();
+  const disposeValidator = installValidator();
   const schedulerDriver = startScheduler();
   context.subscriptions.push({ dispose: disposeDispatcher });
   context.subscriptions.push({ dispose: disposeRecovery });
+  context.subscriptions.push({ dispose: disposeValidator });
   context.subscriptions.push({ dispose: () => schedulerDriver.stop() });
 
   // MCP server - auto-start on extension load
