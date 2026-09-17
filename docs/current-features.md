@@ -166,6 +166,10 @@ A single webview (`sprintdesk.openWorkforce`) operates the whole lifecycle with 
 `plans/*.md` is semantic content written only by the Orchestrator; `database/*.yml` is runtime state written by
 the services. The former `workforce/` state root is gone (one-way legacy read fallback only).
 
+v1.0 **starts from this Plan-native storage model rather than migrating into it**: there is no Task→Plan import
+command, and no v1.0 code path reads a legacy `tasks.yml` or Task markdown. Legacy workspaces keep their history
+in Git and are not auto-imported.
+
 ---
 
 ## Commands

@@ -6,7 +6,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [1.0.0] - 2026-09-17
 
-**Plan-native replatform (slices A–M).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
+**Plan-native replatform (slices A–O).** In 1.0.0 a **Plan is the only unit that can enter execution** — there
 is no Task compatibility layer underneath it. The legacy Task/Epic/Backlog/Sprint project-management surface is
 removed from the active runtime, and all runtime state lives under `.SprintDesk/database/`.
 
@@ -19,7 +19,8 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
   `.SprintDesk/people/` identity; `.SprintDesk/inputs/` + `.SprintDesk/plans/` artifacts. The `workforce/`
   state root is gone.
 - **Deferred past 1.0 (tracked debt, not shipped):** the residual dead `Epic` interface and legacy constant
-  strings, and the opt-in `migrateTasksToPlans` archive CLI.
+  strings. There is **no Task→Plan migration utility**: v1.0 starts from the Plan-native storage model and no
+  supported legacy workspace format remains to import (Slice O).
 
 ### v1.0 Slice A — Plan domain, stores & storage layout
 
@@ -118,8 +119,8 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
 - **Workflow `task` steps now materialize Plans** (the `taskType` enum is mapped through
   `legacyTaskKindToPlanCategory`); the DSL key itself is unchanged (superseded by Slice M).
 - **Tracked residuals (not removed in this slice):** the dead `Epic` interface and the legacy
-  Epic/Backlog/Sprint constant strings are left as cleanup debt, and the opt-in `migrateTasksToPlans` archive
-  CLI was **not** shipped.
+  Epic/Backlog/Sprint constant strings are left as cleanup debt; the migration CLI was not shipped and is
+  resolved as **not required** in Slice O.
 
 ### v1.0 Slice J — Validator → checkpoint → deploy wiring
 
@@ -166,6 +167,23 @@ removed from the active runtime, and all runtime state lives under `.SprintDesk/
   step / `taskType` keys are not read; workflows are authored with `type: 'plan'` and `category`.
 - **Resolver guarantees unchanged:** `plan` steps still emit `run.queued` as source `workflow`, never bypass
   `QueueService`, and never let tool/LLM output drive control flow.
+
+### v1.0 Slice N — Dead configuration cleanup
+
+- **Removed the legacy `sprintdesk.*` settings.** All 18 unreferenced `contributes.configuration` properties
+  are gone from the manifest (project/epic/task/backlog/sprint prefixes, start numbers, padding, markdown
+  filename patterns, `defaultBacklog`, `defaultStatus`, `defaultPriority`, `showIds`), together with the dead
+  `IHost.getConfig` accessor and the `NodeHost` settings map that only served them. There are no extension
+  settings in v1.0 — operational configuration is data-driven under `.SprintDesk/settings/`.
+- **Guardrail:** `docsConsistency.test.ts` fails if any `sprintdesk.*` configuration property reappears.
+
+### v1.0 Slice O — Migration-tool decision (Task→Plan not required)
+
+- **No Task→Plan migration utility ships.** The previously planned opt-in one-shot archive importer is
+  removed from the plan: it would have read legacy `tasks.yml`, but the legacy project-management data layer
+  and every reader for it were removed in Slice I, so no supported legacy workspace format remains.
+- **Architecture note:** v1.0 starts from the Plan-native storage model (`.SprintDesk/plans/PLAN-*.md` +
+  `.SprintDesk/database/plans.yml`); legacy workspaces keep their history in Git and are not auto-imported.
 
 ## v0.12 — pre-release development line (shipped in 1.0.0)
 
