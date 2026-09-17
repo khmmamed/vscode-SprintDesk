@@ -3,7 +3,7 @@ import { Finding, FindingStatus } from '../types';
 
 export class FindingStore extends YAMLStore<Finding> {
   constructor(workspaceRoot?: string) {
-    super('workforce', 'findings.yml', 'findings', workspaceRoot);
+    super('database', 'findings.yml', 'findings', workspaceRoot, 'workforce', 'findings.yml');
   }
 
   byStatus(status: FindingStatus): Finding[] {

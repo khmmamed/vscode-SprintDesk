@@ -3,7 +3,7 @@ import { Approval, ApprovalStatus } from '../types';
 
 export class ApprovalStore extends YAMLStore<Approval> {
   constructor(workspaceRoot?: string) {
-    super('workforce', 'approvals.yml', 'approvals', workspaceRoot);
+    super('database', 'approvals.yml', 'approvals', workspaceRoot, 'workforce', 'approvals.yml');
   }
 
   byStatus(status: ApprovalStatus): Approval[] {

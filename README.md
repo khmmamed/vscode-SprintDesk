@@ -37,7 +37,8 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
   navigation (Run ↔ Finding ↔ Window ↔ Workflow ↔ Rule ↔ Task ↔ Agent), and empty/loading/error states
   throughout.
 - **Employees & workforce** — human/agent members with certified skills, RBAC roles, and lifecycle gates
-  (`.SprintDesk/workforce/*.yml`); agents are configured (provider/model/capabilities) from the UI
+  (skills/policy in `.SprintDesk/database/`; people in `.SprintDesk/people/`); agents are configured
+  (provider/model/capabilities) from the UI
 - **Tasks → Runs → Queue → Worker** — a task drives a `run`; queued runs are claimed by the queue
   (manual pass or event-driven) and executed by headless/terminal/noop/ollama workers; every state change
   flows through `startRun` / `finishRun` / `cancelRun`

@@ -1741,7 +1741,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
       {tab === "schedules" && (
         <div>
           {schedules.length === 0 && (
-            <div style={styles.empty}>No schedules defined. A time-based schedule turns each due occurrence into a task + queued run. Define `.SprintDesk/workforce/schedules.yml` to get started.</div>
+            <div style={styles.empty}>No schedules defined. A time-based schedule turns each due occurrence into a task + queued run. Define `.SprintDesk/settings/schedules.yml` to get started.</div>
           )}
           {schedules.map(s => (
             <div key={s.id} style={styles.card}>

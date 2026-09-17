@@ -6,5 +6,7 @@ node_modules
 releases/
 
 # SprintDesk secrets (resolved by reference only, never committed)
+**.SprintDesk/settings/credentials.secret.json
+.SprintDesk/settings/credentials.secret.json
 **.SprintDesk/workforce/credentials.secret.json
 .SprintDesk/workforce/credentials.secret.json

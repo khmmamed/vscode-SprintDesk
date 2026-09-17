@@ -36,13 +36,32 @@ describe('credential facade', () => {
     assert.deepStrictEqual(listSecretNames(), ['api_key']);
   });
 
-  it('stores secrets in .SprintDesk/workforce/credentials.secret.json', () => {
+  it('stores secrets in .SprintDesk/settings/credentials.secret.json', () => {
     saveSecret('token', 'abc123');
-    const file = path.join(ws.root, '.SprintDesk', 'workforce', 'credentials.secret.json');
-    assert.ok(fs.existsSync(file), 'secret file should exist under .SprintDesk/workforce');
+    const file = path.join(ws.root, '.SprintDesk', 'settings', 'credentials.secret.json');
+    assert.ok(fs.existsSync(file), 'secret file should exist under .SprintDesk/settings');
     const content = fs.readFileSync(file, 'utf8');
     assert.ok(content.includes('abc123'));
     assert.ok(!content.includes('.yml'), 'secrets must never be stored in YAML');
+  });
+
+  it('reads legacy secrets from the former workforce/ location and migrates on write', () => {
+    const legacyDir = path.join(ws.root, '.SprintDesk', 'workforce');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(legacyDir, 'credentials.secret.json'),
+      JSON.stringify({ secrets: { legacy_key: 'legacy-value' } }),
+      'utf8'
+    );
+
+    assert.strictEqual(resolveCredential('secret:legacy_key'), 'legacy-value');
+
+    saveSecret('fresh_key', 'fresh-value');
+    const settingsFile = path.join(ws.root, '.SprintDesk', 'settings', 'credentials.secret.json');
+    assert.ok(fs.existsSync(settingsFile), 'write should target settings/');
+    const written = JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as { secrets: Record<string, string> };
+    assert.strictEqual(written.secrets.legacy_key, 'legacy-value');
+    assert.strictEqual(written.secrets.fresh_key, 'fresh-value');
   });
 
   it('never resolves inline/plaintext values in tracked YAML', () => {

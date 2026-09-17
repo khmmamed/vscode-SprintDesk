@@ -245,11 +245,16 @@ describe('v1.0.0 Slice A — plan domain, stores & storage layout', () => {
     assert.ok(!fs.existsSync(path.join(ws.root, '.SprintDesk', 'data', 'audit.yml')));
   });
 
-  it('storage invariant: all new-seeded state stores live under database/', () => {
-    for (const file of ['inputs.yml', 'plans.yml', 'cycles.yml', 'checkpoints.yml', 'executions.yml', 'events.yml', 'audit.yml']) {
-      const dbPath = path.join(ws.root, '.SprintDesk', 'database', file);
-      assert.ok(fs.existsSync(dbPath), `${file} should be seeded under database/`);
+  it('storage invariant: all seeded state stores live under database/ only', () => {
+    const seeded = [
+      'inputs.yml', 'plans.yml', 'cycles.yml', 'checkpoints.yml', 'executions.yml',
+      'events.yml', 'audit.yml', 'findings.yml', 'approvals.yml', 'skills.yml',
+      'eventRules.yml', 'classification.yml', 'executionWindows.yml'
+    ];
+    for (const file of seeded) {
+      assert.ok(fs.existsSync(path.join(ws.root, '.SprintDesk', 'database', file)), `${file} should be seeded under database/`);
       assert.ok(!fs.existsSync(path.join(ws.root, '.SprintDesk', 'data', file)), `${file} must not live under data/`);
+      assert.ok(!fs.existsSync(path.join(ws.root, '.SprintDesk', 'workforce', file)), `${file} must not live under workforce/`);
     }
   });
 });

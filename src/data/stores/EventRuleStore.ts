@@ -3,7 +3,7 @@ import { EventRule } from '../types';
 
 export class EventRuleStore extends YAMLStore<EventRule> {
   constructor(workspaceRoot?: string) {
-    super('workforce', 'eventRules.yml', 'eventRules', workspaceRoot);
+    super('database', 'eventRules.yml', 'eventRules', workspaceRoot, 'workforce', 'eventRules.yml');
   }
 
   loadEnabled(): EventRule[] {

@@ -18,10 +18,9 @@ export function makeWorkspace(): TestWorkspace {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sprintdesk-test-'));
   fs.mkdirSync(path.join(root, '.SprintDesk', 'people'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'database'), { recursive: true });
-  fs.mkdirSync(path.join(root, '.SprintDesk', 'workforce'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'plans'), { recursive: true });
   fs.mkdirSync(path.join(root, '.SprintDesk', 'inputs'), { recursive: true });
-  // database/ registry files
+  // database/ registry files (Slice K: former workforce/ state now lives here)
   const dbFiles: Record<string, string> = {
     inputs: 'inputs',
     plans: 'plans',
@@ -29,7 +28,13 @@ export function makeWorkspace(): TestWorkspace {
     checkpoints: 'checkpoints',
     executions: 'runs',
     events: 'events',
-    audit: 'entries'
+    audit: 'entries',
+    findings: 'findings',
+    approvals: 'approvals',
+    skills: 'skills',
+    eventRules: 'eventRules',
+    classification: 'proposals',
+    executionWindows: 'executionWindows'
   };
   for (const [file, key] of Object.entries(dbFiles)) {
     fs.writeFileSync(path.join(root, '.SprintDesk', 'database', `${file}.yml`), `${key}: []`, 'utf8');
@@ -37,10 +42,6 @@ export function makeWorkspace(): TestWorkspace {
   // people/ files
   for (const key of ['humans', 'agents']) {
     fs.writeFileSync(path.join(root, '.SprintDesk', 'people', `${key}.yml`), `${key}: []`, 'utf8');
-  }
-  // workforce/ files
-  for (const key of ['skills', 'eventRules', 'findings', 'classification', 'approvals', 'executionWindows']) {
-    fs.writeFileSync(path.join(root, '.SprintDesk', 'workforce', `${key}.yml`), `${key}: []`, 'utf8');
   }
   currentRoot = root;
   setWorkspaceRootOverride(root);

@@ -3,7 +3,7 @@ import { TaskProposal, TaskProposalStatus } from '../types';
 
 export class ProposalStore extends YAMLStore<TaskProposal> {
   constructor(workspaceRoot?: string) {
-    super('workforce', 'classification.yml', 'proposals', workspaceRoot);
+    super('database', 'classification.yml', 'proposals', workspaceRoot, 'workforce', 'classification.yml');
   }
 
   byStatus(status: TaskProposalStatus): TaskProposal[] {

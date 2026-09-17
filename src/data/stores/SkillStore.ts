@@ -24,7 +24,7 @@ export const DEFAULT_SKILLS: Skill[] = [
 
 export class SkillStore extends YAMLStore<Skill> {
   constructor(workspaceRoot?: string) {
-    super('workforce', 'skills.yml', 'skills', workspaceRoot);
+    super('database', 'skills.yml', 'skills', workspaceRoot, 'workforce', 'skills.yml');
   }
 
   findByName(name: string): Skill | undefined {

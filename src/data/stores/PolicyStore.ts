@@ -5,20 +5,32 @@ import { DEFAULT_POLICY, Employee, PermissionId, Policy } from '../types';
 
 export class PolicyStore {
   private readonly filePath: string;
+  private readonly legacyFilePath: string;
   private readonly fileSystem: IFileSystem;
 
   constructor(workspaceRoot?: string) {
     const root = workspaceRoot || getHost().getWorkspaceRoot() || '';
-    this.filePath = path.join(root, '.SprintDesk', 'workforce', 'policy.yml');
+    this.filePath = path.join(root, '.SprintDesk', 'database', 'policy.yml');
+    this.legacyFilePath = path.join(root, '.SprintDesk', 'workforce', 'policy.yml');
     this.fileSystem = getFileSystem();
+  }
+
+  // v1.0 Slice K — one-way continuity fallback: policy persisted under the old
+  // workforce/ location is still read until the first write moves it to database/.
+  private readPath(): string {
+    if (this.fileSystem.exists(this.filePath)) {
+      return this.filePath;
+    }
+    return this.legacyFilePath;
   }
 
   load(): Policy {
     try {
-      if (!this.fileSystem.exists(this.filePath)) {
+      const file = this.readPath();
+      if (!this.fileSystem.exists(file)) {
         return DEFAULT_POLICY;
       }
-      const content = this.fileSystem.readFile(this.filePath);
+      const content = this.fileSystem.readFile(file);
       const data = yaml.load(content) as { policy?: Policy };
       const policy = data.policy;
       if (!policy || !policy.roles) {
@@ -36,7 +48,7 @@ export class PolicyStore {
   }
 
   ensureDefault(): void {
-    if (!this.fileSystem.exists(this.filePath)) {
+    if (!this.fileSystem.exists(this.readPath())) {
       this.save(DEFAULT_POLICY);
     }
   }

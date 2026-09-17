@@ -85,18 +85,18 @@
   error/in-progress/completed
 
 ### 👥 Employees & Workforce
-- Human/agent employees with certified skills (`.SprintDesk/workforce/skills.yml`, seeded catalog of 8)
+- Human/agent employees with certified skills (`.SprintDesk/database/skills.yml`, seeded catalog of 8)
 - Teams with lead/member assignment and Git-history sync
 - Skill catalog, aliases, and task-type → required-skill mapping
 - Deterministic `rankEmployees` assignee recommendations (coverage → load → status → name → id)
 
 ### 🔐 RBAC & Policy
 - Role → permission matrix (`lead` / `developer` / `reviewer` / `observer` / `agent` / `human`)
-- Per-employee allow/deny overrides (`.SprintDesk/workforce/policy.yml`)
+- Per-employee allow/deny overrides (`.SprintDesk/database/policy.yml`)
 - Lifecycle gates on assignment, claim, run start, run execution, and config change
 
 ### 🔄 Queue, Runs & Worker
-- Task → Run → Queue → Worker pipeline (`.SprintDesk/data/runs.yml`)
+- Task → Run → Queue → Worker pipeline (`.SprintDesk/database/executions.yml`)
 - Deterministic queue pass: `createdAt asc → attempts asc → id asc`, explicit skip reasons
 - Single transition path `startRun` / `finishRun` / `cancelRun` with audit events
 - Headless (spawn), terminal, noop, and ollama worker runtimes
@@ -120,11 +120,11 @@
 
 ### 📦 Execution Windows (v0.11)
 - Deliberate synchronous batches: `Human → Window → Workflow → Task/Run → Queue → Worker → Finding →
-  Validation → Human Decision` (`.SprintDesk/workforce/executionWindows.yml`)
+  Validation → Human Decision` (`.SprintDesk/database/executionWindows.yml`)
 - Auto-advance to completion via run events; cancellation; persisted completion summary
 
 ### 📡 Events & Event Rules (v0.11)
-- Lifecycle event emission (`.SprintDesk/data/events.yml`) on run / queue / employee transitions
+- Lifecycle event emission (`.SprintDesk/database/events.yml`) on run / queue / employee transitions
 - Event Rules: idempotent, re-entrancy-safe `Event → Rule → Workflow → Task/Run` async automation
 - Activity summary, audit trail, and history tracking
 
@@ -136,7 +136,7 @@
 
 ### ✅ Reviews & Approval Gates
 - `auto` / `manual` gates for task-assignment, run-execution, config-change
-- Pending approvals (`.SprintDesk/workforce/approvals.yml`) with approve/reject tools
+- Pending approvals (`.SprintDesk/database/approvals.yml`) with approve/reject tools
 
 ### 📋 Workflow DSL
 - Declarative `task` / `loop` / `tool` / `condition` workflows (`.SprintDesk/settings/workflows.yml`)

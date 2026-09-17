@@ -124,7 +124,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const sdPath = path.join(ws, '.SprintDesk');
 
 // Ensure all directories exist
-    const dirs = ['database', 'people', 'workforce', 'settings', 'mcp', 'plans', 'inputs'];
+    const dirs = ['database', 'people', 'settings', 'mcp', 'plans', 'inputs'];
     for (const dir of dirs) {
       const fullPath = path.join(sdPath, dir);
       if (!fs.existsSync(fullPath)) {
@@ -132,8 +132,10 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     }
 
-    // v1.0 Slice A — database/ is the single runtime-state boundary; seed the new
-    // registry files (executions.yml keeps its internal `runs` key)
+    // v1.0 — database/ is the single runtime-state boundary; seed the registry
+    // files (executions.yml keeps its internal `runs` key). Slice K relocated the
+    // former workforce/ state stores (findings, approvals, skills, eventRules,
+    // classification, executionWindows, policy) here.
     const dbFiles = new Map<string, string>([
       ['inputs.yml', 'inputs'],
       ['plans.yml', 'plans'],
@@ -141,7 +143,13 @@ export async function activate(context: vscode.ExtensionContext) {
       ['checkpoints.yml', 'checkpoints'],
       ['executions.yml', 'runs'],
       ['events.yml', 'events'],
-      ['audit.yml', 'entries']
+      ['audit.yml', 'entries'],
+      ['findings.yml', 'findings'],
+      ['approvals.yml', 'approvals'],
+      ['skills.yml', 'skills'],
+      ['eventRules.yml', 'eventRules'],
+      ['classification.yml', 'proposals'],
+      ['executionWindows.yml', 'executionWindows']
     ]);
     for (const [file, key] of dbFiles) {
       const dbPath = path.join(sdPath, 'database', file);

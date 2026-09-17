@@ -6,7 +6,8 @@ export interface SecretStoreFile {
   secrets: Record<string, string>;
 }
 
-const SECRET_DIR = path.join('.SprintDesk', 'workforce');
+const SECRET_DIR = path.join('.SprintDesk', 'settings');
+const LEGACY_SECRET_DIR = path.join('.SprintDesk', 'workforce');
 const SECRET_FILE = 'credentials.secret.json';
 
 function secretFilePath(): string | undefined {
@@ -14,17 +15,23 @@ function secretFilePath(): string | undefined {
   return root ? path.join(root, SECRET_DIR, SECRET_FILE) : undefined;
 }
 
+function legacySecretFilePath(): string | undefined {
+  const root = getWorkspaceRoot();
+  return root ? path.join(root, LEGACY_SECRET_DIR, SECRET_FILE) : undefined;
+}
+
+// v1.0 Slice K — read-only continuity: secrets persisted under the former
+// workforce/ directory are still resolved until the next write lands in settings/.
 function loadSecretFile(): SecretStoreFile {
-  const file = secretFilePath();
-  if (!file) {
-    return { secrets: {} };
-  }
   const fs = getFileSystem();
-  if (!fs.exists(file)) {
+  const file = secretFilePath();
+  const legacy = legacySecretFilePath();
+  const source = file && fs.exists(file) ? file : legacy && fs.exists(legacy) ? legacy : undefined;
+  if (!source) {
     return { secrets: {} };
   }
   try {
-    return JSON.parse(fs.readFile(file)) as SecretStoreFile;
+    return JSON.parse(fs.readFile(source)) as SecretStoreFile;
   } catch {
     return { secrets: {} };
   }
