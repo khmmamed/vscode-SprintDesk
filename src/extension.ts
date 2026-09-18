@@ -21,6 +21,8 @@ import { activityTreeDataProvider } from './providers/activity/ActivityTreeDataP
 import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
 import { registerWorkforceControlCenter } from './commands/workforce/openWorkforceControlCenter';
 import { registerSectionCommands } from './commands/sections/sectionCommands';
+import { installIntakeEventTriggers, scheduleIntakePass, startIntakeDriver } from './services/workforce/intake/intakeService';
+import { seedOrchestratorTeam } from './services/workforce/orchestration/roles';
 import { installDispatcher } from './services/workforce/plan/dispatcher';
 import { installRecovery } from './services/workforce/plan/recovery';
 import { installValidator } from './services/workforce/plan/validator';
@@ -202,6 +204,23 @@ export async function activate(context: vscode.ExtensionContext) {
     // Seed the catalogs the Control Center tools/capability views read from.
     getStores(ws).tools.seedDefaultTools();
     getStores(ws).skills.seedDefaultSkills();
+
+    // v1.1 Slice U — Orchestrator team (idempotent) + automatic Request intake.
+    // Intake → Plan and organization stay always-on; execution remains gated by
+    // queueSettings.enabled. The watcher + event trigger + interval reconciliation
+    // converge on the same inputs, so no duplicate Plans are created.
+    seedOrchestratorTeam(ws);
+
+    const intakeWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(workspaceFolders[0], '.SprintDesk/inputs/*.md')
+    );
+    intakeWatcher.onDidCreate(() => scheduleIntakePass());
+    intakeWatcher.onDidChange(() => scheduleIntakePass());
+    context.subscriptions.push(intakeWatcher);
+
+    const disposeIntakeTriggers = installIntakeEventTriggers();
+    context.subscriptions.push({ dispose: disposeIntakeTriggers });
+    context.subscriptions.push(startIntakeDriver());
 
 // Ensure MCP files exist
     const mcpManifestPath = path.join(sdPath, 'mcp', 'manifest.json');

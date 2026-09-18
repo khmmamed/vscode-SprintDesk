@@ -37,6 +37,12 @@ the Organizer) touches the queue.
   `InputRecord` and opens a `Cycle`.
 - `orchestrate()` decomposes an input into one or more plans, capped by `maxPlansPerPass` (default 5) and deduped
   by normalized objective. Emits `plan.created` / `input.planned` / `cycle.opened`.
+- **Automatic intake (v1.1).** `runIntakePass()` drives discover → ingest → orchestrate → organize → scheduling
+  decision with no manual step. Three convergent discovery paths — an `input.created` event trigger, a
+  `FileSystemWatcher` on `inputs/*.md`, and interval reconciliation — all run the same idempotent pass, so one
+  Request converges on one Plan lineage. Intake and organization are always on; **execution stays gated** by
+  `queueSettings.enabled`. Stage events (`orchestration.reader/classifier/planner/organizer/scheduler`) appear in
+  Activity.
 
 ### 🗂 Plans
 - `plans/PLAN-*.md` artifacts (front-matter `id`/`version`/`lineage`; body Objective / Implementation / Acceptance
@@ -68,7 +74,10 @@ the Organizer) touches the queue.
 The Activity Bar shows eleven sections, each a **view over existing Plan-centric state** (no second work model, no
 duplicate Plan storage):
 
-- **People** — Humans / Agents / Teams / Runs; agents carry optional `mcps` / `tools` capability refs.
+- **People** — Humans / Agents / Teams / Runs; agents carry optional `mcps` / `tools` capability refs. The seeded
+  **Orchestrator** team lists its eight stage roles (`reader`, `classifier`, `planner`, `organizer`, `scheduler`,
+  `validator`, `tester`, `human-sync`); roles are assignment-only and fall back to the deterministic service when
+  unassigned (**Assign / Clear Orchestration Role**).
 - **MCP** — external MCP server registry (`mcp/servers.yml`): enable/disable, inspect, remove, add.
 - **Tools** — the `database/tools.yml` catalog (`ToolStore`, five seeded).
 - **Requests** — `.SprintDesk/inputs/*.md` (`InputStore`); create, open, and run an Organizer pass.

@@ -32,6 +32,23 @@ resolves canonical Plan IDs and introduces no second work model and no duplicate
 - **Manifest.** New `sprintdesk.*` commands and `view/title` + `view/item/context` menu contributions; no
   `contributes.configuration` is added.
 
+### v1.0 Slice U — Orchestrator Team & Automatic Request Intake
+
+- **Automatic intake.** Dropping a `.SprintDesk/inputs/*.md` Request now produces its Plan with no manual step:
+  one pass discovers the file → ingests it → runs the Orchestrator (reader → classifier → planner) → runs the
+  Organizer → records the scheduling decision. Execution stays gated by `queueSettings.enabled` (default off).
+- **Three convergent discovery paths.** An `input.created` event trigger, a `FileSystemWatcher` on
+  `.SprintDesk/inputs/*.md`, and interval reconciliation all funnel into the same idempotent pass, so no
+  duplicate Plans are created (dedup by file hash and normalized objective — one Request → one Plan lineage).
+- **Orchestrator team.** A seeded, idempotent `Orchestrator` team owns eight stage roles: `reader`,
+  `classifier`, `planner`, `organizer`, `scheduler`, `validator`, `tester`, `human-sync`. Roles are
+  assignment/identity only — an unassigned role falls back to the existing deterministic service.
+  `People → Teams → Orchestrator` lists the roles with **Assign Orchestration Role** / **Clear Orchestration
+  Role** actions.
+- **Observability.** Stage events (`orchestration.reader.completed`, `.classifier.completed`,
+  `.planner.completed`, `.organizer.completed`, `.scheduler.evaluated`) join `input.created` / `plan.created`
+  in Activity, under the `intake` source, and carry the assigned member id when a role is filled.
+
 ## [1.0.1] - 2026-09-17
 
 **Final integrity audit (Slice S).** No behavior change: the last dead legacy PM type was removed and the

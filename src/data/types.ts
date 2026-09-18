@@ -328,12 +328,37 @@ export const DEFAULT_QUEUE_SETTINGS: QueueSettings = {
   approvalGates: { ...DEFAULT_APPROVAL_GATES }
 };
 
+// v1.1 Slice U — orchestration stage roles. A role is a *function* owned by the
+// Orchestrator team; a team member is *assigned* to it. Roles carry identity and
+// organization only: when a role is unassigned (or has no `memberId`), the
+// existing deterministic service performs that stage. Roles never imply an extra
+// LLM/agent execution engine.
+export type OrchestrationRole =
+  | 'reader'
+  | 'classifier'
+  | 'planner'
+  | 'organizer'
+  | 'scheduler'
+  | 'validator'
+  | 'tester'
+  | 'human-sync';
+
+export interface TeamRoleAssignment {
+  role: OrchestrationRole;
+  // The assigned member (agent or human). Absent/undefined = unassigned, in which
+  // case the deterministic service performs the stage. `human-sync` may reference
+  // a human, which is why this is a member id and not an agent id.
+  memberId?: string;
+}
+
 export interface EmployeeTeam {
   id: string;
   name: string;
   description?: string;
   memberIds: string[];
   leadId?: string;
+  // v1.1 Slice U — the team owns its role assignments (additive, non-breaking).
+  roles?: TeamRoleAssignment[];
   createdAt: string;
   updatedAt: string;
 }

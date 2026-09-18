@@ -1,11 +1,21 @@
 import * as vscode from 'vscode';
-import { Employee, EmployeeTeam, Plan, Run } from '../../data/types';
+import { Employee, EmployeeTeam, OrchestrationRole, Plan, Run } from '../../data/types';
 import * as workforceService from '../../services/workforce/workforceService';
 import { getStores } from '../../data/stores';
 import { planTitleFor } from '../../services/workforce/plan/planService';
+import {
+  ORCHESTRATION_ROLES,
+  ORCHESTRATION_ROLE_DESCRIPTIONS,
+  ORCHESTRATION_ROLE_LABELS,
+  roleMemberId
+} from '../../services/workforce/orchestration/roles';
 import type { WorkforceSection } from '../../commands/workforce/openWorkforceControlCenter';
 
 export class WorkforceItem extends vscode.TreeItem {
+  // v1.1 Slice U — set on role rows under the Orchestrator team.
+  public role?: OrchestrationRole;
+  public roleTeamId?: string;
+
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
@@ -193,7 +203,7 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
       );
     }
 
-    return team.memberIds.map(id => {
+    const members = team.memberIds.map(id => {
       const employee = workforceService.getWorkforce().employees.find(e => e.id === id);
       if (!employee) return null;
       return new WorkforceItem(
@@ -203,6 +213,41 @@ export class WorkforceTreeDataProvider implements vscode.TreeDataProvider<Workfo
         employee
       );
     }).filter((x): x is WorkforceItem => x !== null);
+
+    // v1.1 Slice U — the Orchestrator team surfaces its stage roles. Unassigned
+    // roles fall back to the deterministic service at runtime.
+    if (!team.roles || team.roles.length === 0) {
+      return members;
+    }
+
+    const employees = workforceService.getWorkforce().employees;
+    const roleRows = ORCHESTRATION_ROLES.map(role => {
+      const memberId = roleMemberId(team, role);
+      const member = memberId ? employees.find(e => e.id === memberId) : undefined;
+      const item = new WorkforceItem(
+        `${ORCHESTRATION_ROLE_LABELS[role]}: ${member ? member.name : 'unassigned'}`,
+        vscode.TreeItemCollapsibleState.None,
+        'workforceRole',
+        undefined,
+        team,
+        undefined,
+        undefined,
+        undefined,
+        member ? 'account' : 'circle-outline',
+        undefined,
+        `${ORCHESTRATION_ROLE_DESCRIPTIONS[role]}\n${member ? `Assigned to ${member.name}` : 'Unassigned — deterministic service handles this stage'}`
+      );
+      item.role = role;
+      item.roleTeamId = team.id;
+      item.command = {
+        command: 'sprintdesk.assignOrchestrationRole',
+        title: 'Assign Orchestration Role',
+        arguments: [item]
+      };
+      return item;
+    });
+
+    return [...roleRows, ...members];
   }
 
   private buildRunRows(): WorkforceItem[] {

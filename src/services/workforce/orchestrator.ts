@@ -21,6 +21,7 @@ import {
 import { emitEvent } from './events';
 import { getLLMProvider } from './llm/registry';
 import { LLMProvider, ProviderRequest } from './llm/types';
+import { memberForRole } from './orchestration/roles';
 import { readPlanMd, resolvePlanFile, writePlanMd, PlanMdSections } from './plan/planService';
 
 const PLAN_CATEGORIES: readonly string[] = [
@@ -458,6 +459,13 @@ export async function orchestrate(inputId: string, opts: OrchestrateOptions = {}
 
   const suggested = await suggestDecomposition(raw, opts);
   const units = suggested ? suggested : deterministicallyDecompose(data, parsed.content, input.file);
+  // Slice U — stage events make the intake lifecycle observable in Activity. The
+  // assigned role member (if any) is recorded for attribution only.
+  emitEvent('orchestration.reader.completed', EVENT_SOURCE, {
+    inputId,
+    units: units.length,
+    memberId: memberForRole('reader', root)?.id
+  });
 
   const existing = existingPlanObjectives(root);
   const cap = opts.maxPlansPerPass ?? stores.queue.getSettings().maxPlansPerPass ?? 5;
@@ -477,11 +485,24 @@ export async function orchestrate(inputId: string, opts: OrchestrateOptions = {}
     existing.add(objectiveKey);
   }
 
+  emitEvent('orchestration.classifier.completed', EVENT_SOURCE, {
+    inputId,
+    accepted: accepted.length,
+    skipped: skipped.length,
+    memberId: memberForRole('classifier', root)?.id
+  });
+
   const cycle = openCycleForInput(stores, inputId);
   const plans: Plan[] = [];
   for (const unit of accepted) {
     plans.push(createPlan(inputId, unit, { workspaceRoot: root }));
   }
+
+  emitEvent('orchestration.planner.completed', EVENT_SOURCE, {
+    inputId,
+    planIds: plans.map(p => p.id),
+    memberId: memberForRole('planner', root)?.id
+  });
 
   if (plans.length > 0) {
     const plannedFrom = [...(input.plannedFrom || [])];

@@ -78,6 +78,16 @@
         "icon": "$(star)"
       },
       {
+        "command": "sprintdesk.assignOrchestrationRole",
+        "title": "SprintDesk: Assign Orchestration Role",
+        "icon": "$(organization)"
+      },
+      {
+        "command": "sprintdesk.clearOrchestrationRole",
+        "title": "SprintDesk: Clear Orchestration Role",
+        "icon": "$(circle-slash)"
+      },
+      {
         "command": "sprintdesk.setEmployeeStatus",
         "title": "SprintDesk: Set Availability",
         "icon": "$(circle-filled)"
@@ -303,6 +313,16 @@
           "command": "sprintdesk.setTeamLead",
           "when": "view == sprintdesk-main && viewItem == workforceTeam",
           "group": "inline@4"
+        },
+        {
+          "command": "sprintdesk.assignOrchestrationRole",
+          "when": "view == sprintdesk-main && viewItem == workforceRole",
+          "group": "inline@1"
+        },
+        {
+          "command": "sprintdesk.clearOrchestrationRole",
+          "when": "view == sprintdesk-main && viewItem == workforceRole",
+          "group": "inline@2"
         },
         {
           "command": "sprintdesk.cancelRun",

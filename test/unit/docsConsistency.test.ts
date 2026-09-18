@@ -176,4 +176,20 @@ describe('documentation consistency (v1.0.0)', () => {
       assert.ok(commands.has(command), `manifest must declare ${command}`);
     }
   });
+
+  it('the Orchestrator team and automatic intake are documented (Slice U)', () => {
+    const changelog = read('CHANGELOG.md');
+    assert.match(changelog, /^### v1\.0 Slice U /m, 'CHANGELOG must document v1.0 Slice U');
+
+    const doc = read('docs/current-features.md');
+    assert.match(doc, /runIntakePass/, 'current-features must document automatic intake');
+    assert.match(doc, /human-sync/, 'current-features must document the orchestration roles');
+    assert.match(doc, /queueSettings\.enabled/, 'current-features must document the execution gate');
+
+    const pkg = JSON.parse(read('package.json')) as { contributes?: { commands?: Array<{ command: string }> } };
+    const commands = new Set((pkg.contributes?.commands ?? []).map((c) => c.command));
+    for (const command of ['sprintdesk.assignOrchestrationRole', 'sprintdesk.clearOrchestrationRole']) {
+      assert.ok(commands.has(command), `manifest must declare ${command}`);
+    }
+  });
 });

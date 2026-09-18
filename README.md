@@ -9,7 +9,8 @@ reviewable. A **Plan is the only unit that can enter execution**.
 ## Features
 
 ### Plan-Native Work
-- **Inputs** - Drop `inputs/*.md` (or use the Create Input form); the Orchestrator turns them into Plans
+- **Inputs** - Drop `inputs/*.md` (or use the Create Input form); automatic intake turns them into Plans with no
+  manual step, while Plan execution stays gated until the queue is enabled
 - **Plans** - `plans/PLAN-*.md` artifacts with a runtime registry tracking classification, dependencies,
   scheduling, execution, and lineage
 - **Organizer** - re-classifies and prioritizes existing plans, detects dependencies, and selects the execution
@@ -20,6 +21,9 @@ reviewable. A **Plan is the only unit that can enter execution**.
 ### Team Collaboration
 - Add people (humans and AI agents) manually
 - Automatically sync people from Git commit history
+- The seeded **Orchestrator** team owns the intake stage roles (reader, classifier, planner, organizer,
+  scheduler, validator, tester, human-sync); assign a member to a role or leave it unassigned so the
+  deterministic service handles that stage
 - Track all changes with the History view
 
 ### Workforce & Autonomous Work
@@ -83,6 +87,8 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
 | View workforce | `sprintdesk.viewWorkforce` |
 | Add a person | `sprintdesk.addEmployee` |
 | Create team | `sprintdesk.createTeam` |
+| Assign orchestration role | `sprintdesk.assignOrchestrationRole` |
+| Clear orchestration role | `sprintdesk.clearOrchestrationRole` |
 | Sync people from Git | `sprintdesk.syncPeopleFromGit` |
 | Process queue | `sprintdesk.processQueue` |
 | Start MCP server | `sprintdesk.startMcp` |

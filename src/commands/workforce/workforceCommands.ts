@@ -4,6 +4,7 @@ import * as workforceService from '../../services/workforce/workforceService';
 import * as queueService from '../../services/workforce/queueService';
 import * as worker from '../../services/workforce/worker/worker';
 import { getStores } from '../../data/stores';
+import { ORCHESTRATION_ROLE_LABELS, assignTeamRole } from '../../services/workforce/orchestration/roles';
 import { openWorkforceControlCenter } from './openWorkforceControlCenter';
 
 export function registerWorkforceCommands(context: vscode.ExtensionContext, provider: WorkforceTreeDataProvider): void {
@@ -133,6 +134,50 @@ export function registerWorkforceCommands(context: vscode.ExtensionContext, prov
       workforceService.setTeamLead(team.id, memberPick.value);
       provider.refresh();
       vscode.window.showInformationMessage(`Lead updated for ${team.name}`);
+    }),
+
+    // v1.1 Slice U — assign a team member to an orchestration stage role, or
+    // clear the assignment (the deterministic service then owns the stage).
+    vscode.commands.registerCommand('sprintdesk.assignOrchestrationRole', async (item?: WorkforceItem) => {
+      const role = item?.role;
+      const teamId = item?.roleTeamId;
+      if (!role || !teamId) {
+        vscode.window.showWarningMessage('Select an Orchestrator role to assign.');
+        return;
+      }
+
+      const employees = workforceService.getWorkforce().employees;
+      const label = ORCHESTRATION_ROLE_LABELS[role];
+      const pick = await vscode.window.showQuickPick(
+        [
+          { label: 'Unassigned', description: 'Deterministic service handles this stage', value: undefined as string | undefined },
+          ...employees
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(e => ({ label: e.name, description: `${e.role} · ${e.status || 'idle'}`, value: e.id as string | undefined }))
+        ],
+        { placeHolder: `Assign ${label} role` }
+      );
+      if (!pick) {
+        return;
+      }
+
+      assignTeamRole(teamId, role, pick.value);
+      provider.refresh();
+      vscode.window.showInformationMessage(pick.value
+        ? `${label} assigned to ${pick.label}`
+        : `${label} unassigned — deterministic service active`);
+    }),
+
+    vscode.commands.registerCommand('sprintdesk.clearOrchestrationRole', async (item?: WorkforceItem) => {
+      const role = item?.role;
+      const teamId = item?.roleTeamId;
+      if (!role || !teamId) {
+        return;
+      }
+      assignTeamRole(teamId, role, undefined);
+      provider.refresh();
+      vscode.window.showInformationMessage(`${ORCHESTRATION_ROLE_LABELS[role]} unassigned — deterministic service active`);
     }),
 
     vscode.commands.registerCommand('sprintdesk.setEmployeeStatus', async (item: WorkforceItem) => {
