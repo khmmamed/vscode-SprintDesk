@@ -81,10 +81,22 @@ export async function runIntakePass(opts: IntakePassOptions = {}): Promise<Intak
   }
 }
 
+// A pass must never fail silently: the event/watcher/driver callers all discard
+// the promise, so surface the failure as an event (Activity) and the console.
+export function reportIntakeError(error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error);
+  try {
+    emitEvent('intake.failed', EVENT_SOURCE, { reason });
+  } catch {
+    // event store unavailable — fall through to the console
+  }
+  console.error('[SprintDesk] intake pass failed:', reason);
+}
+
 // Coalesces bursts of intake events into a single deferred pass.
 export function scheduleIntakePass(opts: IntakePassOptions = {}): void {
   setTimeout(() => {
-    void runIntakePass(opts);
+    void runIntakePass(opts).catch(reportIntakeError);
   }, 0);
 }
 
@@ -107,7 +119,7 @@ export function startIntakeDriver(opts: { intervalMs?: number } = {}): IntakeDri
   const intervalMs = opts.intervalMs ?? 15000;
   scheduleIntakePass();
   const timer = setInterval(() => {
-    void runIntakePass();
+    void runIntakePass().catch(reportIntakeError);
   }, intervalMs);
   if (typeof timer.unref === 'function') {
     timer.unref();

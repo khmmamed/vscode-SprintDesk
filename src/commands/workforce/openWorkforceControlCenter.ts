@@ -741,20 +741,26 @@ async function handleCreateInput(message: any, panelRef: vscode.WebviewPanel): P
     const filename = `${safeTitle || 'input'}-${Date.now()}.md`;
     const filePath = path.join(inputDir, filename);
 
+    // Front-matter carries the classification axes the Orchestrator reads
+    // (title/objective drive decomposition, priority seeds classification.original);
+    // the body stays human-readable.
+    const frontMatter: Record<string, string> = {
+      title: String(title).trim(),
+      objective: String(title).trim(),
+      source: payload?.source ? String(payload.source) : 'human'
+    };
+    if (payload?.priority) {
+      frontMatter.priority = String(payload.priority);
+    }
+    if (payload?.category) {
+      frontMatter.category = String(payload.category);
+    }
+
     const lines: string[] = [`# ${String(title).trim()}`, ''];
     if (payload?.description) {
       lines.push(String(payload.description).trim(), '');
     }
-    if (payload?.priority) {
-      lines.push(`**Priority:** ${payload.priority}`, '');
-    }
-    if (payload?.category) {
-      lines.push(`**Category:** ${payload.category}`, '');
-    }
-    if (payload?.source) {
-      lines.push(`**Source:** ${payload.source}`, '');
-    }
-    fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+    fs.writeFileSync(filePath, matter.stringify(lines.join('\n'), frontMatter), 'utf-8');
 
     const input = orchestrator.ingestInput(filePath, { source: { type: 'human', id: 'control-center' } });
     workforceTreeDataProvider.refresh();

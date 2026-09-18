@@ -155,6 +155,35 @@ describe('v1.0.0 Slice B — Orchestrator', () => {
     assert.ok(events.includes('input.planned'));
   });
 
+  it('decomposes a plain-markdown input (no front-matter) from its heading/paragraph', async () => {
+    const dir = path.join(ws.root, '.SprintDesk', 'inputs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'plain.md');
+    fs.writeFileSync(file, '# Fix flaky login test\n\nThe login test times out under load.\n', 'utf8');
+    const input = ingestInput(file);
+
+    const result = await orchestrate(input.id);
+    assert.strictEqual(result.plans.length, 1);
+    const plan = result.plans[0];
+    const md = readPlanMd(planMdPath(plan.id, ws.root));
+    assert.strictEqual(md.sections.objective, 'Fix flaky login test');
+    assert.strictEqual(md.sections.implementation, 'The login test times out under load.');
+    // No front-matter still seeds the default classification axis.
+    assert.strictEqual(plan.classification.original.category, 'feature');
+  });
+
+  it('produces no plans for an input with no textual content', async () => {
+    const dir = path.join(ws.root, '.SprintDesk', 'inputs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'empty.md');
+    fs.writeFileSync(file, '   \n\n', 'utf8');
+    const input = ingestInput(file);
+
+    const result = await orchestrate(input.id);
+    assert.strictEqual(result.plans.length, 0);
+    assert.strictEqual(getStores(ws.root).plans.loadAll().length, 0);
+  });
+
   it('is idempotent per input — dedup by normalized objective', async () => {
     const file = writeInput(ws, 'idem.md', {
       plans: [

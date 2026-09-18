@@ -157,7 +157,10 @@ function firstParagraph(content: string): string {
 
 // Deterministic decomposition: front-matter drives the units. A `plans` array
 // yields one plan per entry; otherwise a single plan is derived from the whole
-// input (title/objective from front-matter or the first heading/paragraph).
+// input. Front-matter is preferred, but a plain-markdown Request (no front-matter)
+// still yields one unit from its first heading/paragraph so dropped files and the
+// Control Center Create Input form are readable. Only an input with no textual
+// content at all produces zero units.
 function deterministicallyDecompose(
   data: Record<string, unknown>,
   content: string,
@@ -188,15 +191,22 @@ function deterministicallyDecompose(
     return units;
   }
 
-  const objective = asString(data.objective);
+  const heading = firstHeading(content);
+  const paragraph = firstParagraph(content);
+  const objective = asString(data.objective) || asString(data.title) || heading || paragraph;
   if (!objective) {
     return [];
   }
   return [
     {
-      title: asString(data.title) || asString(data.name) || firstHeading(content) || path.basename(fileName, '.md'),
+      title:
+        asString(data.title) ||
+        asString(data.name) ||
+        heading ||
+        path.basename(fileName, '.md') ||
+        objective,
       objective,
-      implementation: asString(data.implementation) || firstParagraph(content),
+      implementation: asString(data.implementation) || paragraph,
       acceptanceCriteria: asString(data.acceptanceCriteria) || '',
       constraints: asString(data.constraints) || '',
       classification: pickAxis(data)
