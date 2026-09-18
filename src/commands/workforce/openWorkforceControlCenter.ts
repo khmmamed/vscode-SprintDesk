@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import matter from 'gray-matter';
 import { getWebviewContent } from '../../webview/getWebviewContent';
 import * as fileService from '../../services/fileService';
 import * as approvals from '../../services/workforce/approvals';
@@ -113,9 +114,12 @@ export interface PlanDto {
 export interface InputDto {
   id: string;
   file: string;
+  title: string;
   status: InputRecord['status'];
-  source: InputRecord['source'];
-  ingestedAt: string;
+  // Human-readable label (never the raw InputSource object — the webview renders this directly).
+  source: string;
+  sourceType: InputRecord['source']['type'];
+  receivedAt: string;
 }
 
 export interface CheckpointDto {
@@ -385,6 +389,35 @@ function planDtos(): PlanDto[] {
     });
 }
 
+// Title shown for a Request: front-matter `title`, else the first markdown heading,
+// else the file name. Create Input writes a `# heading` and dropped files may carry either.
+function inputTitle(record: InputRecord): string {
+  try {
+    const abs = orchestrator.inputArtifactPath(record.id);
+    if (abs && fs.existsSync(abs)) {
+      const parsed = matter(fs.readFileSync(abs, 'utf8'));
+      const fmTitle = (parsed.data as Record<string, unknown>)?.title;
+      if (typeof fmTitle === 'string' && fmTitle.trim()) {
+        return fmTitle.trim();
+      }
+      const heading = parsed.content.split('\n').find(line => line.trim().startsWith('# '));
+      if (heading) {
+        return heading.replace(/^#\s*/, '').trim();
+      }
+    }
+  } catch {
+    // unreadable artifact — fall back to the file name
+  }
+  return path.basename(record.file || record.id);
+}
+
+function inputSourceLabel(source: InputRecord['source'] | undefined): string {
+  if (!source) {
+    return 'human';
+  }
+  return source.id ? `${source.type}:${source.id}` : source.type;
+}
+
 function inputDtos(): InputDto[] {
   return getStores()
     .inputs.loadAll()
@@ -392,9 +425,11 @@ function inputDtos(): InputDto[] {
     .map(i => ({
       id: i.id,
       file: i.file,
+      title: inputTitle(i),
       status: i.status,
-      source: i.source,
-      ingestedAt: i.ingestedAt
+      source: inputSourceLabel(i.source),
+      sourceType: i.source?.type || 'human',
+      receivedAt: i.ingestedAt
     }));
 }
 
