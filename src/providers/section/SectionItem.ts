@@ -6,6 +6,7 @@ import {
   Finding,
   InputRecord,
   McpServerConfig,
+  ModelDefinition,
   Plan,
   Run,
   ScheduleRecord,
@@ -27,6 +28,7 @@ export type SectionPayload =
   | { kind: 'mcpServer'; server: McpServerConfig }
   | { kind: 'mcpTool'; serverId: string; toolName: string }
   | { kind: 'tool'; tool: Tool }
+  | { kind: 'model'; model: ModelDefinition }
   | { kind: 'event'; event: EventRecord }
   | { kind: 'run'; run: Run }
   | { kind: 'employee'; employee: Employee };

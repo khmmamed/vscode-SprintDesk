@@ -226,6 +226,31 @@
         "command": "sprintdesk.selectAgentTools",
         "title": "SprintDesk: Select Agent Tools",
         "icon": "$(tools)"
+      },
+      {
+        "command": "sprintdesk.addModel",
+        "title": "SprintDesk: Add Model",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sprintdesk.editModel",
+        "title": "SprintDesk: Edit Model",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sprintdesk.removeModel",
+        "title": "SprintDesk: Remove Model",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sprintdesk.assignModelToAgent",
+        "title": "SprintDesk: Assign Model to Agent",
+        "icon": "$(person-add)"
+      },
+      {
+        "command": "sprintdesk.selectAgentModel",
+        "title": "SprintDesk: Select Agent Model",
+        "icon": "$(vm)"
       }
     ],
     "viewsContainers": {
@@ -408,6 +433,31 @@
           "command": "sprintdesk.selectAgentTools",
           "when": "view == sprintdesk-main && viewItem == employeeAgent",
           "group": "inline@5"
+        },
+        {
+          "command": "sprintdesk.selectAgentModel",
+          "when": "view == sprintdesk-main && viewItem == employeeAgent",
+          "group": "inline@6"
+        },
+        {
+          "command": "sprintdesk.assignModelToAgent",
+          "when": "view == sprintdesk-main && viewItem == modelItem",
+          "group": "inline@0"
+        },
+        {
+          "command": "sprintdesk.editModel",
+          "when": "view == sprintdesk-main && viewItem == modelItem",
+          "group": "inline@1"
+        },
+        {
+          "command": "sprintdesk.removeModel",
+          "when": "view == sprintdesk-main && viewItem == modelItem",
+          "group": "1_model@2"
+        },
+        {
+          "command": "sprintdesk.addModel",
+          "when": "view == sprintdesk-main && viewItem == sprintdeskSection:models",
+          "group": "inline@0"
         }
       ]
     },

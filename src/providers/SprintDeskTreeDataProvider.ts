@@ -4,6 +4,7 @@ export type SourceId =
   | 'people'
   | 'mcp'
   | 'tools'
+  | 'models'
   | 'requests'
   | 'plans'
   | 'findings'
@@ -46,6 +47,7 @@ export class SprintDeskTreeDataProvider implements vscode.TreeDataProvider<vscod
     { id: 'people', label: 'People', icon: 'organization', description: 'Humans, agents, teams, and runs' },
     { id: 'mcp', label: 'MCP', icon: 'server', description: 'Registered MCP servers and their tools' },
     { id: 'tools', label: 'Tools', icon: 'tools', description: 'Tool catalog referenced by agents' },
+    { id: 'models', label: 'Models', icon: 'vm', description: 'Registered model profiles assignable to agents' },
     { id: 'requests', label: 'Requests', icon: 'inbox', description: 'Inputs awaiting organization' },
     { id: 'plans', label: 'Plans', icon: 'checklist', description: 'Canonical plan registry' },
     { id: 'findings', label: 'Findings', icon: 'search', description: 'Plan-linked findings' },

@@ -157,6 +157,7 @@ describe('documentation consistency (v1.0.0)', () => {
       'People',
       'MCP',
       'Tools',
+      'Models',
       'Requests',
       'Plans',
       'Findings',
@@ -189,6 +190,21 @@ describe('documentation consistency (v1.0.0)', () => {
     const pkg = JSON.parse(read('package.json')) as { contributes?: { commands?: Array<{ command: string }> } };
     const commands = new Set((pkg.contributes?.commands ?? []).map((c) => c.command));
     for (const command of ['sprintdesk.assignOrchestrationRole', 'sprintdesk.clearOrchestrationRole']) {
+      assert.ok(commands.has(command), `manifest must declare ${command}`);
+    }
+  });
+
+  it('the model catalog is documented and wired (Slice V)', () => {
+    const changelog = read('CHANGELOG.md');
+    assert.match(changelog, /^### v1\.0 Slice V /m, 'CHANGELOG must document v1.0 Slice V');
+
+    const doc = read('docs/current-features.md');
+    assert.match(doc, /models\.yml/, 'current-features must document the model catalog store');
+    assert.match(doc, /modelId/, 'current-features must document the agent→model provenance link');
+
+    const pkg = JSON.parse(read('package.json')) as { contributes?: { commands?: Array<{ command: string }> } };
+    const commands = new Set((pkg.contributes?.commands ?? []).map((c) => c.command));
+    for (const command of ['sprintdesk.addModel', 'sprintdesk.assignModelToAgent', 'sprintdesk.selectAgentModel']) {
       assert.ok(commands.has(command), `manifest must declare ${command}`);
     }
   });

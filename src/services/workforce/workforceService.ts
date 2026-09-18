@@ -291,6 +291,11 @@ export function recordWorkforceAudit(entry: {
 
 export interface EmployeeConfigChange {
   modelProfile?: EmployeeModelProfile;
+  // v1.0 Slice V — catalog origin for the assigned model (additive). An empty
+  // string clears the link; omitting the field leaves it untouched.
+  modelId?: string;
+  // v1.0 Slice V — clears the assigned model (both the profile and its origin).
+  clearModel?: boolean;
   agentConfig?: AgentConfig;
   capabilities?: string[];
 }
@@ -300,8 +305,15 @@ export function performConfigChange(employeeId: string, changes: EmployeeConfigC
   const employee = stores.people.loadAll().find(e => e.id === employeeId || e.name === employeeId);
   if (!employee) throw new Error(`Employee not found: ${employeeId}`);
 
-  const updates: Partial<Pick<Employee, 'modelProfile' | 'agentConfig' | 'capabilities'>> = {};
+  const updates: Partial<Pick<Employee, 'modelProfile' | 'modelId' | 'agentConfig' | 'capabilities'>> = {};
+  if (changes.clearModel) {
+    updates.modelProfile = undefined;
+    updates.modelId = undefined;
+  }
   if (changes.modelProfile !== undefined) updates.modelProfile = changes.modelProfile;
+  if (changes.modelId !== undefined) {
+    updates.modelId = changes.modelId || undefined;
+  }
   if (changes.agentConfig !== undefined) updates.agentConfig = changes.agentConfig;
   if (changes.capabilities !== undefined) updates.capabilities = changes.capabilities;
 

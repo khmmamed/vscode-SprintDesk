@@ -45,6 +45,9 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
   (manual pass or event-driven) and executed by headless/terminal/noop/ollama workers; every state change
   flows through `startRun` / `finishRun` / `cancelRun`
 - **LLM providers** — ollama/openai model profiles per employee (model output is *data today*, never authority)
+- **Models (v1.1)** — a `Models` sidebar section catalogs models (`.SprintDesk/database/models.yml`) so a model is
+  registered once and assigned to agents from either side; assignment is gated by the `config-change` approval gate
+  and recorded via `Employee.modelId`
 - **MCP servers** — built-in `sprintdesk_*` toolset plus a capability-gated MCP client registry
 - **Findings** — the agent's primary output: materialized from the `Findings:` section of completed runs into
   first-class persisted objects with severity/confidence and a review journey
@@ -76,8 +79,9 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
 
 1. Open VS Code and click the SprintDesk icon in the sidebar
 2. Expand the **People** section to manage humans, agents, and teams
-3. Use the other sections — **Requests**, **Plans**, **Findings**, **Approvals**, **Schedules**, **Workflows**,
-   **Activity**, and **History** — or open the Workforce Control Center for bulk operations
+3. Use the other sections — **MCP**, **Tools**, **Models**, **Requests**, **Plans**, **Findings**, **Approvals**,
+   **Schedules**, **Workflows**, **Activity**, and **History** — or open the Workforce Control Center for bulk
+   operations
 
 ### Commands
 
@@ -91,6 +95,9 @@ pipeline is operated from the **Workforce Control Center** (`sprintdesk.openWork
 | Clear orchestration role | `sprintdesk.clearOrchestrationRole` |
 | Sync people from Git | `sprintdesk.syncPeopleFromGit` |
 | Process queue | `sprintdesk.processQueue` |
+| Add / edit / remove a model | `sprintdesk.addModel` / `sprintdesk.editModel` / `sprintdesk.removeModel` |
+| Assign a model to agent(s) | `sprintdesk.assignModelToAgent` |
+| Pick an agent's model | `sprintdesk.selectAgentModel` |
 | Start MCP server | `sprintdesk.startMcp` |
 | Refresh | `sprintdesk.refresh` |
 

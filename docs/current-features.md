@@ -71,7 +71,7 @@ the Organizer) touches the queue.
 
 ## Sidebar Control Center (v1.1)
 
-The Activity Bar shows eleven sections, each a **view over existing Plan-centric state** (no second work model, no
+The Activity Bar shows twelve sections, each a **view over existing Plan-centric state** (no second work model, no
 duplicate Plan storage):
 
 - **People** — Humans / Agents / Teams / Runs; agents carry optional `mcps` / `tools` capability refs. The seeded
@@ -80,6 +80,8 @@ duplicate Plan storage):
   unassigned (**Assign / Clear Orchestration Role**).
 - **MCP** — external MCP server registry (`mcp/servers.yml`): enable/disable, inspect, remove, add.
 - **Tools** — the `database/tools.yml` catalog (`ToolStore`, five seeded).
+- **Models** — the `database/models.yml` catalog (`ModelStore`); add / edit / remove a model (provider, model id,
+  base URL, API-key secret ref, options) and assign it to agents. Expanding a model lists the agents assigned to it.
 - **Requests** — `.SprintDesk/inputs/*.md` (`InputStore`); create, open, and run an Organizer pass.
 - **Plans** — canonical `PlanStore` rows; open / enqueue / cancel / requeue / reassign.
 - **Findings** — grouped by canonical `planId` (with an `Unlinked` bucket).
@@ -225,13 +227,17 @@ in Git and are not auto-imported.
 | Toggle a schedule / workflow | `sprintdesk.toggleSchedule` / `sprintdesk.toggleWorkflow` |
 | Add / toggle / inspect / remove an MCP server | `sprintdesk.addMcpServer` / `sprintdesk.toggleMcpServer` / `sprintdesk.inspectMcpServer` / `sprintdesk.removeMcpServer` |
 | Add / remove a tool | `sprintdesk.addTool` / `sprintdesk.removeTool` |
+| Add / edit / remove a model | `sprintdesk.addModel` / `sprintdesk.editModel` / `sprintdesk.removeModel` |
+| Assign a model to agent(s) / pick an agent's model | `sprintdesk.assignModelToAgent` / `sprintdesk.selectAgentModel` |
 | Cancel run | `sprintdesk.cancelRun` |
 | Start MCP server | `sprintdesk.startMcp` |
 | Refresh | `sprintdesk.refresh` |
 
-The sidebar shows eleven sections (People, MCP, Tools, Requests, Plans, Findings, Approvals, Schedules, Workflows,
-Activity, History); deeper bulk operations live in the Control Center webview. The v1.0 manifest declares no
-`sprintdesk.*` extension settings — operational configuration lives under `.SprintDesk/settings/`.
+The sidebar shows twelve sections (People, MCP, Tools, Models, Requests, Plans, Findings, Approvals, Schedules,
+Workflows, Activity, History); deeper bulk operations live in the Control Center webview. Model assignment writes a
+snapshot into `Employee.modelProfile` through `applyConfigChange` (so it honors the `config-change` approval gate and
+audit trail) and records the catalog origin in `Employee.modelId`. The v1.0 manifest declares no `sprintdesk.*`
+extension settings — operational configuration lives under `.SprintDesk/settings/`.
 
 ---
 

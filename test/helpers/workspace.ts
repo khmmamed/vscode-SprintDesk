@@ -33,6 +33,7 @@ export function makeWorkspace(): TestWorkspace {
     approvals: 'approvals',
     skills: 'skills',
     tools: 'tools',
+    models: 'models',
     eventRules: 'eventRules',
     classification: 'proposals',
     executionWindows: 'executionWindows'

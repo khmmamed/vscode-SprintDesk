@@ -157,6 +157,11 @@ export interface Employee {
   // v0.7 provider semantics (additive, non-breaking)
   modelProfile?: EmployeeModelProfile;
 
+  // v1.0 Slice V — provenance link to a ModelStore catalog entry. The runtime
+  // still reads the denormalized `modelProfile` snapshot; `modelId` records which
+  // catalog model it came from so the Models tree can show assignments.
+  modelId?: string;
+
   // v1.0 Slice T — agent capability references (additive, non-breaking). These
   // are ids/names resolved against the MCP registry and the ToolStore catalog.
   mcps?: string[];
@@ -386,6 +391,26 @@ export interface EmployeeModelProfile {
     maxTokens?: number;
     timeoutMs?: number;
   };
+}
+
+// v1.0 Slice V — the ModelStore catalog (.SprintDesk/database/models.yml). A
+// model is registered once here and assigned to agents; assignment snapshots the
+// provider fields into Employee.modelProfile while Employee.modelId records the
+// catalog origin.
+export interface ModelDefinition {
+  id: string;
+  name: string;
+  provider: LLMProviderKind;
+  model: string;
+  baseUrl?: string;
+  apiKeyRef?: string;
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+    timeoutMs?: number;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 // v0.7 MCP server registrations (additive, non-breaking)

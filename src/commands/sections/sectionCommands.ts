@@ -11,7 +11,9 @@ import * as mcpRegistry from '../../services/workforce/mcp/registry';
 import { inspectServer } from '../../services/workforce/mcp/client';
 import { openWorkforceControlCenter, WorkforceSection } from '../workforce/openWorkforceControlCenter';
 import { payloadOf, SectionItem } from '../../providers/section/SectionItem';
-import { Employee } from '../../data/types';
+import { Employee, EmployeeModelProfile, LLMProviderKind, ModelDefinition } from '../../data/types';
+import { DEFAULT_OLLAMA_BASEURL } from '../../services/workforce/llm/ollamaProvider';
+import { DEFAULT_OPENAI_BASEURL } from '../../services/workforce/llm/openaiProvider';
 
 export interface SectionRefreshTarget {
   refresh(): void;
@@ -65,6 +67,102 @@ async function pickActor(placeHolder: string): Promise<string | undefined> {
     { placeHolder }
   );
   return picked?.value;
+}
+
+function modelSlug(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
+}
+
+async function promptModel(existing?: ModelDefinition): Promise<ModelDefinition | undefined> {
+  const name = await vscode.window.showInputBox({
+    prompt: 'Model name (shown in the Models tree)',
+    value: existing?.name ?? ''
+  });
+  if (name === undefined) {return undefined;}
+  if (!name.trim()) {
+    vscode.window.showWarningMessage('SprintDesk: a model name is required');
+    return undefined;
+  }
+
+  const providerPick = await vscode.window.showQuickPick(
+    [{ label: 'Ollama', value: 'ollama' as LLMProviderKind }, { label: 'OpenAI', value: 'openai' as LLMProviderKind }],
+    { placeHolder: 'Provider' }
+  );
+  if (!providerPick) {return undefined;}
+  const provider = providerPick.value;
+
+  const model = await vscode.window.showInputBox({
+    prompt: 'Model id (e.g. gemma2:9b or gpt-4o-mini)',
+    value: existing?.model ?? ''
+  });
+  if (model === undefined) {return undefined;}
+  if (!model.trim()) {
+    vscode.window.showWarningMessage('SprintDesk: a model id is required');
+    return undefined;
+  }
+
+  const defaultBaseUrl = provider === 'ollama' ? DEFAULT_OLLAMA_BASEURL : DEFAULT_OPENAI_BASEURL;
+  const baseUrl = await vscode.window.showInputBox({
+    prompt: 'Base URL (optional)',
+    value: existing?.baseUrl ?? defaultBaseUrl
+  });
+  if (baseUrl === undefined) {return undefined;}
+
+  const apiKeyRef = await vscode.window.showInputBox({
+    prompt: 'API key secret reference (optional)',
+    value: existing?.apiKeyRef ?? ''
+  });
+  if (apiKeyRef === undefined) {return undefined;}
+
+  const temperatureInput = await vscode.window.showInputBox({
+    prompt: 'Temperature (optional, 0-2)',
+    value: existing?.options?.temperature !== undefined ? String(existing.options.temperature) : ''
+  });
+  if (temperatureInput === undefined) {return undefined;}
+
+  const maxTokensInput = await vscode.window.showInputBox({
+    prompt: 'Max tokens (optional)',
+    value: existing?.options?.maxTokens !== undefined ? String(existing.options.maxTokens) : ''
+  });
+  if (maxTokensInput === undefined) {return undefined;}
+
+  const options: NonNullable<ModelDefinition['options']> = {};
+  const temperature = temperatureInput.trim() ? Number(temperatureInput.trim()) : undefined;
+  if (temperature !== undefined && Number.isFinite(temperature)) {options.temperature = temperature;}
+  const maxTokens = maxTokensInput.trim() ? Number(maxTokensInput.trim()) : undefined;
+  if (maxTokens !== undefined && Number.isFinite(maxTokens)) {options.maxTokens = maxTokens;}
+
+  const now = new Date().toISOString();
+  return {
+    id: existing?.id ?? `model_${modelSlug(name)}`,
+    name: name.trim(),
+    provider,
+    model: model.trim(),
+    baseUrl: baseUrl.trim() || undefined,
+    apiKeyRef: apiKeyRef.trim() || undefined,
+    options: Object.keys(options).length ? options : undefined,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
+  };
+}
+
+function modelProfileSnapshot(model: ModelDefinition, employee: Employee): EmployeeModelProfile {
+  return {
+    name: employee.name,
+    provider: model.provider,
+    model: model.model,
+    baseUrl: model.baseUrl,
+    apiKeyRef: model.apiKeyRef,
+    options: model.options
+  };
+}
+
+function assignModelToEmployee(employee: Employee, model: ModelDefinition): { applied: boolean; approvalRequired: boolean } {
+  const result = workforceService.applyConfigChange(employee.id, {
+    modelProfile: modelProfileSnapshot(model, employee),
+    modelId: model.id
+  });
+  return { applied: result.applied, approvalRequired: Boolean(result.approvalRequired) };
 }
 
 export function registerSectionCommands(context: vscode.ExtensionContext, refreshTarget: SectionRefreshTarget): void {
@@ -273,6 +371,112 @@ export function registerSectionCommands(context: vscode.ExtensionContext, refres
       if (!picked) {return;}
       getStores().people.update(employee.id, { tools: picked.map(p => p.label) });
       refresh();
+    }),
+
+    vscode.commands.registerCommand('sprintdesk.addModel', async () => {
+      const model = await promptModel();
+      if (!model) {return;}
+      getStores().models.upsert(model);
+      refresh();
+    }),
+
+    vscode.commands.registerCommand('sprintdesk.editModel', async (arg?: unknown) => {
+      const existing = payloadOf(arg, 'model')?.model;
+      if (!existing) {return;}
+      const model = await promptModel(existing);
+      if (!model) {return;}
+      getStores().models.upsert(model);
+      refresh();
+    }),
+
+    vscode.commands.registerCommand('sprintdesk.removeModel', async (arg?: unknown) => {
+      const model = payloadOf(arg, 'model')?.model;
+      if (!model) {return;}
+      const confirm = await vscode.window.showWarningMessage(
+        `Remove model "${model.name}"? Agents keep their assigned profile.`,
+        { modal: true },
+        'Remove'
+      );
+      if (confirm !== 'Remove') {return;}
+      getStores().models.delete(model.id);
+      refresh();
+    }),
+
+    // Model-first assignment: pick agents to assign this catalog model to.
+    vscode.commands.registerCommand('sprintdesk.assignModelToAgent', async (arg?: unknown) => {
+      const model = payloadOf(arg, 'model')?.model;
+      if (!model) {return;}
+      const agents = getStores().people.loadAll().filter(e => e.role === 'agent');
+      if (agents.length === 0) {
+        vscode.window.showInformationMessage('SprintDesk: no agents to assign this model to');
+        return;
+      }
+      const picked = await vscode.window.showQuickPick(
+        agents
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(a => ({ label: a.name, description: a.modelProfile?.model ? `current: ${a.modelProfile.model}` : 'no model', picked: a.modelId === model.id, employee: a })),
+        { canPickMany: true, placeHolder: `Assign ${model.name} to agents` }
+      );
+      if (!picked) {return;}
+      let applied = 0;
+      let pending = 0;
+      for (const item of picked) {
+        const outcome = assignModelToEmployee(item.employee, model);
+        if (outcome.applied) {applied++;} else if (outcome.approvalRequired) {pending++;}
+      }
+      refresh();
+      if (pending > 0) {
+        vscode.window.showInformationMessage(`SprintDesk: ${applied} assigned, ${pending} awaiting approval`);
+      } else {
+        vscode.window.showInformationMessage(`SprintDesk: ${model.name} assigned to ${applied} agent(s)`);
+      }
+    }),
+
+    // Agent-first assignment: pick one catalog model for this agent (or unassign).
+    vscode.commands.registerCommand('sprintdesk.selectAgentModel', async (arg?: unknown) => {
+      const employee = employeeFrom(arg);
+      if (!employee) {return;}
+      const store = getStores().models;
+      const models = store.loadAll().slice().sort((a, b) => a.name.localeCompare(b.name));
+      if (models.length === 0) {
+        const add = await vscode.window.showInformationMessage('SprintDesk: no models registered yet', 'Add Model');
+        if (add === 'Add Model') {await vscode.commands.executeCommand('sprintdesk.addModel');}
+        return;
+      }
+      const picked = await vscode.window.showQuickPick(
+        [
+          { label: '$(close) Unassigned', description: 'clear the assigned model', modelId: '' },
+          ...models.map(m => ({
+            label: m.name,
+            description: `${m.provider} · ${m.model}`,
+            modelId: m.id
+          }))
+        ],
+        { placeHolder: `Model for ${employee.name}` }
+      );
+      if (!picked) {return;}
+
+      if (!picked.modelId) {
+        const result = workforceService.applyConfigChange(employee.id, { clearModel: true });
+        refresh();
+        vscode.window.showInformationMessage(
+          result.applied
+            ? `SprintDesk: cleared the model for ${employee.name}`
+            : `SprintDesk: clearing the model for ${employee.name} awaits approval`
+        );
+        return;
+      }
+
+      const model = store.getById(picked.modelId);
+      if (!model) {return;}
+      const outcome = assignModelToEmployee(employee, model);
+      refresh();
+      vscode.window.showInformationMessage(
+        outcome.applied
+          ? `SprintDesk: assigned ${model.name} to ${employee.name}`
+          : `SprintDesk: assigning ${model.name} to ${employee.name} awaits approval`
+      );
     })
   );
 }

@@ -32,6 +32,20 @@ resolves canonical Plan IDs and introduces no second work model and no duplicate
 - **Manifest.** New `sprintdesk.*` commands and `view/title` + `view/item/context` menu contributions; no
   `contributes.configuration` is added.
 
+### v1.0 Slice V — Model Catalog
+
+- **Models section.** A new `Models` sidebar section lists the `ModelStore` catalog
+  (`.SprintDesk/database/models.yml`, mirroring the `ToolStore` pattern), showing each model's provider, model id,
+  base URL, and any assigned agents.
+- **Register models once, assign to agents.** **Add Model** / **Edit Model** / **Remove Model** register an entry
+  (provider, model id, base URL, API-key secret ref, temperature/max tokens). Assignment works in both directions:
+  **Assign Model to Agent** from a model row (picks one or more agents) and **Select Agent Model** from an agent row
+  (picks one model, or Unassigned).
+- **Assignment is gated and audited.** Assignment writes a snapshot into `Employee.modelProfile` through
+  `applyConfigChange`, so it honors the existing `config-change` approval gate and audit trail; the additive
+  `Employee.modelId` records the catalog origin and lets the Models tree show which agents use a model. Clearing a
+  model uses the new `clearModel` change. No `contributes.configuration` is added.
+
 ### v1.0 Slice U — Orchestrator Team & Automatic Request Intake
 
 - **Automatic intake.** Dropping a `.SprintDesk/inputs/*.md` Request now produces its Plan with no manual step:

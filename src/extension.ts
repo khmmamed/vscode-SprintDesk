@@ -16,6 +16,7 @@ import { schedulesTreeDataProvider } from './providers/schedules/SchedulesTreeDa
 import { workflowsTreeDataProvider } from './providers/workflows/WorkflowsTreeDataProvider';
 import { mcpTreeDataProvider } from './providers/mcp/McpTreeDataProvider';
 import { toolsTreeDataProvider } from './providers/tools/ToolsTreeDataProvider';
+import { modelsTreeDataProvider } from './providers/models/ModelsTreeDataProvider';
 import { activityTreeDataProvider } from './providers/activity/ActivityTreeDataProvider';
 // Services
 import { registerWorkforceCommands } from './commands/workforce/workforceCommands';
@@ -47,6 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
     people: workforceProvider as any,
     mcp: mcpTreeDataProvider,
     tools: toolsTreeDataProvider,
+    models: modelsTreeDataProvider,
     requests: requestsTreeDataProvider,
     plans: plansTreeDataProvider,
     findings: findingsTreeDataProvider,

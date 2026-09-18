@@ -11,6 +11,7 @@ import { PeopleStore } from './PeopleStore';
 import { EmployeeTeamStore } from './EmployeeTeamStore';
 import { SkillStore } from './SkillStore';
 import { ToolStore } from './ToolStore';
+import { ModelStore } from './ModelStore';
 import { PolicyStore } from './PolicyStore';
 import { QueueSettingsStore } from './QueueSettingsStore';
 import { McpServerStore } from './McpServerStore';
@@ -41,6 +42,7 @@ export interface Stores {
   teams: EmployeeTeamStore;
   skills: SkillStore;
   tools: ToolStore;
+  models: ModelStore;
   policy: PolicyStore;
   queue: QueueSettingsStore;
   mcpServers: McpServerStore;
@@ -84,6 +86,7 @@ export function getStores(workspaceRoot?: string): Stores {
       teams: new EmployeeTeamStore(root),
       skills: new SkillStore(root),
       tools: new ToolStore(root),
+      models: new ModelStore(root),
       policy: new PolicyStore(root),
       queue: new QueueSettingsStore(root),
       mcpServers: new McpServerStore(root),
