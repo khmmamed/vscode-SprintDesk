@@ -208,4 +208,15 @@ describe('documentation consistency (v1.0.0)', () => {
       assert.ok(commands.has(command), `manifest must declare ${command}`);
     }
   });
+
+  it('the plan refinement pipeline is documented (Slice W)', () => {
+    const changelog = read('CHANGELOG.md');
+    assert.match(changelog, /^### v1\.0 Slice W /m, 'CHANGELOG must document v1.0 Slice W');
+
+    const doc = read('docs/current-features.md');
+    assert.match(doc, /runPlanPipeline/, 'current-features must document the refinement pipeline');
+    assert.match(doc, /plan\.ready/, 'current-features must document the terminal ready event');
+    assert.match(doc, /## Classification/, 'current-features must document stage-owned sections');
+    assert.match(doc, /idempotent/i, 'current-features must document pipeline idempotence');
+  });
 });

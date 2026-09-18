@@ -349,6 +349,14 @@ export function createPlan(
     scheduling: { status: 'draft', mode: 'immediate', dependsOn: [] },
     execution: { status: 'unassigned' },
     validation: { decision: 'passed', errors: [], artifacts: [] },
+    pipeline: {
+      stage: 'planner',
+      updatedAt: now,
+      history: [
+        { stage: 'reader', at: now, source: 'deterministic' },
+        { stage: 'planner', at: now, source: 'deterministic' }
+      ]
+    },
     createdAt: now,
     updatedAt: now
   };

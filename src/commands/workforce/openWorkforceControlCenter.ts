@@ -17,7 +17,7 @@ import * as workforceService from '../../services/workforce/workforceService';
 import * as eventRulesService from '../../services/workforce/eventRulesService';
 import * as executionWindowService from '../../services/workforce/executionWindowService';
 import { subscribeEvents } from '../../services/workforce/events';
-import { Approval, Checkpoint, Cycle, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, InputRecord, Plan, Run, ScheduleRecord, Proposal, WorkerMode } from '../../data/types';
+import { Approval, Checkpoint, Cycle, Employee, EmployeeModelProfile, EventRecord, ExecutionWindow, Finding, FindingStatus, InputRecord, Plan, PlanPipelineStage, Run, ScheduleRecord, Proposal, WorkerMode } from '../../data/types';
 import { workforceTreeDataProvider } from '../../providers/workforce/WorkforceTreeDataProvider';
 
 export type WorkforceSection =
@@ -105,6 +105,8 @@ export interface PlanDto {
   status: Plan['scheduling']['status'];
   category: string;
   priority: string;
+  // v1.0 Slice W — refinement stage, mirrored from the registry Plan.pipeline.
+  stage: PlanPipelineStage;
   assignedAgent?: string;
   runId?: string;
   createdAt: string;
@@ -381,6 +383,7 @@ function planDtos(): PlanDto[] {
         status: p.scheduling?.status,
         category: axis?.category || 'research',
         priority: axis?.priority || 'medium',
+        stage: p.pipeline?.stage || 'reader',
         assignedAgent: p.execution?.assignedAgent,
         runId: latestRun?.id,
         createdAt: p.createdAt,

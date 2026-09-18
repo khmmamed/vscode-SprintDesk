@@ -10,6 +10,26 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 v1.0 runtime directly in the Activity Bar. Every categorized view is a **view over Plan-centric state** — it
 resolves canonical Plan IDs and introduces no second work model and no duplicate Plan storage.
 
+### v1.0 Slice W — Plan Refinement Pipeline
+
+- **One Request, one refined Plan.** Request-born plans now flow through a staged pipeline on each intake pass:
+  `reader → planner → classifier → organizer → scheduler`, terminating at `ready` (ready for the gated
+  Dispatcher — execution itself still requires `queueSettings.enabled`). `runIntakePass` ends by calling
+  `runPendingPipelines()`.
+- **Each stage owns its own section.** Classifier writes `## Classification`, Organizer writes `## Breakdown` /
+  `## Dependencies` / `## Assignment`, Scheduler writes `## Execution Plan`; the Reader/Planner own
+  Objective/Implementation. Sections are optional and empty stages leave the artifact byte-identical.
+- **Idempotent and convergent.** `Plan.pipeline` (registry-authoritative, mirrored in front-matter) records the
+  stage and a per-stage history; each stage hashes its own inputs, so a steady-state pass rewrites nothing and
+  emits nothing. Editing a plan re-runs only the affected downstream stages.
+- **Hybrid refinement.** A stage runs the assigned Orchestrator-role member's model when one resolves
+  (`modelProfile`/`modelId`), otherwise it falls back to the deterministic result; scheduling stays
+  registry-authoritative. Synthetic (workflow/schedule) and proposal-derived plans are excluded.
+- **Observability.** New `plan.pipeline.stage` (with `stage`/`source`/`memberId`) and terminal `plan.ready` events;
+  the Control Center Plans rows show the current stage.
+- **Fix.** Plain-markdown Requests (no front-matter) are now read from their heading/paragraph, so manually
+  dropped files produce Plans; intake failures are surfaced as `intake.failed` instead of being swallowed.
+
 ### v1.0 Slice T — Plan-native sidebar Control Center
 
 - **Eleven sections.** `People`, `MCP`, `Tools`, `Requests`, `Plans`, `Findings`, `Approvals`, `Schedules`,

@@ -10,6 +10,8 @@ import {
   PlanComplexity,
   PlanExecutionMode,
   PlanLineage,
+  PlanPipeline,
+  PlanPipelineStage,
   PlanPriority,
   PlanRisk,
   PlanUrgency
@@ -20,18 +22,28 @@ export interface PlanMdSections {
   implementation: string;
   acceptanceCriteria: string;
   constraints: string;
+  // v1.0 Slice W — stage-owned sections. Absent/empty on a reader-only plan, so
+  // an untouched artifact stays byte-identical to the pre-pipeline format.
+  classification?: string;
+  breakdown?: string;
+  dependencies?: string;
+  assignment?: string;
+  executionPlan?: string;
 }
 
 export interface PlanMdFrontMatter {
   id: string;
   version: number;
   lineage?: PlanLineage;
+  // Mirror of the registry-authoritative Plan.pipeline.stage, for humans.
+  pipeline?: PlanPipelineStage;
 }
 
 export interface ReadPlanMdResult {
   id: string;
   version: number;
   lineage: PlanLineage;
+  pipeline?: PlanPipelineStage;
   sections: PlanMdSections;
   raw: string;
 }
@@ -40,7 +52,12 @@ const SECTION_KEYS = new Map<string, keyof PlanMdSections>([
   ['Objective', 'objective'],
   ['Implementation', 'implementation'],
   ['Acceptance Criteria', 'acceptanceCriteria'],
-  ['Constraints', 'constraints']
+  ['Constraints', 'constraints'],
+  ['Classification', 'classification'],
+  ['Breakdown', 'breakdown'],
+  ['Dependencies', 'dependencies'],
+  ['Assignment', 'assignment'],
+  ['Execution Plan', 'executionPlan']
 ]);
 
 function resolveRoot(workspaceRoot?: string): string {
@@ -168,10 +185,19 @@ export function materializePlan(
   return plan;
 }
 
-// Orchestrator content path only — the .md body is written from source content and
-// is never regenerated from registry state (no savePlanMd mirror of classification).
+// The .md body is written from source/stage content and is never regenerated from
+// registry state (no savePlanMd mirror of classification). Slice W stages append
+// their own optional sections; the four core sections are always present.
+const OPTIONAL_SECTIONS: Array<[string, keyof PlanMdSections]> = [
+  ['Classification', 'classification'],
+  ['Breakdown', 'breakdown'],
+  ['Dependencies', 'dependencies'],
+  ['Assignment', 'assignment'],
+  ['Execution Plan', 'executionPlan']
+];
+
 export function buildPlanMd(
-  plan: Pick<Plan, 'id' | 'version' | 'lineage'>,
+  plan: Pick<Plan, 'id' | 'version' | 'lineage'> & { pipeline?: PlanPipeline },
   sections: PlanMdSections
 ): string {
   const body = [
@@ -193,17 +219,24 @@ export function buildPlanMd(
     '',
     sections.constraints.trim(),
     ''
-  ].join('\n');
+  ];
+  for (const [heading, key] of OPTIONAL_SECTIONS) {
+    const value = sections[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      body.push(`## ${heading}`, '', value.trim(), '');
+    }
+  }
   const data: PlanMdFrontMatter = {
     id: plan.id,
     version: plan.version,
-    lineage: plan.lineage
+    lineage: plan.lineage,
+    ...(plan.pipeline ? { pipeline: plan.pipeline.stage } : {})
   };
-  return matter.stringify(body, data);
+  return matter.stringify(body.join('\n'), data);
 }
 
 export function writePlanMd(
-  plan: Pick<Plan, 'id' | 'version' | 'lineage' | 'file'>,
+  plan: Pick<Plan, 'id' | 'version' | 'lineage' | 'file'> & { pipeline?: PlanPipeline },
   sections: PlanMdSections,
   workspaceRoot?: string
 ): string {
@@ -222,7 +255,15 @@ export function readPlanMd(file: string): ReadPlanMdResult {
   const id = (front.id as string) || path.basename(file, '.md');
   const version = typeof front.version === 'number' ? front.version : 1;
   const lineage = (front.lineage || {}) as PlanLineage;
-  return { id, version, lineage, sections: parseSections(parsed.content), raw };
+  const pipeline = front.pipeline as PlanPipelineStage | undefined;
+  return {
+    id,
+    version,
+    lineage,
+    ...(pipeline ? { pipeline } : {}),
+    sections: parseSections(parsed.content),
+    raw
+  };
 }
 
 export function parseSections(content: string): PlanMdSections {

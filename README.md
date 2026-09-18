@@ -11,10 +11,12 @@ reviewable. A **Plan is the only unit that can enter execution**.
 ### Plan-Native Work
 - **Inputs** - Drop `inputs/*.md` (or use the Create Input form); automatic intake turns them into Plans with no
   manual step, while Plan execution stays gated until the queue is enabled
+- **Refinement pipeline** - each Request-born plan advances through classifier → organizer → scheduler on the same
+  artifact until it is `ready`, with every stage idempotently owning its own plan section
 - **Plans** - `plans/PLAN-*.md` artifacts with a runtime registry tracking classification, dependencies,
-  scheduling, execution, and lineage
+  scheduling, execution, lineage, and refinement stage
 - **Organizer** - re-classifies and prioritizes existing plans, detects dependencies, and selects the execution
-  mode and agent without ever rewriting plan content
+  mode and agent; its low-level registry pass never rewrites plan content
 - **Cycles & Checkpoints** - each ingest opens a Cycle; a passing validation writes a Checkpoint and closes it
 - **Deploy authorization** - checkpoints are deployed only after an explicit human decision
 

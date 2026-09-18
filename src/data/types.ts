@@ -817,6 +817,29 @@ export interface PlanSource {
   checkpointId?: string;
 }
 
+// v1.0 Slice W — staged plan refinement pipeline. A Request flows through
+// reader → planner → classifier → organizer → scheduler; each stage enriches the
+// same plan artifact, and `ready` is the terminal "ready for implementation"
+// stage (execution itself stays gated by queueSettings.enabled).
+export type PlanPipelineStage = 'reader' | 'planner' | 'classifier' | 'organizer' | 'scheduler' | 'ready';
+
+export interface PlanPipelineStageRecord {
+  stage: PlanPipelineStage;
+  at: string;
+  // Assigned Orchestrator-team member the stage ran as (attribution only).
+  by?: string;
+  source: 'deterministic' | 'llm';
+  // Content hash of the plan the stage consumed; used for idempotent re-runs.
+  // Reader/planner records omit it (plan creation is already objective-deduped).
+  hash?: string;
+}
+
+export interface PlanPipeline {
+  stage: PlanPipelineStage;
+  updatedAt: string;
+  history: PlanPipelineStageRecord[];
+}
+
 export interface Plan {
   id: string;
   file: string;
@@ -828,6 +851,7 @@ export interface Plan {
   scheduling: PlanScheduling;
   execution: PlanExecution;
   validation: PlanValidation;
+  pipeline?: PlanPipeline;
   createdAt: string;
   updatedAt: string;
 }

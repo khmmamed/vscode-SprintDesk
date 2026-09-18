@@ -17,19 +17,20 @@ equivalent is a Plan).
 ### 🔄 The lifecycle
 
 ```
-Input → Plan → Organize → Dispatch → Run → Finding → Validate → Checkpoint → Deploy
+Input → Reader → Planner → Classifier → Organizer → Scheduler (ready) → Dispatch → Run → Finding → Validate → Checkpoint → Deploy
 ```
 
 - **Orchestrator** ("what work should exist?") ingests `inputs/*.md` and writes semantic `plans/PLAN-*.md`
-  artifacts with an initial classification.
-- **Organizer** ("what is this, how urgent, who, when?") re-evaluates existing plans only — re-classification,
-  priority, dependencies, execution mode, and agent selection — and writes the registry, never plan content.
+  artifacts with an initial classification (the `reader`/`planner` stages).
+- **Refinement pipeline** (v1.1 Slice W) then advances each Request-born plan through `classifier → organizer →
+  scheduler` on the same artifact, ending at `ready`. See **Plan refinement pipeline** below.
 - **Dispatcher** enqueues an organized, ready plan through `queueService.createRun(planId, agentId)`.
 - **Validator** turns a completed run into a `PlanValidation` record and, on a pass, creates a **Checkpoint** and
   closes the cycle. **Deploy** is a separate, human-authorized step.
 
-Two custody rules are enforced by tests: the Organizer never writes `plans/*.md`, and only the Dispatcher (never
-the Organizer) touches the queue.
+Custody rules are enforced by tests: each pipeline stage writes only the plan sections it owns, the low-level
+Organizer registry pass (`runOrganizerPass`) writes only `database/plans.yml`, and only the Dispatcher (never the
+Organizer or the pipeline) touches the queue.
 
 ### 📥 Inputs
 - Drop `inputs/*.md` (Basket 1) or use the Control Center **Create Input** form.
@@ -37,19 +38,35 @@ the Organizer) touches the queue.
   `InputRecord` and opens a `Cycle`.
 - `orchestrate()` decomposes an input into one or more plans, capped by `maxPlansPerPass` (default 5) and deduped
   by normalized objective. Emits `plan.created` / `input.planned` / `cycle.opened`.
-- **Automatic intake (v1.1).** `runIntakePass()` drives discover → ingest → orchestrate → organize → scheduling
-  decision with no manual step. Three convergent discovery paths — an `input.created` event trigger, a
-  `FileSystemWatcher` on `inputs/*.md`, and interval reconciliation — all run the same idempotent pass, so one
-  Request converges on one Plan lineage. Intake and organization are always on; **execution stays gated** by
-  `queueSettings.enabled`. Stage events (`orchestration.reader/classifier/planner/organizer/scheduler`) appear in
-  Activity.
+- **Automatic intake (v1.1).** `runIntakePass()` drives discover → ingest → orchestrate → refine (classifier →
+  organizer → scheduler) with no manual step. Three convergent discovery paths — an `input.created` event
+  trigger, a `FileSystemWatcher` on `inputs/*.md`, and interval reconciliation — all run the same idempotent
+  pass, so one Request converges on one Plan lineage. Intake and refinement are always on; **execution stays
+  gated** by `queueSettings.enabled`. Stage events (`orchestration.reader/classifier/planner/organizer/scheduler`)
+  appear in Activity.
 
 ### 🗂 Plans
-- `plans/PLAN-*.md` artifacts (front-matter `id`/`version`/`lineage`; body Objective / Implementation / Acceptance
-  Criteria / Constraints) written only by the Orchestrator content path.
+- `plans/PLAN-*.md` artifacts (front-matter `id`/`version`/`lineage`/`pipeline`; body Objective / Implementation /
+  Acceptance Criteria / Constraints plus the optional stage-owned sections below).
 - Registry `database/plans.yml`: six-axis classification (`original` and `current`), organization status/version,
-  scheduling, execution, validation, and lineage.
-- Control Center **Plans** tab; MCP `plansList` / `plansGet` / `plansReplan`.
+  scheduling, execution, validation, lineage, and `pipeline`.
+- Control Center **Plans** tab (shows the current refinement stage); MCP `plansList` / `plansGet` / `plansReplan`.
+
+### 🧬 Plan refinement pipeline
+- `runPlanPipeline(planId)` advances one plan through **classifier → organizer → scheduler**, then
+  `runPendingPipelines()` drives every eligible plan at the end of an intake pass. A Request-born plan always
+  terminates at the `ready` stage (`plan.ready`), meaning ready for the gated Dispatcher — never an automatic
+  execution.
+- Each stage owns its own plan section and is idempotent (a content hash of its inputs is stored on
+  `Plan.pipeline.history`): Reader/Planner write Objective/Implementation, Classifier writes `## Classification`,
+  Organizer writes `## Breakdown` / `## Dependencies` / `## Assignment`, Scheduler writes `## Execution Plan`. A
+  steady-state pass rewrites nothing and emits nothing.
+- Refinement is **hybrid**: a stage runs the assigned Orchestrator-role member's model when one is resolvable
+  (`modelProfile`/`modelId`), and otherwise falls back to the deterministic result. Scheduling is always
+  deterministic (registry-authoritative). Synthetic (workflow/schedule) and proposal-derived plans are not owned
+  by this pipeline.
+- Events: `plan.pipeline.stage` per advance (payload `stage`/`source`/`memberId`), terminal `plan.ready`, plus the
+  existing `orchestration.*` stage events.
 
 ### 🔁 Cycles & Checkpoints
 - `database/cycles.yml` opens on ingest and closes on a passing validation (`closed-pass`) or escalation.

@@ -2,7 +2,7 @@ import { getStores } from '../../../data/stores';
 import { emitEvent, subscribeEvents } from '../events';
 import { getQueueSettings } from '../queueService';
 import { ingestInput, listInputs, orchestrate } from '../orchestrator';
-import { runOrganizerPass } from '../plan/organizer';
+import { runPendingPipelines } from '../pipeline/planPipeline';
 import { memberForRole } from '../orchestration/roles';
 
 const EVENT_SOURCE = 'intake';
@@ -54,24 +54,33 @@ export async function runIntakePass(opts: IntakePassOptions = {}): Promise<Intak
     }
 
     const planIds = Object.values(planned).flat();
-    const organizer = runOrganizerPass({ workspaceRoot: root, planIds: planIds.length ? planIds : undefined });
+    const pipeline = await runPendingPipelines({
+      workspaceRoot: root,
+      planIds: planIds.length ? planIds : undefined
+    });
     emitEvent('orchestration.organizer.completed', EVENT_SOURCE, {
-      examined: organizer.examined,
-      changed: organizer.changed,
+      examined: pipeline.examined,
+      changed: pipeline.organizer.changed,
       memberId: memberForRole('organizer', root)?.id
     });
 
-    // Intake stops at the scheduling decision. Execution is gated: the existing
-    // scheduler/dispatcher only dispatch when queue execution is enabled.
+    // The pipeline stops at the scheduling decision. Execution is gated: the
+    // existing scheduler/dispatcher only dispatch when queue execution is enabled.
     const queueEnabled = getQueueSettings().enabled;
     emitEvent('orchestration.scheduler.evaluated', EVENT_SOURCE, {
       queueEnabled,
       executionGated: !queueEnabled,
       planIds,
+      ready: pipeline.ready,
       memberId: memberForRole('scheduler', root)?.id
     });
 
-    return { ingested, planned, organizer: { examined: organizer.examined, changed: organizer.changed }, queueEnabled };
+    return {
+      ingested,
+      planned,
+      organizer: { examined: pipeline.examined, changed: pipeline.organizer.changed },
+      queueEnabled
+    };
   } finally {
     running = false;
     if (rerunRequested) {

@@ -158,6 +158,7 @@ interface PlanDto {
   title: string;
   status: string;
   priority: string;
+  stage?: string;
   assignedTo?: string;
   inputId?: string;
   classification?: string;
@@ -2070,6 +2071,7 @@ export const WorkforceControlCenter: React.FunctionComponent = () => {
                 <span style={styles.name}>{p.title}</span>
                 <span style={{ ...styles.statusChip, color: p.status === "active" ? "#4caf50" : p.status === "completed" ? "#90caf9" : p.status === "failed" ? "#e53935" : p.status === "cancelled" ? "#9e9e9e" : "#ffb74d" }}>{p.status}</span>
                 <span style={styles.chip}>{p.priority}</span>
+                {p.stage && <span style={styles.chip}>{p.stage === "ready" ? "ready" : `stage ${p.stage}`}</span>}
                 {p.classification && <span style={styles.chip}>{p.classification}</span>}
                 {p.schedulingStatus && <span style={styles.chip}>sched {p.schedulingStatus}</span>}
                 <span style={{ flex: 1 }} />
