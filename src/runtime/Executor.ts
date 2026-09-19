@@ -17,8 +17,11 @@ import {
   type Resource,
 } from "../kernel/index.js";
 import { createArtifactService, type ArtifactService } from "./ArtifactService.js";
+import type { ExecuteOptions } from "./ExecutionBackend.js";
 import type { ResourceResolver, ResolvedResources } from "./ResourceResolver.js";
 import type { Artifact, ArtifactStore } from "./persistence/ArtifactStore.js";
+
+export type { ExecuteOptions } from "./ExecutionBackend.js";
 
 export type { NodeFailureKind } from "../kernel/index.js";
 
@@ -76,15 +79,6 @@ export interface ExecutorOptions {
   readonly capabilityHandlerRegistry?: CapabilityHandlerRegistry;
   readonly resourceResolver?: ResourceResolver;
   readonly artifactStore?: ArtifactStore;
-}
-
-export interface ExecuteOptions {
-  readonly id?: string;
-  readonly initialState?: State;
-  readonly eventBus?: EventBus;
-  readonly signal?: AbortSignal;
-  readonly pipelineId?: string;
-  readonly pipelineVersion?: number;
 }
 
 export class Executor {

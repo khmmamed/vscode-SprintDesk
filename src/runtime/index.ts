@@ -8,9 +8,10 @@ export {
   type NodeFailureKind,
   type NodeInput,
   type NodeOutput,
-  type ExecuteOptions,
   type ExecutorOptions,
 } from "./Executor.js";
+export { ExecutionBackend, type ExecuteOptions } from "./ExecutionBackend.js";
+export { InProcessExecutionBackend } from "./InProcessExecutionBackend.js";
 export { createArtifactService, type ArtifactService } from "./ArtifactService.js";
 export type { ResourceResolver, ResolvedResources } from "./ResourceResolver.js";
 export { RegistryResourceResolver } from "./RegistryResourceResolver.js";

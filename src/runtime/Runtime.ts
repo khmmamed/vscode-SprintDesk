@@ -8,7 +8,9 @@ import {
   type NodeFailureKind,
   type RunStatus,
 } from "../kernel/index.js";
-import { Executor, type ExecuteOptions } from "./Executor.js";
+import { ExecutionBackend, type ExecuteOptions } from "./ExecutionBackend.js";
+import { InProcessExecutionBackend } from "./InProcessExecutionBackend.js";
+import { Executor } from "./Executor.js";
 import { MemoryRunStore } from "./persistence/MemoryRunStore.js";
 import {
   toStoredNodeRun,
@@ -22,7 +24,8 @@ export const RUN_INTERRUPTED_ERROR = "Run was interrupted by system restart";
 export type RuntimeRunStatus = RunStatus;
 
 export interface RuntimeOptions {
-  readonly executor: Executor;
+  readonly backend?: ExecutionBackend;
+  readonly executor?: Executor;
   readonly eventBus?: EventBus;
   readonly runStore?: RunStore;
 }
@@ -61,13 +64,13 @@ interface RunRecord {
 }
 
 export class Runtime {
-  readonly executor: Executor;
+  readonly backend: ExecutionBackend;
   readonly eventBus?: EventBus;
   readonly runStore: RunStore;
   private readonly records = new Map<string, RunRecord>();
 
   constructor(options: RuntimeOptions) {
-    this.executor = options.executor;
+    this.backend = options.backend ?? (options.executor ? new InProcessExecutionBackend(options.executor) : new InProcessExecutionBackend(new Executor()));
     this.eventBus = options.eventBus;
     this.runStore = options.runStore ?? new MemoryRunStore();
     for (const stored of this.runStore.list()) {
@@ -317,7 +320,7 @@ export class Runtime {
       pipelineVersion: version.version,
     };
     try {
-      const execution = await this.executor.execute(version, executeOptions);
+      const execution = await this.backend.execute(version, executeOptions);
       this.complete(record, execution);
       return execution;
     } catch (error) {
