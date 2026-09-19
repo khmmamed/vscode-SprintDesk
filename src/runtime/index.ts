@@ -1,9 +1,11 @@
 export {
   Executor,
   ExecutionCancelledError,
+  NodeExecutionError,
   type CapabilityExecutionContext,
   type CapabilityNodeInput,
   type NodeAction,
+  type NodeFailureKind,
   type NodeInput,
   type NodeOutput,
   type ExecuteOptions,
@@ -14,6 +16,7 @@ export type { ResourceResolver, ResolvedResources } from "./ResourceResolver.js"
 export { RegistryResourceResolver } from "./RegistryResourceResolver.js";
 export {
   Runtime,
+  RUN_INTERRUPTED_ERROR,
   type RuntimeOptions,
   type RuntimeRunOptions,
   type RuntimeRunStatus,
@@ -34,7 +37,7 @@ export {
 } from "./Dispatcher.js";
 export { MemoryRunStore } from "./persistence/MemoryRunStore.js";
 export { FileRunStore, type FileRunStoreOptions } from "./persistence/FileRunStore.js";
-export type { RunStore, StoredRun, StoredNodeRun } from "./persistence/RunStore.js";
+export type { RunStore, StoredNodeAttempt, StoredNodeRun, StoredRetryPolicy, StoredRun } from "./persistence/RunStore.js";
 export {
   parseArtifact,
   type Artifact,
@@ -61,6 +64,7 @@ export {
   type ScheduleStore,
   type StoredEdge,
   type StoredGraph,
+  type StoredNodeRetryPolicy,
   type StoredNode,
   type StoredPipelineVersion,
   type StoredResourceReference,

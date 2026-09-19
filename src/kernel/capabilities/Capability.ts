@@ -24,6 +24,9 @@ export class Capability {
     if (type.length === 0) {
       throw new DomainError({ code: "INVALID_INPUT", message: "Capability type must be a non-empty string" });
     }
+    if (!Number.isInteger(options.version) || options.version < 1) {
+      throw new DomainError({ code: "INVALID_INPUT", message: "Capability version must be a positive integer" });
+    }
     this.id = id;
     this.type = type;
     this.version = options.version;

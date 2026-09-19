@@ -1,4 +1,5 @@
 import { DomainError } from "../DomainError.js";
+import type { ResourceReference } from "./ResourceReference.js";
 
 export type ResourceMetadata = Readonly<Record<string, unknown>>;
 
@@ -35,5 +36,9 @@ export class Resource {
     this.version = version;
     this.metadata = Object.freeze({ ...options.metadata });
     Object.freeze(this);
+  }
+
+  matches(reference: ResourceReference): boolean {
+    return this.id === reference.resourceId && (reference.version === undefined || this.version === reference.version);
   }
 }

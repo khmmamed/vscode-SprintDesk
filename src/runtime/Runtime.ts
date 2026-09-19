@@ -5,6 +5,7 @@ import {
   PipelineVersion,
   State,
   type Event,
+  type NodeFailureKind,
   type RunStatus,
 } from "../kernel/index.js";
 import { Executor, type ExecuteOptions } from "./Executor.js";
@@ -15,6 +16,8 @@ import {
   type StoredNodeRun,
   type StoredRun,
 } from "./persistence/RunStore.js";
+
+export const RUN_INTERRUPTED_ERROR = "Run was interrupted by system restart";
 
 export type RuntimeRunStatus = RunStatus;
 
@@ -70,6 +73,7 @@ export class Runtime {
     for (const stored of this.runStore.list()) {
       this.hydrate(stored);
     }
+    this.recoverInterrupted();
   }
 
   start(version: PipelineVersion, options: RuntimeRunOptions = {}): string {
@@ -142,13 +146,24 @@ export class Runtime {
   }
 
   async recover(): Promise<void> {
+    this.recoverInterrupted();
+  }
+
+  private recoverInterrupted(): void {
     for (const record of this.records.values()) {
-      if (record.status === "queued" || record.status === "running") {
-        record.status = "failed";
-        record.error = "Run was interrupted by system restart";
-        record.finishedAt = Date.now();
-        this.persist(record);
+      if (record.status !== "queued" && record.status !== "running") {
+        continue;
       }
+      const now = Date.now();
+      record.status = "failed";
+      record.error = RUN_INTERRUPTED_ERROR;
+      record.finishedAt = now;
+      for (const [nodeId, nodeRun] of record.nodeRuns) {
+        if (nodeRun.status === "queued" || nodeRun.status === "running") {
+          record.nodeRuns.set(nodeId, { ...nodeRun, status: "cancelled", finishedAt: now });
+        }
+      }
+      this.persist(record);
     }
   }
 
@@ -260,6 +275,7 @@ export class Runtime {
           startedAt: existing?.startedAt,
           finishedAt: Date.now(),
           error: event.payload.error === undefined ? undefined : String(event.payload.error),
+          ...(event.payload.kind !== undefined ? { failureKind: event.payload.kind as NodeFailureKind } : {}),
         });
         this.persist(record);
       }

@@ -7,21 +7,39 @@ import {
   NodeRun,
   PipelineRun,
   PipelineVersion,
+  RetryPolicy,
   State,
   type Capability,
   type CapabilityHandler,
   type EventPayload,
   type Node,
+  type NodeFailureKind,
   type Resource,
 } from "../kernel/index.js";
 import { createArtifactService, type ArtifactService } from "./ArtifactService.js";
 import type { ResourceResolver, ResolvedResources } from "./ResourceResolver.js";
 import type { Artifact, ArtifactStore } from "./persistence/ArtifactStore.js";
 
+export type { NodeFailureKind } from "../kernel/index.js";
+
 export class ExecutionCancelledError extends Error {
   constructor(message = "Execution cancelled") {
     super(message);
     this.name = "ExecutionCancelledError";
+  }
+}
+
+export class NodeExecutionError extends Error {
+  readonly kind: NodeFailureKind;
+  readonly original: unknown;
+
+  constructor(kind: NodeFailureKind, original: unknown) {
+    const message = original instanceof Error ? original.message : String(original);
+    super(message);
+    this.name = "NodeExecutionError";
+    this.kind = kind;
+    this.original = original;
+    Object.freeze(this);
   }
 }
 
@@ -127,7 +145,7 @@ export class Executor {
     const started = execution.run.start(startTime());
     execution = execution.withRun(started);
     for (const node of order) {
-      execution = execution.withNodeRun(new NodeRun({ nodeId: node.id, nodeType: node.type }));
+      execution = execution.withNodeRun(new NodeRun({ nodeId: node.id, nodeType: node.type, retryPolicy: node.retryPolicy }));
     }
     emit(eventBus, "execution.run.started", { executionId: id, status: started.status });
 
@@ -147,9 +165,15 @@ export class Executor {
         emit(eventBus, "execution.run.cancelled", { executionId: id, status: cancelled.status });
       } else {
         const message = error instanceof Error ? error.message : String(error);
+        const kind = error instanceof NodeExecutionError ? error.kind : undefined;
         const failed = execution.run.fail(message, finishTime());
         execution = execution.withRun(failed);
-        emit(eventBus, "execution.run.failed", { executionId: id, status: failed.status, error: message });
+        emit(eventBus, "execution.run.failed", {
+          executionId: id,
+          status: failed.status,
+          error: message,
+          ...(kind !== undefined ? { kind } : {}),
+        });
       }
     }
 
@@ -163,19 +187,58 @@ export class Executor {
     box: { execution: Execution }
   ): Promise<State> {
     let state = initialState;
+    throwIfAborted(ctx.signal);
+    for (const node of order) {
+      state = await this.runNodeWithRetries(node, state, ctx, box);
+    }
+    return state;
+  }
+
+  private async runNodeWithRetries(
+    node: Node,
+    state: State,
+    ctx: ExecutorGraphContext,
+    box: { execution: Execution }
+  ): Promise<State> {
     let execution = box.execution;
     const commit = (): void => {
       box.execution = execution;
     };
-    throwIfAborted(ctx.signal);
-    for (const node of order) {
-      emit(ctx.eventBus, "execution.node.started", {
-        executionId: ctx.executionId,
-        nodeId: node.id,
-        nodeType: node.type,
-      });
-      execution = execution.withNodeRun(getNodeRun(execution, node.id).start(startTime()));
-      commit();
+
+    emit(ctx.eventBus, "execution.node.started", {
+      executionId: ctx.executionId,
+      nodeId: node.id,
+      nodeType: node.type,
+    });
+    execution = execution.withNodeRun(getNodeRun(execution, node.id).start(startTime()));
+    commit();
+
+    const policy = node.retryPolicy ?? DEFAULT_RETRY_POLICY;
+    const maxAttempts = policy.maxAttempts;
+    const retrying = maxAttempts > 1;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (attempt > 1) {
+        const delayMs = policy.delayMs ?? 0;
+        emit(ctx.eventBus, "execution.node.retry.scheduled", {
+          executionId: ctx.executionId,
+          nodeId: node.id,
+          nodeType: node.type,
+          attempt,
+          delayMs,
+        });
+        await wait(delayMs, ctx.signal);
+        execution = execution.withNodeRun(getNodeRun(execution, node.id).start(startTime()));
+        commit();
+      }
+      if (retrying) {
+        emit(ctx.eventBus, "execution.node.attempt.started", {
+          executionId: ctx.executionId,
+          nodeId: node.id,
+          nodeType: node.type,
+          attempt,
+        });
+      }
 
       let output: State;
       let artifacts: readonly Artifact[];
@@ -195,13 +258,38 @@ export class Executor {
           throw error;
         }
         const message = error instanceof Error ? error.message : String(error);
-        execution = execution.withNodeRun(getNodeRun(execution, node.id).fail(message, finishTime()));
+        const kind = error instanceof NodeExecutionError ? error.kind : undefined;
+        if (retrying && attempt < maxAttempts) {
+          execution = execution.withNodeRun(getNodeRun(execution, node.id).failAttempt(message, finishTime(), kind));
+          commit();
+          emit(ctx.eventBus, "execution.node.attempt.failed", {
+            executionId: ctx.executionId,
+            nodeId: node.id,
+            nodeType: node.type,
+            attempt,
+            error: message,
+            ...(kind !== undefined ? { kind } : {}),
+          });
+          continue;
+        }
+        if (retrying) {
+          emit(ctx.eventBus, "execution.node.attempt.failed", {
+            executionId: ctx.executionId,
+            nodeId: node.id,
+            nodeType: node.type,
+            attempt,
+            error: message,
+            ...(kind !== undefined ? { kind } : {}),
+          });
+        }
+        execution = execution.withNodeRun(getNodeRun(execution, node.id).fail(message, finishTime(), kind));
         commit();
         emit(ctx.eventBus, "execution.node.failed", {
           executionId: ctx.executionId,
           nodeId: node.id,
           nodeType: node.type,
           error: message,
+          ...(kind !== undefined ? { kind } : {}),
         });
         throw error;
       }
@@ -223,6 +311,7 @@ export class Executor {
           details: { nodeId: node.id },
         });
       }
+
       state = output;
       execution = execution.withNodeRun(getNodeRun(execution, node.id).succeed(state.version, finishTime()));
       commit();
@@ -232,9 +321,14 @@ export class Executor {
         nodeId: node.id,
         stateVersion: state.version,
       });
+      return state;
     }
-    commit();
-    return state;
+
+    throw new DomainError({
+      code: "INVALID_INPUT",
+      message: `Node "${node.id}" exhausted its attempts without a terminal outcome`,
+      details: { nodeId: node.id, maxAttempts },
+    });
   }
 
   private async runNode(
@@ -245,63 +339,9 @@ export class Executor {
     const pending: Artifact[] = [];
     const artifacts = createArtifactService((artifact) => pending.push(artifact));
     if (node.capabilityId === undefined) {
-      if (node.resourceReferences.length > 0) {
-        throw new DomainError({
-          code: "INVALID_INPUT",
-          message: `Node "${node.id}" declares resource references but is not a capability node`,
-          details: { nodeId: node.id },
-        });
-      }
-      const action = this.actions.get(node.type);
-      if (!action) {
-        throw new DomainError({
-          code: "INVALID_INPUT",
-          message: `No action registered for node type "${node.type}"`,
-          details: { nodeId: node.id },
-        });
-      }
-      const output = await action.run({ node, state, signal: ctx.signal, artifacts });
-      return { output, artifacts: pending };
+      return runPlainNode(this, node, state, ctx, artifacts, pending);
     }
-    const capability = this.resolveCapability(node);
-    const handler = this.resolveHandler(node, capability);
-    const resources = await this.resolveResources(node, ctx);
-    const output = await handler.run(
-      { node, state, signal: ctx.signal, artifacts, resources },
-      { executionId: ctx.executionId, version: ctx.version }
-    );
-    return { output, artifacts: pending };
-  }
-
-  private async resolveResources(node: Node, ctx: ExecutorGraphContext): Promise<ResolvedResources> {
-    if (node.resourceReferences.length === 0) {
-      return {};
-    }
-    if (!this.resourceResolver) {
-      throw new DomainError({
-        code: "UNRESOLVED_REFERENCE",
-        message: `No resource resolver configured; cannot resolve resource references for node "${node.id}"`,
-        details: { nodeId: node.id },
-      });
-    }
-    const resolved: Record<string, Resource> = {};
-    for (const reference of node.resourceReferences) {
-      throwIfAborted(ctx.signal);
-      if (resolved[reference.resourceId] !== undefined) {
-        continue;
-      }
-      const resource = await this.resourceResolver.resolve(reference);
-      if (resource.id !== reference.resourceId) {
-        throw new DomainError({
-          code: "UNRESOLVED_REFERENCE",
-          message: `Resource resolver did not resolve reference "${reference.resourceId}" for node "${node.id}"`,
-          details: { nodeId: node.id, resourceId: reference.resourceId },
-        });
-      }
-      resolved[reference.resourceId] = resource;
-    }
-    throwIfAborted(ctx.signal);
-    return resolved;
+    return runCapabilityNode(this, node, state, ctx, artifacts, pending);
   }
 
   private commitArtifacts(artifacts: readonly Artifact[]): void {
@@ -312,27 +352,145 @@ export class Executor {
       this.artifactStore.save(artifact);
     }
   }
+}
 
-  private resolveCapability(node: Node): Capability {
-    if (!this.capabilityRegistry) {
+async function runPlainNode(
+  executor: Executor,
+  node: Node,
+  state: State,
+  ctx: ExecutorGraphContext,
+  artifacts: ArtifactService,
+  pending: Artifact[]
+): Promise<{ readonly output: State; readonly artifacts: readonly Artifact[] }> {
+  try {
+    if (node.resourceReferences.length > 0) {
       throw new DomainError({
-        code: "UNRESOLVED_REFERENCE",
-        message: `No capability registry configured; cannot resolve capability id "${node.capabilityId}" for node "${node.id}"`,
-        details: { nodeId: node.id, capabilityId: node.capabilityId },
+        code: "INVALID_INPUT",
+        message: `Node "${node.id}" declares resource references but is not a capability node`,
+        details: { nodeId: node.id },
       });
     }
-    return this.capabilityRegistry.get(node.capabilityId as string);
+    const action = executor.actions.get(node.type);
+    if (!action) {
+      throw new DomainError({
+        code: "INVALID_INPUT",
+        message: `No action registered for node type "${node.type}"`,
+        details: { nodeId: node.id },
+      });
+    }
+    const output = await action.run({ node, state, signal: ctx.signal, artifacts });
+    return { output, artifacts: pending };
+  } catch (error) {
+    rethrowIfCancelled(error);
+    throw new NodeExecutionError("action", error);
   }
+}
 
-  private resolveHandler(node: Node, capability: Capability): CapabilityHandler<CapabilityExecutionContext, CapabilityNodeInput, State> {
-    if (!this.capabilityHandlerRegistry) {
+async function runCapabilityNode(
+  executor: Executor,
+  node: Node,
+  state: State,
+  ctx: ExecutorGraphContext,
+  artifacts: ArtifactService,
+  pending: Artifact[]
+): Promise<{ readonly output: State; readonly artifacts: readonly Artifact[] }> {
+  let capability: Capability;
+  let handler: CapabilityHandler<CapabilityExecutionContext, CapabilityNodeInput, State>;
+  try {
+    capability = resolveCapability(executor, node);
+    handler = resolveHandler(executor, node, capability);
+  } catch (error) {
+    rethrowIfCancelled(error);
+    throw new NodeExecutionError("capability", error);
+  }
+  let resources: ResolvedResources;
+  try {
+    resources = await resolveResources(executor, node, ctx);
+  } catch (error) {
+    rethrowIfCancelled(error);
+    throw new NodeExecutionError("resource", error);
+  }
+  try {
+    const output = await handler.run(
+      { node, state, signal: ctx.signal, artifacts, resources },
+      { executionId: ctx.executionId, version: ctx.version }
+    );
+    return { output, artifacts: pending };
+  } catch (error) {
+    rethrowIfCancelled(error);
+    throw new NodeExecutionError("capability", error);
+  }
+}
+
+function resolveCapability(executor: Executor, node: Node): Capability {
+  if (!executor.capabilityRegistry) {
+    throw new DomainError({
+      code: "UNRESOLVED_REFERENCE",
+      message: `No capability registry configured; cannot resolve capability id "${node.capabilityId}" for node "${node.id}"`,
+      details: { nodeId: node.id, capabilityId: node.capabilityId },
+    });
+  }
+  const capability = executor.capabilityRegistry.get(node.capabilityId as string);
+  if (node.capabilityVersion !== undefined && capability.version !== node.capabilityVersion) {
+    throw new DomainError({
+      code: "UNRESOLVED_REFERENCE",
+      message: `Capability with id "${capability.id}" is not available at version ${node.capabilityVersion} (registered version ${capability.version})`,
+      details: {
+        nodeId: node.id,
+        capabilityId: capability.id,
+        requestedVersion: node.capabilityVersion,
+        registeredVersion: capability.version,
+      },
+    });
+  }
+  return capability;
+}
+
+function resolveHandler(executor: Executor, node: Node, capability: Capability): CapabilityHandler<CapabilityExecutionContext, CapabilityNodeInput, State> {
+  if (!executor.capabilityHandlerRegistry) {
+    throw new DomainError({
+      code: "UNRESOLVED_REFERENCE",
+      message: `No capability handler registry configured; cannot resolve capability id "${capability.id}" for node "${node.id}"`,
+      details: { nodeId: node.id, capabilityId: capability.id },
+    });
+  }
+  return executor.capabilityHandlerRegistry.get<CapabilityExecutionContext, CapabilityNodeInput, State>(capability.id);
+}
+
+async function resolveResources(executor: Executor, node: Node, ctx: ExecutorGraphContext): Promise<ResolvedResources> {
+  if (node.resourceReferences.length === 0) {
+    return {};
+  }
+  if (!executor.resourceResolver) {
+    throw new DomainError({
+      code: "UNRESOLVED_REFERENCE",
+      message: `No resource resolver configured; cannot resolve resource references for node "${node.id}"`,
+      details: { nodeId: node.id },
+    });
+  }
+  const resolved: Record<string, Resource> = {};
+  for (const reference of node.resourceReferences) {
+    throwIfAborted(ctx.signal);
+    if (resolved[reference.resourceId] !== undefined) {
+      continue;
+    }
+    const resource = await executor.resourceResolver.resolve(reference);
+    if (!resource.matches(reference)) {
       throw new DomainError({
         code: "UNRESOLVED_REFERENCE",
-        message: `No capability handler registry configured; cannot resolve capability id "${capability.id}" for node "${node.id}"`,
-        details: { nodeId: node.id, capabilityId: capability.id },
+        message: `Resource resolver did not resolve reference "${reference.resourceId}" for node "${node.id}"`,
+        details: { nodeId: node.id, resourceId: reference.resourceId, reference },
       });
     }
-    return this.capabilityHandlerRegistry.get<CapabilityExecutionContext, CapabilityNodeInput, State>(capability.id);
+    resolved[reference.resourceId] = resource;
+  }
+  throwIfAborted(ctx.signal);
+  return resolved;
+}
+
+function rethrowIfCancelled(error: unknown): void {
+  if (error instanceof ExecutionCancelledError) {
+    throw error;
   }
 }
 
@@ -342,6 +500,8 @@ type ExecutorGraphContext = {
   readonly signal: AbortSignal;
   readonly version: PipelineVersion;
 };
+
+const DEFAULT_RETRY_POLICY = new RetryPolicy({ maxAttempts: 1 });
 
 function addAction(actions: Map<string, NodeAction>, action: NodeAction): void {
   if (actions.has(action.type)) {
@@ -363,6 +523,28 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new ExecutionCancelledError();
   }
+}
+
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    throwIfAborted(signal);
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new ExecutionCancelledError());
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new ExecutionCancelledError());
+    };
+    const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function getNodeRun(execution: Execution, nodeId: string): NodeRun {

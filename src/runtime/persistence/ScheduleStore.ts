@@ -4,6 +4,7 @@ import {
   Graph,
   Node,
   PipelineVersion,
+  RetryPolicy,
   StateSchema,
   type FieldType,
 } from "../../kernel/index.js";
@@ -11,6 +12,12 @@ import { Schedule, type ScheduleTrigger } from "../Schedule.js";
 
 export interface StoredResourceReference {
   readonly resourceId: string;
+  readonly version?: string;
+}
+
+export interface StoredNodeRetryPolicy {
+  readonly maxAttempts: number;
+  readonly delayMs?: number;
 }
 
 export interface StoredNode {
@@ -19,7 +26,9 @@ export interface StoredNode {
   readonly version?: number;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly capabilityId?: string;
+  readonly capabilityVersion?: number;
   readonly resourceReferences?: readonly StoredResourceReference[];
+  readonly retryPolicy?: StoredNodeRetryPolicy;
 }
 
 export interface StoredEdge {
@@ -84,14 +93,37 @@ export function toStoredPipelineVersion(version: PipelineVersion): StoredPipelin
   return {
     version: version.version,
     graph: {
-      nodes: [...version.graph.nodes.values()].map((node) => ({
-        id: node.id,
-        type: node.type,
-        version: node.version,
-        metadata: node.metadata,
-        capabilityId: node.capabilityId,
-        resourceReferences: node.resourceReferences.map(({ resourceId }) => ({ resourceId })),
-      })),
+      nodes: [...version.graph.nodes.values()].map((node) => {
+        const storedNode: {
+          id: string;
+          type: string;
+          version?: number;
+          metadata?: Readonly<Record<string, unknown>>;
+          capabilityId?: string;
+          capabilityVersion?: number;
+          resourceReferences: readonly StoredResourceReference[];
+          retryPolicy?: StoredNodeRetryPolicy;
+        } = {
+          id: node.id,
+          type: node.type,
+          version: node.version,
+          metadata: node.metadata,
+          capabilityId: node.capabilityId,
+          resourceReferences: node.resourceReferences.map(({ resourceId, version }) =>
+            version === undefined ? { resourceId } : { resourceId, version }
+          ),
+        };
+        if (node.capabilityVersion !== undefined) {
+          storedNode.capabilityVersion = node.capabilityVersion;
+        }
+        if (node.retryPolicy !== undefined) {
+          storedNode.retryPolicy = {
+            maxAttempts: node.retryPolicy.maxAttempts,
+            ...(node.retryPolicy.delayMs !== undefined ? { delayMs: node.retryPolicy.delayMs } : {}),
+          };
+        }
+        return storedNode;
+      }),
       edges: version.graph.edges.map((edge) => ({
         from: edge.from,
         to: edge.to,
@@ -167,7 +199,9 @@ export function fromStoredPipelineVersion(stored: StoredPipelineVersion): Pipeli
           version: node.version,
           metadata: node.metadata,
           capabilityId: node.capabilityId,
+          capabilityVersion: node.capabilityVersion,
           resourceReferences: node.resourceReferences,
+          retryPolicy: node.retryPolicy ? new RetryPolicy(node.retryPolicy) : undefined,
         })
     ),
     edges: stored.graph.edges.map(
