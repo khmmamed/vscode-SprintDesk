@@ -48,209 +48,48 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "sprintdesk.startMcp",
-        "title": "SprintDesk: Start MCP Server",
-        "icon": "$(server)"
+        "command": "sprintdesk.executeDevPipeline",
+        "title": "SprintDesk: Execute Dev Pipeline"
       },
       {
-        "command": "sprintdesk.viewWorkforce",
-        "title": "SprintDesk: View Workforce",
-        "icon": "$(organization)"
+        "command": "sprintdesk.executeCancellationPipeline",
+        "title": "SprintDesk: Execute Cancellation Pipeline"
       },
       {
-        "command": "sprintdesk.addEmployee",
-        "title": "SprintDesk: Add Person",
-        "icon": "$(person-add)"
+        "command": "sprintdesk.cancelActiveRun",
+        "title": "SprintDesk: Cancel Active Run"
       },
       {
-        "command": "sprintdesk.createTeam",
-        "title": "SprintDesk: Create Team",
-        "icon": "$(new-folder)"
+        "command": "sprintdesk.refreshDevInspection",
+        "title": "SprintDesk: Refresh Dev Inspection"
       },
       {
-        "command": "sprintdesk.assignToTeam",
-        "title": "SprintDesk: Assign to Team",
-        "icon": "$(add)"
+        "command": "sprintdesk.scheduleDevPipeline",
+        "title": "SprintDesk: Schedule Dev Pipeline"
       },
       {
-        "command": "sprintdesk.setTeamLead",
-        "title": "SprintDesk: Set Team Lead",
-        "icon": "$(star)"
+        "command": "sprintdesk.triggerDevSchedule",
+        "title": "SprintDesk: Trigger Dev Schedule"
       },
       {
-        "command": "sprintdesk.assignOrchestrationRole",
-        "title": "SprintDesk: Assign Orchestration Role",
-        "icon": "$(organization)"
+        "command": "sprintdesk.listDevSchedules",
+        "title": "SprintDesk: List Dev Schedules"
       },
       {
-        "command": "sprintdesk.clearOrchestrationRole",
-        "title": "SprintDesk: Clear Orchestration Role",
-        "icon": "$(circle-slash)"
+        "command": "sprintdesk.startScheduler",
+        "title": "SprintDesk: Start Scheduler"
       },
       {
-        "command": "sprintdesk.setEmployeeStatus",
-        "title": "SprintDesk: Set Availability",
-        "icon": "$(circle-filled)"
+        "command": "sprintdesk.stopScheduler",
+        "title": "SprintDesk: Stop Scheduler"
       },
       {
-        "command": "sprintdesk.removeEmployee",
-        "title": "SprintDesk: Remove Employee",
-        "icon": "$(trash)"
+        "command": "sprintdesk.scheduleEventDevPipeline",
+        "title": "SprintDesk: Schedule Event Dev Pipeline"
       },
       {
-        "command": "sprintdesk.syncPeopleFromGit",
-        "title": "SprintDesk: Sync People from Git",
-        "icon": "$(sync)"
-      },
-      {
-        "command": "sprintdesk.processQueue",
-        "title": "SprintDesk: Process Queue",
-        "icon": "$(play)"
-      },
-      {
-        "command": "sprintdesk.openWorkforce",
-        "title": "SprintDesk: Open Workforce Control Center",
-        "icon": "$(window)"
-      },
-      {
-        "command": "sprintdesk.createInputForEmployee",
-        "title": "SprintDesk: Create Input for Agent",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.cancelRun",
-        "title": "SprintDesk: Cancel Run",
-        "icon": "$(close)"
-      },
-      {
-        "command": "sprintdesk.openInControlCenter",
-        "title": "SprintDesk: Open in Control Center",
-        "icon": "$(window)"
-      },
-      {
-        "command": "sprintdesk.createRequest",
-        "title": "SprintDesk: New Request",
-        "icon": "$(new-file)"
-      },
-      {
-        "command": "sprintdesk.runOrganizer",
-        "title": "SprintDesk: Organize Requests",
-        "icon": "$(run)"
-      },
-      {
-        "command": "sprintdesk.openInput",
-        "title": "SprintDesk: Open Request",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "sprintdesk.openPlan",
-        "title": "SprintDesk: Open Plan",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "sprintdesk.enqueuePlan",
-        "title": "SprintDesk: Enqueue Plan",
-        "icon": "$(play)"
-      },
-      {
-        "command": "sprintdesk.cancelPlan",
-        "title": "SprintDesk: Cancel Plan",
-        "icon": "$(close)"
-      },
-      {
-        "command": "sprintdesk.requeuePlan",
-        "title": "SprintDesk: Requeue Plan",
-        "icon": "$(debug-restart)"
-      },
-      {
-        "command": "sprintdesk.reassignPlan",
-        "title": "SprintDesk: Reassign Plan",
-        "icon": "$(person-add)"
-      },
-      {
-        "command": "sprintdesk.approveApproval",
-        "title": "SprintDesk: Approve",
-        "icon": "$(check)"
-      },
-      {
-        "command": "sprintdesk.rejectApproval",
-        "title": "SprintDesk: Reject",
-        "icon": "$(close)"
-      },
-      {
-        "command": "sprintdesk.toggleSchedule",
-        "title": "SprintDesk: Toggle Schedule",
-        "icon": "$(circle-large-outline)"
-      },
-      {
-        "command": "sprintdesk.toggleWorkflow",
-        "title": "SprintDesk: Toggle Workflow",
-        "icon": "$(circle-large-outline)"
-      },
-      {
-        "command": "sprintdesk.addMcpServer",
-        "title": "SprintDesk: Add MCP Server",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.toggleMcpServer",
-        "title": "SprintDesk: Enable/Disable MCP Server",
-        "icon": "$(circle-large-outline)"
-      },
-      {
-        "command": "sprintdesk.inspectMcpServer",
-        "title": "SprintDesk: Inspect MCP Server",
-        "icon": "$(info)"
-      },
-      {
-        "command": "sprintdesk.removeMcpServer",
-        "title": "SprintDesk: Remove MCP Server",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "sprintdesk.addTool",
-        "title": "SprintDesk: Add Tool",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.removeTool",
-        "title": "SprintDesk: Remove Tool",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "sprintdesk.selectAgentMcpServers",
-        "title": "SprintDesk: Select Agent MCP Servers",
-        "icon": "$(server)"
-      },
-      {
-        "command": "sprintdesk.selectAgentTools",
-        "title": "SprintDesk: Select Agent Tools",
-        "icon": "$(tools)"
-      },
-      {
-        "command": "sprintdesk.addModel",
-        "title": "SprintDesk: Add Model",
-        "icon": "$(add)"
-      },
-      {
-        "command": "sprintdesk.editModel",
-        "title": "SprintDesk: Edit Model",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "sprintdesk.removeModel",
-        "title": "SprintDesk: Remove Model",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "sprintdesk.assignModelToAgent",
-        "title": "SprintDesk: Assign Model to Agent",
-        "icon": "$(person-add)"
-      },
-      {
-        "command": "sprintdesk.selectAgentModel",
-        "title": "SprintDesk: Select Agent Model",
-        "icon": "$(vm)"
+        "command": "sprintdesk.emitDevEvent",
+        "title": "SprintDesk: Emit Dev Event"
       }
     ],
     "viewsContainers": {
@@ -267,6 +106,10 @@
         {
           "id": "sprintdesk-main",
           "name": "SprintDesk"
+        },
+        {
+          "id": "sprintdesk-dev-inspection",
+          "name": "Dev Inspection"
         }
       ]
     },
@@ -276,200 +119,13 @@
           "command": "sprintdesk.refresh",
           "when": "view == sprintdesk-main",
           "group": "navigation@9"
-        },
-        {
-          "command": "sprintdesk.addEmployee",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@1"
-        },
-        {
-          "command": "sprintdesk.createTeam",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@2"
-        },
-        {
-          "command": "sprintdesk.syncPeopleFromGit",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@3"
-        },
-        {
-          "command": "sprintdesk.processQueue",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@4"
-        },
-        {
-          "command": "sprintdesk.openWorkforce",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@5"
-        },
-        {
-          "command": "sprintdesk.createRequest",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@6"
-        },
-        {
-          "command": "sprintdesk.runOrganizer",
-          "when": "view == sprintdesk-main",
-          "group": "navigation@7"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "sprintdesk.assignToTeam",
-          "when": "view == sprintdesk-main && viewItem =~ /^employee/",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.createInputForEmployee",
-          "when": "view == sprintdesk-main && viewItem == employeeAgent",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.setEmployeeStatus",
-          "when": "view == sprintdesk-main && viewItem =~ /^employee/",
-          "group": "inline@2"
-        },
-        {
-          "command": "sprintdesk.removeEmployee",
-          "when": "view == sprintdesk-main && viewItem =~ /^employee/",
-          "group": "inline@3"
-        },
-        {
-          "command": "sprintdesk.setTeamLead",
-          "when": "view == sprintdesk-main && viewItem == workforceTeam",
-          "group": "inline@4"
-        },
-        {
-          "command": "sprintdesk.assignOrchestrationRole",
-          "when": "view == sprintdesk-main && viewItem == workforceRole",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.clearOrchestrationRole",
-          "when": "view == sprintdesk-main && viewItem == workforceRole",
-          "group": "inline@2"
-        },
-        {
-          "command": "sprintdesk.cancelRun",
-          "when": "view == sprintdesk-main && viewItem == runItem",
-          "group": "inline"
-        },
-        {
-          "command": "sprintdesk.openPlan",
-          "when": "view == sprintdesk-main && viewItem == planItem",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.enqueuePlan",
-          "when": "view == sprintdesk-main && viewItem == planItem",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.requeuePlan",
-          "when": "view == sprintdesk-main && viewItem == planItem",
-          "group": "1_plan@2"
-        },
-        {
-          "command": "sprintdesk.reassignPlan",
-          "when": "view == sprintdesk-main && viewItem == planItem",
-          "group": "1_plan@3"
-        },
-        {
-          "command": "sprintdesk.cancelPlan",
-          "when": "view == sprintdesk-main && viewItem == planItem",
-          "group": "1_plan@4"
-        },
-        {
-          "command": "sprintdesk.openInput",
-          "when": "view == sprintdesk-main && viewItem == requestInput",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.approveApproval",
-          "when": "view == sprintdesk-main && viewItem == approvalItemPending",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.rejectApproval",
-          "when": "view == sprintdesk-main && viewItem == approvalItemPending",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.toggleSchedule",
-          "when": "view == sprintdesk-main && viewItem == scheduleItem",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.toggleWorkflow",
-          "when": "view == sprintdesk-main && viewItem == workflowItem",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.toggleMcpServer",
-          "when": "view == sprintdesk-main && viewItem =~ /^mcpServerItem/",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.inspectMcpServer",
-          "when": "view == sprintdesk-main && viewItem =~ /^mcpServerItem/",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.removeMcpServer",
-          "when": "view == sprintdesk-main && viewItem =~ /^mcpServerItem/",
-          "group": "1_mcp@2"
-        },
-        {
-          "command": "sprintdesk.removeTool",
-          "when": "view == sprintdesk-main && viewItem == toolItem",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.selectAgentMcpServers",
-          "when": "view == sprintdesk-main && viewItem == employeeAgent",
-          "group": "inline@4"
-        },
-        {
-          "command": "sprintdesk.selectAgentTools",
-          "when": "view == sprintdesk-main && viewItem == employeeAgent",
-          "group": "inline@5"
-        },
-        {
-          "command": "sprintdesk.selectAgentModel",
-          "when": "view == sprintdesk-main && viewItem == employeeAgent",
-          "group": "inline@6"
-        },
-        {
-          "command": "sprintdesk.assignModelToAgent",
-          "when": "view == sprintdesk-main && viewItem == modelItem",
-          "group": "inline@0"
-        },
-        {
-          "command": "sprintdesk.editModel",
-          "when": "view == sprintdesk-main && viewItem == modelItem",
-          "group": "inline@1"
-        },
-        {
-          "command": "sprintdesk.removeModel",
-          "when": "view == sprintdesk-main && viewItem == modelItem",
-          "group": "1_model@2"
-        },
-        {
-          "command": "sprintdesk.addModel",
-          "when": "view == sprintdesk-main && viewItem == sprintdeskSection:models",
-          "group": "inline@0"
         }
       ]
-    },
-    "mcpServerDefinitionProviders": [
-      {
-        "id": "sprintdesk-mcp",
-        "label": "SprintDesk MCP Server"
-      }
-    ]
+    }
   },
   "devDependencies": {
     "@estruyf/vscode": "^1.1.0",
+    "@types/chai": "^5.2.3",
     "@types/d3-dispatch": "^2.0.0",
     "@types/glob": "^7.2.0",
     "@types/js-yaml": "^4.0.9",
@@ -485,6 +141,7 @@
     "@typescript-eslint/eslint-plugin": "^5.31.0",
     "@typescript-eslint/parser": "^5.31.0",
     "@vscode/test-electron": "^2.1.5",
+    "chai": "^4.3.7",
     "css-loader": "^6.7.1",
     "eslint": "^8.20.0",
     "glob": "^8.0.3",

@@ -25,7 +25,11 @@ const extensionConfig = {
   },
   resolve: {
     // support reading TypeScript and JavaScript files, 📖 -> https://github.com/TypeStrong/ts-loader
-    extensions: ['.ts', '.js']
+    extensions: ['.ts', '.js'],
+    // NodeNext-style imports use explicit .js specifiers for .ts sources; map them back.
+    extensionAlias: {
+      '.js': ['.ts', '.js']
+    }
   },
   module: {
     rules: [
