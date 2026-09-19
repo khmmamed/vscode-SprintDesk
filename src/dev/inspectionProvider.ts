@@ -1,7 +1,9 @@
 import * as vscode from "vscode";
 import type { DevHarness } from "./harness.js";
 import { Node } from "../kernel/index.js";
+import type { RunStatusInfo } from "../runtime/index.js";
 import type { Artifact } from "../runtime/persistence/ArtifactStore.js";
+import type { StoredNodeRun } from "../runtime/persistence/RunStore.js";
 
 export class DevInspectionProvider implements vscode.TreeDataProvider<DevItem> {
   private readonly harness: DevHarness;
@@ -64,24 +66,34 @@ export class DevInspectionProvider implements vscode.TreeDataProvider<DevItem> {
   }
 
   private getPipelineItems(): DevItem[] {
-    const version = this.harness.getVersion();
-    if (!version) {
+    const pipelines = this.harness.listPipelines();
+    if (pipelines.length === 0) {
       return [new DevItem({ label: "No pipelines registered" })];
     }
 
-    return [
-      new DevItem({ 
-        label: `Dev Pipeline (v${version.version})`, 
-        collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
+    return pipelines.map(pipeline =>
+      new DevItem({
+        label: `${pipeline.name} (${pipeline.id})`,
+        collapsible: vscode.TreeItemCollapsibleState.Collapsed,
         children: [
-          new DevItem({ 
-            label: "Graph", 
-            collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-            children: this.getGraphItems(version) 
-          })
-        ]
+          new DevItem({ label: `Latest: v${pipeline.latestVersion()?.version ?? "none"}` }),
+          ...pipeline.versions.map(
+            version =>
+              new DevItem({
+                label: `v${version.version}`,
+                collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+                children: [
+                  new DevItem({
+                    label: "Graph",
+                    collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+                    children: this.getGraphItems(version),
+                  }),
+                ],
+              })
+          ),
+        ],
       })
-    ];
+    );
   }
 
   private getGraphItems(version: any): DevItem[] {
@@ -105,12 +117,33 @@ export class DevInspectionProvider implements vscode.TreeDataProvider<DevItem> {
         label: `run-${run.id} [${run.status}]`, 
         collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
         children: [
+          new DevItem({ label: `Pipeline: ${run.pipelineId ?? "unnamed"} v${run.pipelineVersion ?? "?"}` }),
           new DevItem({ label: `Started: ${run.startedAt ? new Date(run.startedAt).toLocaleString() : "N/A"}` }),
           new DevItem({ label: `Finished: ${run.finishedAt ? new Date(run.finishedAt).toLocaleString() : "N/A"}` }),
           new DevItem({ label: `Error: ${run.error ?? "None"}` }),
+          new DevItem({ 
+            label: "Nodes", 
+            collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
+            children: this.getNodeRunItems(status.nodes) 
+          }),
         ]
       });
     });
+  }
+
+  private getNodeRunItems(nodeRuns: readonly StoredNodeRun[]): DevItem[] {
+    if (nodeRuns.length === 0) {
+      return [new DevItem({ label: "No node runs recorded" })];
+    }
+
+    return nodeRuns.map(nodeRun => new DevItem({
+      label: `${nodeRun.nodeId} (${nodeRun.nodeType}) [${nodeRun.status}]`,
+      description: nodeRun.error
+        ? `Error: ${nodeRun.error}`
+        : nodeRun.stateVersion !== undefined
+          ? `State v${nodeRun.stateVersion}`
+          : undefined,
+    }));
   }
 
   private getScheduleItems(): DevItem[] {

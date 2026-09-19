@@ -61,7 +61,7 @@
       },
       {
         "command": "sprintdesk.refreshDevInspection",
-        "title": "SprintDesk: Refresh Dev Inspection"
+        "title": "SprintDesk: Refresh"
       },
       {
         "command": "sprintdesk.scheduleDevPipeline",
@@ -106,10 +106,6 @@
         {
           "id": "sprintdesk-main",
           "name": "SprintDesk"
-        },
-        {
-          "id": "sprintdesk-dev-inspection",
-          "name": "Dev Inspection"
         }
       ]
     },

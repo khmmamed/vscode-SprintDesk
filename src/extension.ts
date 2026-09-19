@@ -7,10 +7,11 @@ export async function activate(context: vscode.ExtensionContext) {
   const dev = new DevHarness({
     runStoreFile: `${storageDir}/runs.json`,
     scheduleStoreFile: `${storageDir}/schedules.json`,
+    pipelineStoreFile: `${storageDir}/pipelines.json`,
   });
   const inspectionProvider = new DevInspectionProvider(dev);
   
-  const treeView = vscode.window.createTreeView('sprintdesk-dev-inspection', {
+  const treeView = vscode.window.createTreeView('sprintdesk-main', {
     treeDataProvider: inspectionProvider
   });
   

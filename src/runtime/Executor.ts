@@ -6,6 +6,7 @@ import {
   Execution,
   PipelineVersion,
   State,
+  NodeRun,
   type Capability,
   type CapabilityHandler,
   type EventPayload,
@@ -113,17 +114,24 @@ export class Executor {
     let execution = new Execution({ id, version, initialState });
     const started = execution.run.start(startTime());
     execution = execution.withRun(started);
+    for (const node of order) {
+      execution = execution.withNodeRun(new NodeRun({ nodeId: node.id, nodeType: node.type }));
+    }
     emit(eventBus, "execution.run.started", { executionId: id, status: started.status });
 
+    const box: { execution: Execution } = { execution };
     try {
-      const finalState = await this.runGraph(order, initialState, { eventBus, executionId: id, signal, version });
+      const finalState = await this.runGraph(order, initialState, { eventBus, executionId: id, signal, version }, box);
+      execution = box.execution;
       const finished = execution.run.succeed({ finalState: finalState as unknown as Readonly<Record<string, unknown>> }, finishTime());
       execution = execution.withRun(finished);
       emit(eventBus, "execution.run.finished", { executionId: id, status: finished.status });
     } catch (error) {
+      execution = box.execution;
       if (error instanceof ExecutionCancelledError) {
         const cancelled = execution.run.cancel(finishTime());
         execution = execution.withRun(cancelled);
+        execution = cancelQueuedNodeRuns(execution, finishTime());
         emit(eventBus, "execution.run.cancelled", { executionId: id, status: cancelled.status });
       } else {
         const message = error instanceof Error ? error.message : String(error);
@@ -139,14 +147,14 @@ export class Executor {
   private async runGraph(
     order: readonly Node[],
     initialState: State,
-    ctx: {
-      readonly eventBus?: EventBus;
-      readonly executionId: string;
-      readonly signal: AbortSignal;
-      readonly version: PipelineVersion;
-    }
+    ctx: ExecutorGraphContext,
+    box: { execution: Execution }
   ): Promise<State> {
     let state = initialState;
+    let execution = box.execution;
+    const commit = (): void => {
+      box.execution = execution;
+    };
     throwIfAborted(ctx.signal);
     for (const node of order) {
       emit(ctx.eventBus, "execution.node.started", {
@@ -154,16 +162,58 @@ export class Executor {
         nodeId: node.id,
         nodeType: node.type,
       });
-      const { output, artifacts } = await this.runNode(node, state, ctx);
+      execution = execution.withNodeRun(getNodeRun(execution, node.id).start(startTime()));
+      commit();
+
+      let output: State;
+      let artifacts: readonly Artifact[];
+      try {
+        const result = await this.runNode(node, state, ctx);
+        output = result.output;
+        artifacts = result.artifacts;
+      } catch (error) {
+        if (error instanceof ExecutionCancelledError) {
+          execution = execution.withNodeRun(getNodeRun(execution, node.id).cancel(finishTime()));
+          commit();
+          emit(ctx.eventBus, "execution.node.cancelled", {
+            executionId: ctx.executionId,
+            nodeId: node.id,
+            nodeType: node.type,
+          });
+          throw error;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        execution = execution.withNodeRun(getNodeRun(execution, node.id).fail(message, finishTime()));
+        commit();
+        emit(ctx.eventBus, "execution.node.failed", {
+          executionId: ctx.executionId,
+          nodeId: node.id,
+          nodeType: node.type,
+          error: message,
+        });
+        throw error;
+      }
+
       throwIfAborted(ctx.signal);
       if (output.schema !== state.schema) {
+        const message = `Node "${node.id}" returned a State with an incompatible schema`;
+        execution = execution.withNodeRun(getNodeRun(execution, node.id).fail(message, finishTime()));
+        commit();
+        emit(ctx.eventBus, "execution.node.failed", {
+          executionId: ctx.executionId,
+          nodeId: node.id,
+          nodeType: node.type,
+          error: message,
+        });
         throw new DomainError({
           code: "SCHEMA_VIOLATION",
-          message: `Node "${node.id}" returned a State with an incompatible schema`,
+          message,
           details: { nodeId: node.id },
         });
       }
       state = output;
+      execution = execution.withNodeRun(getNodeRun(execution, node.id).succeed(state.version, finishTime()));
+      commit();
       this.commitArtifacts(artifacts);
       emit(ctx.eventBus, "execution.node.finished", {
         executionId: ctx.executionId,
@@ -171,6 +221,7 @@ export class Executor {
         stateVersion: state.version,
       });
     }
+    commit();
     return state;
   }
 
@@ -300,6 +351,28 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new ExecutionCancelledError();
   }
+}
+
+function getNodeRun(execution: Execution, nodeId: string): NodeRun {
+  const nodeRun = execution.nodes.get(nodeId);
+  if (!nodeRun) {
+    throw new DomainError({
+      code: "INVALID_INPUT",
+      message: `No NodeRun tracked for node "${nodeId}"`,
+      details: { nodeId },
+    });
+  }
+  return nodeRun;
+}
+
+function cancelQueuedNodeRuns(execution: Execution, now: number): Execution {
+  let result = execution;
+  for (const nodeRun of execution.nodes.values()) {
+    if (nodeRun.status === "queued" || nodeRun.status === "running") {
+      result = result.withNodeRun(nodeRun.cancel(now));
+    }
+  }
+  return result;
 }
 
 let sequence = 0;

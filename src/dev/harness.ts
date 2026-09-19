@@ -5,6 +5,8 @@ import {
 } from "../runtime/Executor.js";
 import { 
   PipelineVersion, 
+  Pipeline,
+  PipelineRegistry,
   Graph, 
   Node, 
   StateSchema, 
@@ -15,6 +17,7 @@ import {
   CapabilityHandlerRegistry,
   Resource,
   ResourceRegistry,
+  DomainError,
 } from "../kernel/index.js";
 import { Runtime } from "../runtime/Runtime.js";
 import {
@@ -22,6 +25,9 @@ import {
   Schedule,
   FileRunStore,
   FileScheduleStore,
+  FilePipelineStore,
+  fromStoredPipeline,
+  toStoredPipeline,
   ArtifactStore,
   MemoryArtifactStore
 } from "../runtime/index.js";
@@ -29,6 +35,7 @@ import {
 export interface DevHarnessOptions {
   readonly runStoreFile?: string;
   readonly scheduleStoreFile?: string;
+  readonly pipelineStoreFile?: string;
 }
 
 export class DevHarness {
@@ -38,6 +45,8 @@ export class DevHarness {
   private eventBus: EventBus;
   private currentRunId?: string;
   private currentVersion?: PipelineVersion;
+  private readonly pipelineRegistry = new PipelineRegistry();
+  private readonly filePipelineStore?: FilePipelineStore;
   private readonly capabilityRegistry = new CapabilityRegistry();
   private readonly handlerRegistry = new CapabilityHandlerRegistry();
   private readonly resourceRegistry = new ResourceRegistry();
@@ -103,6 +112,40 @@ export class DevHarness {
         ? new FileScheduleStore({ filePath: options.scheduleStoreFile })
         : undefined,
     });
+
+    this.filePipelineStore = options.pipelineStoreFile
+      ? new FilePipelineStore({ filePath: options.pipelineStoreFile })
+      : undefined;
+    this.loadPipelines();
+    this.seedPipelines();
+  }
+
+  private loadPipelines() {
+    if (!this.filePipelineStore) {
+      return;
+    }
+    for (const stored of this.filePipelineStore.list()) {
+      this.pipelineRegistry.register(fromStoredPipeline(stored));
+    }
+  }
+
+  private seedPipelines() {
+    const example = new Pipeline({
+      id: "dev.example",
+      name: "Dev Example Pipeline",
+      versions: [this.buildExampleVersion()],
+    });
+    if (!this.pipelineRegistry.has(example.id)) {
+      this.registerPipeline(example);
+    }
+    const cancellation = new Pipeline({
+      id: "dev.cancellation",
+      name: "Dev Cancellation Pipeline",
+      versions: [this.buildCancellationVersion()],
+    });
+    if (!this.pipelineRegistry.has(cancellation.id)) {
+      this.registerPipeline(cancellation);
+    }
   }
 
   private setupCapabilities() {
@@ -132,14 +175,25 @@ export class DevHarness {
   }
 
   async runExample() {
-    this.currentVersion = this.buildExampleVersion();
-    this.currentRunId = this.runtime.start(this.currentVersion);
-    return this.currentRunId;
+    return this.runPipeline("dev.example");
   }
 
   async runCancellationExample() {
-    this.currentVersion = this.buildCancellationVersion();
-    this.currentRunId = this.runtime.start(this.currentVersion);
+    return this.runPipeline("dev.cancellation");
+  }
+
+  runPipeline(pipelineId: string): string {
+    const pipeline = this.pipelineRegistry.get(pipelineId);
+    const version = pipeline.latestVersion();
+    if (!version) {
+      throw new DomainError({
+        code: "NOT_FOUND",
+        message: `Pipeline "${pipelineId}" has no versions to run`,
+        details: { pipelineId },
+      });
+    }
+    this.currentVersion = version;
+    this.currentRunId = this.runtime.start(version, { pipelineId });
     return this.currentRunId;
   }
 
@@ -200,6 +254,26 @@ export class DevHarness {
 
   getVersion() {
     return this.currentVersion;
+  }
+
+  listPipelines(): readonly Pipeline[] {
+    return this.pipelineRegistry.list();
+  }
+
+  getPipeline(id: string): Pipeline {
+    return this.pipelineRegistry.get(id);
+  }
+
+  registerPipeline(pipeline: Pipeline): Pipeline {
+    this.pipelineRegistry.register(pipeline);
+    if (this.filePipelineStore) {
+      this.filePipelineStore.save(toStoredPipeline(pipeline));
+    }
+    return pipeline;
+  }
+
+  getPipelineRegistry() {
+    return this.pipelineRegistry;
   }
 
   refresh() {

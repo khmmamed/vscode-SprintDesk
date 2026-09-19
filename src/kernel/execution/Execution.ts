@@ -3,6 +3,7 @@ import { Pipeline } from "../pipeline/Pipeline.js";
 import { PipelineVersion } from "../pipeline/PipelineVersion.js";
 import { State } from "../state/State.js";
 import { PipelineRun, type RunStatus } from "./PipelineRun.js";
+import { NodeRun } from "./NodeRun.js";
 
 export interface ExecutionOptions {
   readonly id: string;
@@ -10,6 +11,7 @@ export interface ExecutionOptions {
   readonly initialState: State;
   readonly pipeline?: Pipeline;
   readonly run?: PipelineRun;
+  readonly nodes?: ReadonlyMap<string, NodeRun>;
 }
 
 export class Execution {
@@ -18,6 +20,7 @@ export class Execution {
   readonly initialState: State;
   readonly run: PipelineRun;
   readonly pipeline?: Pipeline;
+  readonly nodes: ReadonlyMap<string, NodeRun>;
 
   constructor(options: ExecutionOptions) {
     const id = options.id.trim();
@@ -29,6 +32,7 @@ export class Execution {
     this.initialState = options.initialState;
     this.run = options.run ?? new PipelineRun({ id: `${id}:run` });
     this.pipeline = options.pipeline;
+    this.nodes = options.nodes ?? frozenMap();
     Object.freeze(this);
   }
 
@@ -43,6 +47,24 @@ export class Execution {
       version: this.version,
       initialState: this.initialState,
       run,
+      nodes: this.nodes,
     });
   }
+
+  withNodeRun(nodeRun: NodeRun): Execution {
+    const nodes = new Map(this.nodes);
+    nodes.set(nodeRun.nodeId, nodeRun);
+    return new Execution({
+      id: this.id,
+      pipeline: this.pipeline,
+      version: this.version,
+      initialState: this.initialState,
+      run: this.run,
+      nodes: Object.freeze(nodes),
+    });
+  }
+}
+
+function frozenMap(): ReadonlyMap<string, NodeRun> {
+  return Object.freeze(new Map<string, NodeRun>());
 }

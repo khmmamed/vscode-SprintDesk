@@ -71,34 +71,38 @@ export interface ScheduleStore {
 export function toStoredSchedule(schedule: Schedule): StoredSchedule {
   return {
     id: schedule.id,
-    version: {
-      version: schedule.version.version,
-      graph: {
-        nodes: [...schedule.version.graph.nodes.values()].map((node) => ({
-          id: node.id,
-          type: node.type,
-          version: node.version,
-          metadata: node.metadata,
-          capabilityId: node.capabilityId,
-          resourceReferences: node.resourceReferences.map(({ resourceId }) => ({ resourceId })),
-        })),
-        edges: schedule.version.graph.edges.map((edge) => ({
-          from: edge.from,
-          to: edge.to,
-          label: edge.label,
-          condition: edge.condition,
-        })),
-      },
-      stateSchema: {
-        name: schedule.version.stateSchema.name,
-        version: schedule.version.stateSchema.version,
-        fields: schedule.version.stateSchema.fields,
-      },
-      metadata: schedule.version.metadata,
-    },
+    version: toStoredPipelineVersion(schedule.version),
     trigger: schedule.trigger,
     enabled: schedule.enabled,
     createdAt: schedule.createdAt,
+  };
+}
+
+export function toStoredPipelineVersion(version: PipelineVersion): StoredPipelineVersion {
+  return {
+    version: version.version,
+    graph: {
+      nodes: [...version.graph.nodes.values()].map((node) => ({
+        id: node.id,
+        type: node.type,
+        version: node.version,
+        metadata: node.metadata,
+        capabilityId: node.capabilityId,
+        resourceReferences: node.resourceReferences.map(({ resourceId }) => ({ resourceId })),
+      })),
+      edges: version.graph.edges.map((edge) => ({
+        from: edge.from,
+        to: edge.to,
+        label: edge.label,
+        condition: edge.condition,
+      })),
+    },
+    stateSchema: {
+      name: version.stateSchema.name,
+      version: version.stateSchema.version,
+      fields: version.stateSchema.fields,
+    },
+    metadata: version.metadata,
   };
 }
 
@@ -149,33 +153,7 @@ export function parseStoredSchedule(value: unknown): StoredSchedule {
 
 export function fromStoredSchedule(stored: StoredSchedule): Schedule {
   try {
-    const graph = new Graph({
-      nodes: stored.version.graph.nodes.map(
-        (node) =>
-          new Node({
-            id: node.id,
-            type: node.type,
-            version: node.version,
-            metadata: node.metadata,
-            capabilityId: node.capabilityId,
-            resourceReferences: node.resourceReferences,
-          })
-      ),
-      edges: stored.version.graph.edges.map(
-        (edge) => new Edge({ from: edge.from, to: edge.to, label: edge.label, condition: edge.condition })
-      ),
-    });
-    const stateSchema = new StateSchema({
-      name: stored.version.stateSchema.name,
-      version: stored.version.stateSchema.version,
-      fields: stored.version.stateSchema.fields,
-    });
-    const version = new PipelineVersion({
-      version: stored.version.version,
-      graph,
-      stateSchema,
-      metadata: stored.version.metadata,
-    });
+    const version = fromStoredPipelineVersion(stored.version);
     return new Schedule({
       id: stored.id,
       version,
@@ -189,6 +167,36 @@ export function fromStoredSchedule(stored: StoredSchedule): Schedule {
     }
     throw error;
   }
+}
+
+export function fromStoredPipelineVersion(stored: StoredPipelineVersion): PipelineVersion {
+  const graph = new Graph({
+    nodes: stored.graph.nodes.map(
+      (node) =>
+        new Node({
+          id: node.id,
+          type: node.type,
+          version: node.version,
+          metadata: node.metadata,
+          capabilityId: node.capabilityId,
+          resourceReferences: node.resourceReferences,
+        })
+    ),
+    edges: stored.graph.edges.map(
+      (edge) => new Edge({ from: edge.from, to: edge.to, label: edge.label, condition: edge.condition })
+    ),
+  });
+  const stateSchema = new StateSchema({
+    name: stored.stateSchema.name,
+    version: stored.stateSchema.version,
+    fields: stored.stateSchema.fields,
+  });
+  return new PipelineVersion({
+    version: stored.version,
+    graph,
+    stateSchema,
+    metadata: stored.metadata,
+  });
 }
 
 function isTrigger(value: unknown): value is ScheduleTrigger {

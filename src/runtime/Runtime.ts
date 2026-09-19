@@ -9,7 +9,12 @@ import {
 } from "../kernel/index.js";
 import { Executor, type ExecuteOptions } from "./Executor.js";
 import { MemoryRunStore } from "./persistence/MemoryRunStore.js";
-import type { RunStore, StoredRun } from "./persistence/RunStore.js";
+import {
+  toStoredNodeRun,
+  type RunStore,
+  type StoredNodeRun,
+  type StoredRun,
+} from "./persistence/RunStore.js";
 
 export type RuntimeRunStatus = RunStatus;
 
@@ -23,6 +28,7 @@ export interface RuntimeRunOptions {
   readonly id?: string;
   readonly initialState?: State;
   readonly eventBus?: EventBus;
+  readonly pipelineId?: string;
 }
 
 export interface RunStatusInfo {
@@ -31,6 +37,9 @@ export interface RunStatusInfo {
   readonly startedAt?: number;
   readonly finishedAt?: number;
   readonly error?: string;
+  readonly pipelineId?: string;
+  readonly pipelineVersion?: number;
+  readonly nodes: readonly StoredNodeRun[];
   readonly execution?: Execution;
 }
 
@@ -41,6 +50,9 @@ interface RunRecord {
   startedAt?: number;
   finishedAt?: number;
   error?: string;
+  pipelineId?: string;
+  pipelineVersion?: number;
+  nodeRuns: Map<string, StoredNodeRun>;
   execution?: Execution;
   unsubscribe?: () => void;
 }
@@ -96,6 +108,9 @@ export class Runtime {
       startedAt: record.startedAt,
       finishedAt: record.finishedAt,
       error: record.error,
+      pipelineId: record.pipelineId,
+      pipelineVersion: record.pipelineVersion,
+      nodes: [...record.nodeRuns.values()],
       execution: record.execution,
     });
   }
@@ -141,7 +156,7 @@ export class Runtime {
     if (this.records.has(id)) {
       throw new DomainError({ code: "DUPLICATE_ID", message: `A run with id "${id}" is already tracked` });
     }
-    const record: RunRecord = { id, controller: new AbortController(), status: "queued" };
+    const record: RunRecord = { id, controller: new AbortController(), status: "queued", nodeRuns: new Map() };
     this.records.set(id, record);
     this.persist(record);
     return record;
@@ -155,6 +170,9 @@ export class Runtime {
       startedAt: stored.startedAt,
       finishedAt: stored.finishedAt,
       error: stored.error,
+      pipelineId: stored.pipelineId,
+      pipelineVersion: stored.pipelineVersion,
+      nodeRuns: new Map((stored.nodes ?? []).map((nodeRun) => [nodeRun.nodeId, nodeRun])),
     };
     this.records.set(record.id, record);
   }
@@ -170,6 +188,9 @@ export class Runtime {
       startedAt: record.startedAt,
       finishedAt: record.finishedAt,
       error: record.error,
+      pipelineId: record.pipelineId,
+      pipelineVersion: record.pipelineVersion,
+      nodes: [...record.nodeRuns.values()],
       result: durableResult(record.execution),
     };
   }
@@ -204,15 +225,73 @@ export class Runtime {
         this.persist(record);
       }
     });
+    const onNodeStarted = bus.subscribe("execution.node.started", (event: Event) => {
+      if (event.payload.executionId === runId) {
+        record.nodeRuns.set(event.payload.nodeId as string, {
+          nodeId: event.payload.nodeId as string,
+          nodeType: event.payload.nodeType as string,
+          status: "running",
+          startedAt: Date.now(),
+        });
+        this.persist(record);
+      }
+    });
+    const onNodeFinished = bus.subscribe("execution.node.finished", (event: Event) => {
+      if (event.payload.executionId === runId) {
+        const existing = record.nodeRuns.get(event.payload.nodeId as string);
+        record.nodeRuns.set(event.payload.nodeId as string, {
+          nodeId: event.payload.nodeId as string,
+          nodeType: existing?.nodeType ?? "unknown",
+          status: "succeeded",
+          startedAt: existing?.startedAt,
+          finishedAt: Date.now(),
+          stateVersion: event.payload.stateVersion as number,
+        });
+        this.persist(record);
+      }
+    });
+    const onNodeFailed = bus.subscribe("execution.node.failed", (event: Event) => {
+      if (event.payload.executionId === runId) {
+        const existing = record.nodeRuns.get(event.payload.nodeId as string);
+        record.nodeRuns.set(event.payload.nodeId as string, {
+          nodeId: event.payload.nodeId as string,
+          nodeType: existing?.nodeType ?? "unknown",
+          status: "failed",
+          startedAt: existing?.startedAt,
+          finishedAt: Date.now(),
+          error: event.payload.error === undefined ? undefined : String(event.payload.error),
+        });
+        this.persist(record);
+      }
+    });
+    const onNodeCancelled = bus.subscribe("execution.node.cancelled", (event: Event) => {
+      if (event.payload.executionId === runId) {
+        const existing = record.nodeRuns.get(event.payload.nodeId as string);
+        record.nodeRuns.set(event.payload.nodeId as string, {
+          nodeId: event.payload.nodeId as string,
+          nodeType: existing?.nodeType ?? "unknown",
+          status: "cancelled",
+          startedAt: existing?.startedAt,
+          finishedAt: Date.now(),
+        });
+        this.persist(record);
+      }
+    });
     return () => {
       onStarted();
       onFinished();
       onFailed();
       onCancelled();
+      onNodeStarted();
+      onNodeFinished();
+      onNodeFailed();
+      onNodeCancelled();
     };
   }
 
   private async run(version: PipelineVersion, record: RunRecord, options: RuntimeRunOptions): Promise<Execution> {
+    record.pipelineId = options.pipelineId;
+    record.pipelineVersion = version.version;
     const executeOptions: ExecuteOptions = {
       id: record.id,
       initialState: options.initialState,
@@ -239,6 +318,10 @@ export class Runtime {
     record.startedAt = execution.run.startedAt;
     record.finishedAt = execution.run.finishedAt;
     record.error = execution.run.error;
+    record.pipelineVersion = execution.version.version;
+    record.nodeRuns = new Map(
+      [...execution.nodes.values()].map((nodeRun) => [nodeRun.nodeId, toStoredNodeRun(nodeRun)])
+    );
     record.unsubscribe?.();
     record.unsubscribe = undefined;
     this.persist(record);
