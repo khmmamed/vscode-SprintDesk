@@ -11,6 +11,7 @@ export class MemoryArtifactStore implements ArtifactStore {
       ref: artifact.ref,
       metadata: artifact.metadata,
       createdAt: artifact.createdAt,
+      lineage: artifact.lineage,
     };
     this.artifacts.set(artifact.id, copy);
   }
@@ -27,6 +28,7 @@ export class MemoryArtifactStore implements ArtifactStore {
       ref: artifact.ref,
       metadata: artifact.metadata,
       createdAt: artifact.createdAt,
+      lineage: artifact.lineage,
     };
     return copy;
   }

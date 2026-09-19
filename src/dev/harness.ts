@@ -32,6 +32,13 @@ import {
   ArtifactStore,
   MemoryArtifactStore,
 } from "../runtime/index.js";
+import {
+  ArtifactService as PlatformArtifactService,
+  CapabilityService,
+  PipelineService,
+  Platform,
+  ResourceService,
+} from "../platform/index.js";
 
 export interface DevHarnessOptions {
   readonly runStoreFile?: string;
@@ -54,6 +61,7 @@ export class DevHarness {
   private readonly handlerRegistry = new CapabilityHandlerRegistry();
   private readonly resourceRegistry = new ResourceRegistry();
   private readonly artifactStore = new MemoryArtifactStore();
+  private platform!: Platform;
 
   constructor(options: DevHarnessOptions = {}) {
     this.setupCapabilities();
@@ -107,6 +115,7 @@ export class DevHarness {
     this.runtime = new Runtime({
       executor: this.executor,
       runStore: options.runStoreFile ? new FileRunStore({ filePath: options.runStoreFile }) : undefined,
+      eventBus: this.eventBus,
     });
     this.pipelineEngine = new PipelineEngine(
       this.pipelineRegistry,
@@ -124,6 +133,22 @@ export class DevHarness {
         : undefined,
     });
 
+    this.platform = new Platform({
+      pipelineService: new PipelineService({
+        registry: this.pipelineRegistry,
+        capabilityRegistry: this.capabilityRegistry,
+        resourceRegistry: this.resourceRegistry,
+      }),
+      capabilityService: new CapabilityService(this.capabilityRegistry),
+      resourceService: new ResourceService(this.resourceRegistry),
+      artifactService: new PlatformArtifactService(this.artifactStore),
+      runtime: this.runtime,
+      engine: this.pipelineEngine,
+      dispatcher: this.dispatcher,
+      scheduler: this.scheduler,
+      eventBus: this.eventBus,
+    });
+
     this.filePipelineStore = options.pipelineStoreFile
       ? new FilePipelineStore({ filePath: options.pipelineStoreFile })
       : undefined;
@@ -136,7 +161,12 @@ export class DevHarness {
       return;
     }
     for (const stored of this.filePipelineStore.list()) {
-      this.pipelineRegistry.register(fromStoredPipeline(stored));
+      const pipeline = fromStoredPipeline(stored);
+      this.platform.pipelineService.create(pipeline);
+      for (const version of pipeline.versions) {
+        this.platform.pipelineService.validate(pipeline.id, version.version);
+        this.platform.pipelineService.publish(pipeline.id, version.version);
+      }
     }
   }
 
@@ -194,25 +224,24 @@ export class DevHarness {
   }
 
   runPipeline(pipelineId: string): string {
-    this.currentDispatchId = this.dispatcher.dispatch({ pipelineId });
-    const info = this.dispatcher.status(this.currentDispatchId);
-    this.currentRunId = info.runId;
-    return this.currentRunId ?? this.currentDispatchId;
+    this.currentDispatchId = undefined;
+    this.currentRunId = this.platform.runService.start({ pipelineId });
+    return this.currentRunId;
   }
 
   schedulePipeline(id: string, version?: number): Schedule {
     this.ensurePipeline(id);
-    return this.scheduler.schedule({ id, pipelineId: id, version });
+    return this.platform.scheduleService.create({ id, pipelineId: id, version });
   }
 
   scheduleIntervalPipeline(id: string, everyMs = 1000, version?: number): Schedule {
     this.ensurePipeline(id);
-    return this.scheduler.schedule({ id, pipelineId: id, version, trigger: { type: "interval", everyMs } });
+    return this.platform.scheduleService.create({ id, pipelineId: id, version, trigger: { type: "interval", everyMs } });
   }
 
   scheduleEventPipeline(id: string, eventType: string, version?: number): Schedule {
     this.ensurePipeline(id);
-    return this.scheduler.schedule({ id, pipelineId: id, version, trigger: { type: "event", eventType } });
+    return this.platform.scheduleService.create({ id, pipelineId: id, version, trigger: { type: "event", eventType } });
   }
 
   private ensurePipeline(id: string): void {
@@ -232,7 +261,7 @@ export class DevHarness {
   }
 
   triggerPipeline(id: string): string {
-    this.currentDispatchId = this.scheduler.trigger(id);
+    this.currentDispatchId = this.platform.scheduleService.trigger(id);
     this.currentRunId = this.dispatcher.status(this.currentDispatchId).runId;
     return this.currentRunId ?? this.currentDispatchId;
   }
@@ -251,6 +280,7 @@ export class DevHarness {
 
   stopScheduler(): void {
     this.scheduler.stop();
+    this.platform.scheduleService.delete("dev-schedule");
   }
 
   getRunCount(): number {
@@ -291,7 +321,11 @@ export class DevHarness {
   }
 
   registerPipeline(pipeline: Pipeline): Pipeline {
-    this.pipelineRegistry.register(pipeline);
+    this.platform.pipelineService.create(pipeline);
+    for (const version of pipeline.versions) {
+      this.platform.pipelineService.validate(pipeline.id, version.version);
+      this.platform.pipelineService.publish(pipeline.id, version.version);
+    }
     if (this.filePipelineStore) {
       this.filePipelineStore.save(toStoredPipeline(pipeline));
     }
@@ -324,6 +358,10 @@ export class DevHarness {
 
   getArtifactStore() {
     return this.artifactStore;
+  }
+
+  getPlatform(): Platform {
+    return this.platform;
   }
 
   private buildExampleVersion(): PipelineVersion {

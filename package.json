@@ -60,6 +60,10 @@
         "title": "SprintDesk: Cancel Active Run"
       },
       {
+        "command": "sprintdesk.openPipelineEditor",
+        "title": "SprintDesk: Open Pipeline Editor"
+      },
+      {
         "command": "sprintdesk.refreshDevInspection",
         "title": "SprintDesk: Refresh"
       },

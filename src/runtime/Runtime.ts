@@ -16,6 +16,7 @@ import {
   toStoredNodeRun,
   type RunStore,
   type StoredNodeRun,
+  type StoredStateSnapshot,
   type StoredRun,
 } from "./persistence/RunStore.js";
 
@@ -46,6 +47,7 @@ export interface RunStatusInfo {
   readonly pipelineId?: string;
   readonly pipelineVersion?: number;
   readonly nodes: readonly StoredNodeRun[];
+  readonly states: readonly StoredStateSnapshot[];
   readonly execution?: Execution;
 }
 
@@ -59,6 +61,7 @@ interface RunRecord {
   pipelineId?: string;
   pipelineVersion?: number;
   nodeRuns: Map<string, StoredNodeRun>;
+  stateSnapshots: Map<string, StoredStateSnapshot>;
   execution?: Execution;
   unsubscribe?: () => void;
 }
@@ -118,6 +121,7 @@ export class Runtime {
       pipelineId: record.pipelineId,
       pipelineVersion: record.pipelineVersion,
       nodes: [...record.nodeRuns.values()],
+      states: [...record.stateSnapshots.values()],
       execution: record.execution,
     });
   }
@@ -174,7 +178,7 @@ export class Runtime {
     if (this.records.has(id)) {
       throw new DomainError({ code: "DUPLICATE_ID", message: `A run with id "${id}" is already tracked` });
     }
-    const record: RunRecord = { id, controller: new AbortController(), status: "queued", nodeRuns: new Map() };
+    const record: RunRecord = { id, controller: new AbortController(), status: "queued", nodeRuns: new Map(), stateSnapshots: new Map() };
     this.records.set(id, record);
     this.persist(record);
     return record;
@@ -191,6 +195,7 @@ export class Runtime {
       pipelineId: stored.pipelineId,
       pipelineVersion: stored.pipelineVersion,
       nodeRuns: new Map((stored.nodes ?? []).map((nodeRun) => [nodeRun.nodeId, nodeRun])),
+      stateSnapshots: new Map((stored.states ?? []).map((snapshot) => [snapshot.nodeId, snapshot])),
     };
     this.records.set(record.id, record);
   }
@@ -209,6 +214,7 @@ export class Runtime {
       pipelineId: record.pipelineId,
       pipelineVersion: record.pipelineVersion,
       nodes: [...record.nodeRuns.values()],
+      ...(record.stateSnapshots.size === 0 ? {} : { states: [...record.stateSnapshots.values()] }),
       result: durableResult(record.execution),
     };
   }
@@ -342,6 +348,9 @@ export class Runtime {
     record.pipelineVersion = execution.version.version;
     record.nodeRuns = new Map(
       [...execution.nodes.values()].map((nodeRun) => [nodeRun.nodeId, toStoredNodeRun(nodeRun)])
+    );
+    record.stateSnapshots = new Map(
+      [...execution.stateHistory.entries()].map(([nodeId, state]) => [nodeId, { nodeId, version: state.version, value: state.value }])
     );
     record.unsubscribe?.();
     record.unsubscribe = undefined;

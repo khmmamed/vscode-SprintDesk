@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { DevHarness } from "./dev/harness.js";
 import { DevInspectionProvider } from "./dev/inspectionProvider.js";
+import { PipelineEditorPanel } from "./dev/PipelineEditorPanel.js";
 
 export async function activate(context: vscode.ExtensionContext) {
   const storageDir = context.globalStorageUri.fsPath;
@@ -16,6 +17,24 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   
   context.subscriptions.push(treeView);
+  context.subscriptions.push(inspectionProvider);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sprintdesk.openPipelineEditor', async () => {
+      const choices = dev.getPlatform().pipelineService.list().flatMap((pipeline) =>
+        pipeline.versions.map((version) => ({
+          label: `${pipeline.name} v${version.version}`,
+          description: pipeline.id,
+          pipelineId: pipeline.id,
+          version: version.version,
+        }))
+      );
+      const choice = await vscode.window.showQuickPick(choices, { placeHolder: "Select a pipeline version to edit" });
+      if (choice) {
+        PipelineEditorPanel.open(context.extensionUri, dev.getPlatform(), choice.pipelineId, choice.version);
+      }
+    })
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('sprintdesk.executeDevPipeline', async () => {
@@ -57,11 +76,14 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sprintdesk.refreshDevInspection', () => {
+  const refreshInspection = () => {
       inspectionProvider.refresh();
       vscode.window.showInformationMessage("🔄 Inspection tree refreshed");
-    })
+  };
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sprintdesk.refresh', refreshInspection),
+    vscode.commands.registerCommand('sprintdesk.refreshDevInspection', refreshInspection)
   );
 
   context.subscriptions.push(

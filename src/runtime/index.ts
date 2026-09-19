@@ -38,11 +38,12 @@ export {
 } from "./Dispatcher.js";
 export { MemoryRunStore } from "./persistence/MemoryRunStore.js";
 export { FileRunStore, type FileRunStoreOptions } from "./persistence/FileRunStore.js";
-export type { RunStore, StoredNodeAttempt, StoredNodeRun, StoredRetryPolicy, StoredRun } from "./persistence/RunStore.js";
+export type { RunStore, StoredNodeAttempt, StoredNodeRun, StoredRetryPolicy, StoredRun, StoredStateSnapshot } from "./persistence/RunStore.js";
 export {
   parseArtifact,
   type Artifact,
   type ArtifactRef,
+  type ArtifactLineage,
   type ArtifactStore,
 } from "./persistence/ArtifactStore.js";
 export { MemoryArtifactStore } from "./persistence/MemoryArtifactStore.js";

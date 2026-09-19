@@ -28,6 +28,12 @@ export interface StoredNodeRun {
   readonly retryPolicy?: StoredRetryPolicy;
 }
 
+export interface StoredStateSnapshot {
+  readonly nodeId: string;
+  readonly version: number;
+  readonly value: Readonly<Record<string, unknown>>;
+}
+
 export interface StoredRun {
   readonly id: string;
   readonly status: RunStatus;
@@ -38,6 +44,7 @@ export interface StoredRun {
   readonly pipelineId?: string;
   readonly pipelineVersion?: number;
   readonly nodes?: readonly StoredNodeRun[];
+  readonly states?: readonly StoredStateSnapshot[];
 }
 
 export interface RunStore {
@@ -146,7 +153,30 @@ export function parseStoredRun(value: unknown): StoredRun {
     }
     stored.nodes = run.nodes.map(parseStoredNodeRun);
   }
+  if (run.states !== undefined) {
+    if (!Array.isArray(run.states)) {
+      throw malformed("states must be an array");
+    }
+    stored.states = run.states.map(parseStoredStateSnapshot);
+  }
   return stored;
+}
+
+function parseStoredStateSnapshot(value: unknown): StoredStateSnapshot {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw malformed("expected a state snapshot object");
+  }
+  const snapshot = value as Record<string, unknown>;
+  if (typeof snapshot.nodeId !== "string" || snapshot.nodeId.trim().length === 0) {
+    throw malformed("state snapshot nodeId must be a non-empty string");
+  }
+  if (typeof snapshot.version !== "number" || !Number.isInteger(snapshot.version) || snapshot.version < 1) {
+    throw malformed("state snapshot version must be a positive integer");
+  }
+  if (typeof snapshot.value !== "object" || snapshot.value === null || Array.isArray(snapshot.value)) {
+    throw malformed("state snapshot value must be an object");
+  }
+  return { nodeId: snapshot.nodeId, version: snapshot.version, value: snapshot.value as Readonly<Record<string, unknown>> };
 }
 
 function parseStoredNodeRun(value: unknown): StoredNodeRun {
@@ -303,6 +333,7 @@ type MutableRetryPolicy = {
 type MutableRun = {
   id: string;
   status: RunStatus;
+  states?: readonly StoredStateSnapshot[];
   startedAt?: number;
   finishedAt?: number;
   error?: string;

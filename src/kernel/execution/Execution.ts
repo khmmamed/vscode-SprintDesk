@@ -12,6 +12,7 @@ export interface ExecutionOptions {
   readonly pipeline?: Pipeline;
   readonly run?: PipelineRun;
   readonly nodes?: ReadonlyMap<string, NodeRun>;
+  readonly stateHistory?: ReadonlyMap<string, State>;
 }
 
 export class Execution {
@@ -21,6 +22,7 @@ export class Execution {
   readonly run: PipelineRun;
   readonly pipeline?: Pipeline;
   readonly nodes: ReadonlyMap<string, NodeRun>;
+  readonly stateHistory: ReadonlyMap<string, State>;
 
   constructor(options: ExecutionOptions) {
     const id = options.id.trim();
@@ -33,6 +35,7 @@ export class Execution {
     this.run = options.run ?? new PipelineRun({ id: `${id}:run` });
     this.pipeline = options.pipeline;
     this.nodes = options.nodes ?? frozenMap();
+    this.stateHistory = options.stateHistory ?? frozenMap<State>();
     Object.freeze(this);
   }
 
@@ -48,6 +51,7 @@ export class Execution {
       initialState: this.initialState,
       run,
       nodes: this.nodes,
+      stateHistory: this.stateHistory,
     });
   }
 
@@ -61,10 +65,25 @@ export class Execution {
       initialState: this.initialState,
       run: this.run,
       nodes: Object.freeze(nodes),
+      stateHistory: this.stateHistory,
+    });
+  }
+
+  withStateSnapshot(nodeId: string, state: State): Execution {
+    const history = new Map(this.stateHistory);
+    history.set(nodeId, state);
+    return new Execution({
+      id: this.id,
+      pipeline: this.pipeline,
+      version: this.version,
+      initialState: this.initialState,
+      run: this.run,
+      nodes: this.nodes,
+      stateHistory: Object.freeze(history),
     });
   }
 }
 
-function frozenMap(): ReadonlyMap<string, NodeRun> {
-  return Object.freeze(new Map<string, NodeRun>());
+function frozenMap<T>(): ReadonlyMap<string, T> {
+  return Object.freeze(new Map<string, T>());
 }

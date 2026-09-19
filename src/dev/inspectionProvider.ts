@@ -1,242 +1,250 @@
 import * as vscode from "vscode";
+import type { PipelineVersion } from "../kernel/index.js";
+import type { Platform } from "../platform/index.js";
+import type { StoredNodeAttempt } from "../runtime/index.js";
 import type { DevHarness } from "./harness.js";
-import { Node } from "../kernel/index.js";
-import type { RunStatusInfo } from "../runtime/index.js";
-import type { Artifact } from "../runtime/persistence/ArtifactStore.js";
-import type { StoredNodeRun } from "../runtime/persistence/RunStore.js";
 
-export class DevInspectionProvider implements vscode.TreeDataProvider<DevItem> {
-  private readonly harness: DevHarness;
-  private _onDidChangeTreeData = new vscode.EventEmitter<DevItem | undefined>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+export class DevInspectionProvider implements vscode.TreeDataProvider<DevItem>, vscode.Disposable {
+  private readonly platform: Platform;
+  private readonly changeEmitter = new vscode.EventEmitter<DevItem | undefined>();
+  private readonly unsubscribeEvents: () => void;
+  readonly onDidChangeTreeData = this.changeEmitter.event;
 
   constructor(harness: DevHarness) {
-    this.harness = harness;
+    this.platform = harness.getPlatform();
+    this.unsubscribeEvents = this.platform.eventBus?.onAny(() => this.refresh()) ?? (() => undefined);
   }
 
   refresh(): void {
-    this._onDidChangeTreeData.fire(undefined);
+    this.changeEmitter.fire(undefined);
+  }
+
+  dispose(): void {
+    this.unsubscribeEvents();
+    this.changeEmitter.dispose();
   }
 
   getTreeItem(item: DevItem): vscode.TreeItem {
     return item;
   }
 
-  async getChildren(item?: DevItem): Promise<DevItem[]> {
+  getChildren(item?: DevItem): DevItem[] {
     if (!item) {
       return [
-        new DevItem({ 
-          label: "Pipelines", 
-          collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-          children: this.getPipelineItems() 
-        }),
-        new DevItem({ 
-          label: "Runs", 
-          collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-          children: this.getRunItems() 
-        }),
-        new DevItem({ 
-          label: "Schedules", 
-          collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-          children: this.getScheduleItems() 
-        }),
-        new DevItem({ 
-          label: "Capabilities", 
-          collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-          children: this.getCapabilityItems() 
-        }),
-        new DevItem({ 
-          label: "Resources", 
-          collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-          children: this.getResourceItems() 
-        }),
-        new DevItem({ 
-          label: "Artifacts", 
-          collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-          children: this.getArtifactItems() 
-        }),
+        this.branch("Pipelines", () => this.getPipelineItems()),
+        this.branch("Runs", () => this.getRunItems()),
+        this.branch("Schedules", () => this.getScheduleItems()),
+        this.branch("Capabilities", () => this.getCapabilityItems()),
+        this.branch("Resources", () => this.getResourceItems()),
+        this.branch("Artifacts", () => this.getArtifactItems()),
       ];
     }
+    return item.loadChildren?.() ?? item.children ?? [];
+  }
 
-    if (item.children) {
-      return item.children;
-    }
-
-    return [];
+  private branch(label: string, loadChildren: () => DevItem[]): DevItem {
+    return new DevItem({ label, collapsible: vscode.TreeItemCollapsibleState.Collapsed, loadChildren });
   }
 
   private getPipelineItems(): DevItem[] {
-    const pipelines = this.harness.listPipelines();
+    const pipelines = this.platform.pipelineService.list();
     if (pipelines.length === 0) {
       return [new DevItem({ label: "No pipelines registered" })];
     }
-
-    return pipelines.map(pipeline =>
-      new DevItem({
-        label: `${pipeline.name} (${pipeline.id})`,
-        collapsible: vscode.TreeItemCollapsibleState.Collapsed,
-        children: [
-          new DevItem({ label: `Latest: v${pipeline.latestVersion()?.version ?? "none"}` }),
-          ...pipeline.versions.map(
-            version =>
-              new DevItem({
-                label: `v${version.version}`,
-                collapsible: vscode.TreeItemCollapsibleState.Collapsed,
-                children: [
-                  new DevItem({
-                    label: "Graph",
-                    collapsible: vscode.TreeItemCollapsibleState.Collapsed,
-                    children: this.getGraphItems(version),
-                  }),
-                ],
-              })
-          ),
-        ],
-      })
-    );
+    return pipelines.map((pipeline) => new DevItem({
+      label: pipeline.name,
+      description: pipeline.id,
+      collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+      children: pipeline.versions.map((version) => this.getPipelineVersionItem(pipeline.id, version)),
+    }));
   }
 
-  private getGraphItems(version: any): DevItem[] {
-    const nodes = Array.from(version.graph.nodes.values()) as Node[];
-    return nodes.map(node => new DevItem({
-      label: `${node.id} (${node.type})`,
-      description: `Cap: ${node.capabilityId ?? "none"} | Res: ${node.resourceReferences?.map(r => r.resourceId).join(", ") ?? "none"}`,
+  private getPipelineVersionItem(pipelineId: string, version: PipelineVersion): DevItem {
+    const lifecycle = this.platform.pipelineService.lifecycle(pipelineId, version.version);
+    return new DevItem({
+      label: `v${version.version}`,
+      description: lifecycle,
+      collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+      children: [
+        new DevItem({ label: `Status: ${capitalize(lifecycle)}` }),
+        this.branch("Graph", () => this.getGraphItems(version)),
+      ],
+    });
+  }
+
+  private getGraphItems(version: PipelineVersion): DevItem[] {
+    return [...version.graph.nodes.values()].map((node) => new DevItem({
+      label: node.id,
+      description: node.type,
     }));
   }
 
   private getRunItems(): DevItem[] {
-    const runtime = this.harness.getRuntime();
-    const runs = runtime.runs();
+    const runs = this.platform.runControlService.list();
     if (runs.length === 0) {
       return [new DevItem({ label: "No runs registered" })];
     }
-
-    return runs.map(run => {
-      const status = runtime.status(run.id);
-      return new DevItem({ 
-        label: `run-${run.id} [${run.status}]`, 
-        collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-        children: [
-          new DevItem({ label: `Pipeline: ${run.pipelineId ?? "unnamed"} v${run.pipelineVersion ?? "?"}` }),
-          new DevItem({ label: `Started: ${run.startedAt ? new Date(run.startedAt).toLocaleString() : "N/A"}` }),
-          new DevItem({ label: `Finished: ${run.finishedAt ? new Date(run.finishedAt).toLocaleString() : "N/A"}` }),
-          new DevItem({ label: `Error: ${run.error ?? "None"}` }),
-          new DevItem({ 
-            label: "Nodes", 
-            collapsible: vscode.TreeItemCollapsibleState.Collapsed, 
-            children: this.getNodeRunItems(status.nodes) 
-          }),
-        ]
-      });
-    });
-  }
-
-  private getNodeRunItems(nodeRuns: readonly StoredNodeRun[]): DevItem[] {
-    if (nodeRuns.length === 0) {
-      return [new DevItem({ label: "No node runs recorded" })];
-    }
-
-    return nodeRuns.map(nodeRun => new DevItem({
-      label: `${nodeRun.nodeId} (${nodeRun.nodeType}) [${nodeRun.status}]`,
-      description: nodeRun.error
-        ? `Error: ${nodeRun.error}`
-        : nodeRun.stateVersion !== undefined
-          ? `State v${nodeRun.stateVersion}`
-          : undefined,
+    return runs.map((run) => new DevItem({
+      label: run.id,
+      description: run.status,
+      collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+      children: [
+        new DevItem({ label: `Pipeline: ${run.pipeline.name ?? run.pipeline.id}` }),
+        new DevItem({ label: `Version: v${run.pipeline.version ?? "?"}` }),
+        new DevItem({ label: `Status: ${capitalize(run.status)}` }),
+        new DevItem({ label: `Duration: ${formatDuration(run.durationMs)}` }),
+        ...(run.error === undefined ? [] : [new DevItem({ label: `Error: ${run.error}` })]),
+        this.branch("Nodes", () => this.getNodeRunItems(run.nodes)),
+        this.branch("State", () => run.stateVersions.map((version) => new DevItem({ label: `State v${version}` }))),
+        this.branch("Timeline", () => this.platform.debuggingService.events(run.id).map((event) => new DevItem({
+          label: event.type,
+          description: new Date(event.timestamp).toLocaleTimeString(),
+        }))),
+        this.branch("Artifacts", () => run.artifacts.map((artifact) => new DevItem({
+          label: artifact.id,
+          description: `${artifact.type}: ${artifact.name}`,
+        }))),
+      ],
     }));
   }
 
+  private getNodeRunItems(nodeRuns: readonly { nodeId: string; nodeType: string; status: string; error?: string; attempts?: readonly StoredNodeAttempt[]; durationMs?: number; stateVersion?: number }[]): DevItem[] {
+    if (nodeRuns.length === 0) {
+      return [new DevItem({ label: "No node runs recorded" })];
+    }
+    return nodeRuns.map((nodeRun) => new DevItem({
+      label: `${nodeRun.nodeId} ${statusGlyph(nodeRun.status)}`,
+      description: nodeRun.error ?? `${nodeRun.status}, ${formatDuration(nodeRun.durationMs)}`,
+      collapsible: (nodeRun.attempts?.length ?? 0) > 0
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : undefined,
+      children: (nodeRun.attempts ?? []).map((attempt) => this.getAttemptItem(attempt)),
+    }));
+  }
+
+  private getAttemptItem(attempt: StoredNodeAttempt): DevItem {
+    return new DevItem({
+      label: `Attempt ${attempt.attempt} ${statusGlyph(attempt.status)}`,
+      description: attempt.error ?? `${attempt.status}, ${formatDuration(durationBetween(attempt.startedAt, attempt.finishedAt))}`,
+    });
+  }
+
   private getScheduleItems(): DevItem[] {
-    const schedules = this.harness.listSchedules();
+    const schedules = this.platform.scheduleService.list();
     if (schedules.length === 0) {
       return [new DevItem({ label: "No schedules registered" })];
     }
-
-    return schedules.map(s => new DevItem({
-      label: s.id,
+    return schedules.map((schedule) => new DevItem({
+      label: schedule.id,
+      description: schedule.enabled ? "enabled" : "disabled",
       collapsible: vscode.TreeItemCollapsibleState.Collapsed,
       children: [
-        new DevItem({ label: `Trigger: ${s.trigger.type}` }),
-        new DevItem({ label: `Enabled: ${s.enabled}` }),
-        new DevItem({ label: `Pipeline: ${s.pipelineId} (v${s.version ?? "latest"})` }),
-      ]
+        new DevItem({ label: `Pipeline: ${schedule.pipelineId}` }),
+        new DevItem({ label: `Version: v${schedule.version ?? "?"}` }),
+        new DevItem({ label: `Trigger: ${schedule.trigger.type}` }),
+      ],
     }));
   }
 
   private getCapabilityItems(): DevItem[] {
-    const registry = this.harness.getCapabilityRegistry();
-    const caps = registry.list();
-    if (caps.length === 0) {
+    const capabilities = this.platform.capabilityService.list();
+    if (capabilities.length === 0) {
       return [new DevItem({ label: "No capabilities registered" })];
     }
-
-    return caps.map(cap => new DevItem({
-      label: cap.id,
+    return capabilities.map((capability) => new DevItem({
+      label: capability.id,
+      description: capability.type,
       collapsible: vscode.TreeItemCollapsibleState.Collapsed,
       children: [
-        new DevItem({ label: `Type: ${cap.type}` }),
-        new DevItem({ label: `Version: ${cap.version}` }),
-        new DevItem({ label: `Handler: ${registry.has(cap.id) ? "Registered" : "Missing"}` }),
-      ]
+        new DevItem({ label: `Version: ${capability.version}` }),
+        new DevItem({ label: `Metadata: ${Object.keys(capability.metadata).length} fields` }),
+      ],
     }));
   }
 
   private getResourceItems(): DevItem[] {
-    const registry = this.harness.getResourceRegistry();
-    const res = registry.list();
-    if (res.length === 0) {
+    const resources = this.platform.resourceService.list();
+    if (resources.length === 0) {
       return [new DevItem({ label: "No resources registered" })];
     }
-
-    return res.map(r => new DevItem({
-      label: r.id,
+    return resources.map((resource) => new DevItem({
+      label: resource.id,
+      description: `${resource.type} v${resource.version}`,
       collapsible: vscode.TreeItemCollapsibleState.Collapsed,
-      children: [
-        new DevItem({ label: `Type: ${r.type}` }),
-        new DevItem({ label: `Version: ${r.version}` }),
-      ]
+      children: [new DevItem({ label: `Metadata: ${Object.keys(resource.metadata).length} fields` })],
     }));
   }
 
   private getArtifactItems(): DevItem[] {
-    const store = this.harness.getArtifactStore();
-    const artifacts = store.list();
+    const artifacts = this.platform.artifactService.list();
     if (artifacts.length === 0) {
       return [new DevItem({ label: "No artifacts registered" })];
     }
-
-    return artifacts.map((a: Artifact) => new DevItem({
-      label: a.id,
+    return artifacts.map((artifact) => new DevItem({
+      label: artifact.id,
+      description: `${artifact.type}: ${artifact.name}`,
       collapsible: vscode.TreeItemCollapsibleState.Collapsed,
       children: [
-        new DevItem({ label: `Type: ${a.type}` }),
-        new DevItem({ label: `Name: ${a.name}` }),
-        new DevItem({ label: `Ref: ${a.ref.kind}` }),
-      ]
+        new DevItem({ label: `Reference: ${artifact.ref.kind}` }),
+        new DevItem({ label: `Metadata: ${Object.keys(artifact.metadata ?? {}).length} fields` }),
+        ...(artifact.lineage === undefined ? [] : [
+          new DevItem({ label: `Run: ${artifact.lineage.executionId}` }),
+          new DevItem({ label: `Node: ${artifact.lineage.nodeId}` }),
+          new DevItem({ label: `Attempt: ${artifact.lineage.attempt}` }),
+          ...(artifact.lineage.pipelineId === undefined ? [] : [
+            new DevItem({ label: `Pipeline: ${artifact.lineage.pipelineId} v${artifact.lineage.pipelineVersion ?? "?"}` }),
+          ]),
+        ]),
+        ...(artifact.retention === undefined ? [] : [
+          new DevItem({ label: `Retention: ${artifact.retention.policy}` }),
+        ]),
+      ],
     }));
   }
 }
 
 class DevItem extends vscode.TreeItem {
-  constructor(options: { 
-    label: string, 
-    collapsible?: vscode.TreeItemCollapsibleState, 
-    children?: DevItem[],
-    iconPath?: any,
-    description?: string
-  }) {
-    super(options.label, vscode.TreeItemCollapsibleState.None);
-    this.description = options.description;
-    if (options.collapsible) {
-      this.collapsibleState = options.collapsible;
-    }
-    if (options.children) {
-      this.children = options.children;
-    }
-    if (options.iconPath) {
-      this.iconPath = options.iconPath;
-    }
-  }
-
   readonly children?: DevItem[];
+  readonly loadChildren?: () => DevItem[];
+
+  constructor(options: {
+    label: string;
+    collapsible?: vscode.TreeItemCollapsibleState;
+    children?: DevItem[];
+    loadChildren?: () => DevItem[];
+    description?: string;
+  }) {
+    super(options.label, options.collapsible ?? vscode.TreeItemCollapsibleState.None);
+    this.description = options.description;
+    this.children = options.children;
+    this.loadChildren = options.loadChildren;
+  }
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
+}
+
+function statusGlyph(status: string): string {
+  if (status === "succeeded") {
+    return "✓";
+  }
+  if (status === "failed") {
+    return "!";
+  }
+  if (status === "cancelled") {
+    return "-";
+  }
+  return "...";
+}
+
+function durationBetween(startedAt?: number, finishedAt?: number): number | undefined {
+  if (startedAt === undefined) {
+    return undefined;
+  }
+  return Math.max(0, (finishedAt ?? Date.now()) - startedAt);
+}
+
+function formatDuration(durationMs?: number): string {
+  return durationMs === undefined ? "in progress" : `${durationMs} ms`;
 }

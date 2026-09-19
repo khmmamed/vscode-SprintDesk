@@ -4,6 +4,14 @@ export type ArtifactRef =
   | { readonly kind: "reference"; readonly ref: string }
   | { readonly kind: "content"; readonly content: unknown };
 
+export interface ArtifactLineage {
+  readonly executionId: string;
+  readonly pipelineId?: string;
+  readonly pipelineVersion?: number;
+  readonly nodeId: string;
+  readonly attempt: number;
+}
+
 export interface Artifact {
   readonly id: string;
   readonly type: string;
@@ -11,6 +19,7 @@ export interface Artifact {
   readonly ref: ArtifactRef;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly createdAt?: number;
+  readonly lineage?: ArtifactLineage;
 }
 
 export interface ArtifactStore {
@@ -52,6 +61,9 @@ export function parseArtifact(value: unknown): Artifact {
     }
     stored.createdAt = artifact.createdAt;
   }
+  if (artifact.lineage !== undefined) {
+    stored.lineage = parseLineage(artifact.lineage);
+  }
   return stored;
 }
 
@@ -62,7 +74,37 @@ type MutableArtifact = {
   ref: ArtifactRef;
   metadata?: Readonly<Record<string, unknown>>;
   createdAt?: number;
+  lineage?: ArtifactLineage;
 };
+
+function parseLineage(value: unknown): ArtifactLineage {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw malformed("lineage must be an object");
+  }
+  const lineage = value as Record<string, unknown>;
+  if (typeof lineage.executionId !== "string" || lineage.executionId.trim().length === 0) {
+    throw malformed("lineage.executionId must be a non-empty string");
+  }
+  if (typeof lineage.nodeId !== "string" || lineage.nodeId.trim().length === 0) {
+    throw malformed("lineage.nodeId must be a non-empty string");
+  }
+  if (typeof lineage.attempt !== "number" || !Number.isInteger(lineage.attempt) || lineage.attempt < 1) {
+    throw malformed("lineage.attempt must be a positive integer");
+  }
+  if (lineage.pipelineId !== undefined && (typeof lineage.pipelineId !== "string" || lineage.pipelineId.trim().length === 0)) {
+    throw malformed("lineage.pipelineId must be a non-empty string");
+  }
+  if (lineage.pipelineVersion !== undefined && (typeof lineage.pipelineVersion !== "number" || !Number.isInteger(lineage.pipelineVersion) || lineage.pipelineVersion < 1)) {
+    throw malformed("lineage.pipelineVersion must be a positive integer");
+  }
+  return {
+    executionId: lineage.executionId,
+    nodeId: lineage.nodeId,
+    attempt: lineage.attempt,
+    ...(lineage.pipelineId === undefined ? {} : { pipelineId: lineage.pipelineId }),
+    ...(lineage.pipelineVersion === undefined ? {} : { pipelineVersion: lineage.pipelineVersion }),
+  };
+}
 
 function parseRef(value: unknown): ArtifactRef {
   if (typeof value !== "object" || value === null) {

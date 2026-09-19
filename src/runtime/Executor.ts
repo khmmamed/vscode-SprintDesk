@@ -19,7 +19,7 @@ import {
 import { createArtifactService, type ArtifactService } from "./ArtifactService.js";
 import type { ExecuteOptions } from "./ExecutionBackend.js";
 import type { ResourceResolver, ResolvedResources } from "./ResourceResolver.js";
-import type { Artifact, ArtifactStore } from "./persistence/ArtifactStore.js";
+import type { Artifact, ArtifactLineage, ArtifactStore } from "./persistence/ArtifactStore.js";
 
 export type { ExecuteOptions } from "./ExecutionBackend.js";
 
@@ -145,7 +145,14 @@ export class Executor {
 
     const box: { execution: Execution } = { execution };
     try {
-      const finalState = await this.runGraph(order, initialState, { eventBus, executionId: id, signal, version }, box);
+      const finalState = await this.runGraph(order, initialState, {
+        eventBus,
+        executionId: id,
+        pipelineId: options.pipelineId,
+        pipelineVersion: options.pipelineVersion ?? version.version,
+        signal,
+        version,
+      }, box);
       execution = box.execution;
       const finished = execution.run.succeed({ finalState: finalState as unknown as Readonly<Record<string, unknown>> }, finishTime());
       execution = execution.withRun(finished);
@@ -308,8 +315,15 @@ export class Executor {
 
       state = output;
       execution = execution.withNodeRun(getNodeRun(execution, node.id).succeed(state.version, finishTime()));
+      execution = execution.withStateSnapshot(node.id, state);
       commit();
-      this.commitArtifacts(artifacts);
+      this.commitArtifacts(artifacts, {
+        executionId: ctx.executionId,
+        pipelineId: ctx.pipelineId,
+        pipelineVersion: ctx.pipelineVersion,
+        nodeId: node.id,
+        attempt: getNodeRun(execution, node.id).currentAttempt ?? attempt,
+      });
       emit(ctx.eventBus, "execution.node.finished", {
         executionId: ctx.executionId,
         nodeId: node.id,
@@ -338,12 +352,12 @@ export class Executor {
     return runCapabilityNode(this, node, state, ctx, artifacts, pending);
   }
 
-  private commitArtifacts(artifacts: readonly Artifact[]): void {
+  private commitArtifacts(artifacts: readonly Artifact[], lineage: ArtifactLineage): void {
     if (this.artifactStore === undefined || artifacts.length === 0) {
       return;
     }
     for (const artifact of artifacts) {
-      this.artifactStore.save(artifact);
+      this.artifactStore.save(artifact.lineage === undefined ? { ...artifact, lineage } : artifact);
     }
   }
 }
@@ -491,6 +505,8 @@ function rethrowIfCancelled(error: unknown): void {
 type ExecutorGraphContext = {
   readonly eventBus?: EventBus;
   readonly executionId: string;
+  readonly pipelineId?: string;
+  readonly pipelineVersion?: number;
   readonly signal: AbortSignal;
   readonly version: PipelineVersion;
 };
