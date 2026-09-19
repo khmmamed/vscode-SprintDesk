@@ -21,6 +21,7 @@ import {
   toStoredPipeline,
   toStoredSchedule,
   fromStoredPipelineVersion,
+  toStoredPipelineVersion,
   type StoredPipeline,
 } from "../../src/runtime/index.js";
 import { parseStoredPipeline } from "../../src/runtime/persistence/PipelineStore.js";
@@ -191,11 +192,11 @@ describe("pipeline persistence completeness", () => {
     assert.throws(() => parseStoredPipeline(duplicateVersions), /Malformed persisted pipeline data/);
   });
 
-  it("version-serializes independently for reuse by schedules and pipelines", () => {
+  it("version-serializes independently for reuse by pipelines and schedules", () => {
     const version = versionOf(2, [
       new Node({ id: "a", type: "primitive", capabilityId: "cap.x", resourceReferences: [{ resourceId: "r" }] }),
     ]);
-    const restored = fromStoredPipelineVersion(throughJson(toStoredSchedule(new Schedule({ id: "s", version })).version));
+    const restored = fromStoredPipelineVersion(throughJson(toStoredPipelineVersion(version)));
     assert.strictEqual(restored.version, 2);
     assert.strictEqual(restored.graph.nodes.get("a")?.capabilityId, "cap.x");
     assert.deepStrictEqual(restored.graph.nodes.get("a")?.resourceReferences, [{ resourceId: "r" }]);
@@ -251,21 +252,17 @@ describe("pipeline persistence completeness", () => {
     }
   });
 
-  it("schedules a pipeline version through the existing schedule persistence boundary", () => {
+  it("schedules a pipeline reference through the schedule persistence boundary", () => {
     const pipeline = fromStoredPipeline(throughJson(toStoredPipeline(examplePipeline())));
     const version = pipeline.latestVersion() as PipelineVersion;
-    const schedule = new Schedule({ id: "from-pipeline", version });
+    const schedule = new Schedule({ id: "from-pipeline", pipelineId: pipeline.id, version: version?.version });
 
     const stored = throughJson(toStoredSchedule(schedule));
     const restored = fromStoredSchedule(stored);
 
     assert.strictEqual(restored.id, "from-pipeline");
-    assert.strictEqual(restored.version.version, 1);
-    assert.strictEqual(restored.version.graph.nodes.get("a")?.capabilityId, "example.capability");
-    assert.deepStrictEqual(restored.version.graph.nodes.get("a")?.resourceReferences, [
-      { resourceId: "database-main" },
-      { resourceId: "api-main" },
-    ]);
+    assert.strictEqual(restored.pipelineId, "example.capable");
+    assert.strictEqual(restored.version, 1);
   });
 });
 

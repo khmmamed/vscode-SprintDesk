@@ -6,16 +6,20 @@ import {
   DomainError,
   Graph,
   Node,
+  Pipeline,
+  PipelineRegistry,
   PipelineVersion,
   StateSchema,
   type SchemaField,
 } from "../../src/kernel/index.js";
 import {
+  Dispatcher,
   Executor,
   FileRunStore,
   FileScheduleStore,
   MemoryRunStore,
   MemoryScheduleStore,
+  PipelineEngine,
   Runtime,
   Schedule,
   Scheduler,
@@ -84,6 +88,17 @@ async function waitForStatus(runtime: Runtime, id: string, status: string, timeo
   assert.fail(`run "${id}" did not reach status "${status}" in time`);
 }
 
+async function waitForDispatchStatus(dispatcher: Dispatcher, id: string, status: string, timeout = 2000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (dispatcher.status(id).status === status) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(`dispatch "${id}" did not reach status "${status}" in time`);
+}
+
 describe("persistence/MemoryRunStore", () => {
   it("saves, gets, lists, and deletes", () => {
     const store = new MemoryRunStore();
@@ -99,7 +114,7 @@ describe("persistence/MemoryRunStore", () => {
 describe("persistence/MemoryScheduleStore", () => {
   it("saves, gets, lists, and deletes", () => {
     const store = new MemoryScheduleStore();
-    const schedule = new Schedule({ id: "daily", version: counterVersion() });
+    const schedule = new Schedule({ id: "daily", pipelineId: "p", version: 3 });
     const stored = toStoredSchedule(schedule);
     store.save(stored);
     assert.deepStrictEqual(store.get("daily"), stored);
@@ -189,7 +204,7 @@ describe("persistence/FileScheduleStore", () => {
     const filePath = join(tmpdirPath(), "schedules.json");
     writeFileSync(
       filePath,
-      JSON.stringify({ version: 1, schedules: [{ id: "s", enabled: true, createdAt: 1, version: { version: 1, graph: { nodes: [], edges: [] }, stateSchema: { name: "x" } }, trigger: { type: "cron" } }] }),
+      JSON.stringify({ version: 1, schedules: [{ id: "s", pipelineId: "p", enabled: true, createdAt: 1, trigger: { type: "cron" } }] }),
       "utf8"
     );
     assert.throws(() => new FileScheduleStore({ filePath }), (error: unknown) => {
@@ -237,18 +252,29 @@ describe("persistence across restart", () => {
   it("Scheduler restores schedules after a fresh Scheduler is created", async () => {
     const filePath = join(tmpdirPath(), "schedules.json");
     const executor = new Executor({ actions: [counterAction()] });
-    const version = counterVersion();
-    const runtime = new Runtime({ executor });
 
+    const firstRegistry = new PipelineRegistry();
+    firstRegistry.register(new Pipeline({ id: "daily", name: "Daily", versions: [counterVersion()] }));
+    const firstRuntime = new Runtime({ executor });
+    const firstDispatcher = new Dispatcher({
+      engine: new PipelineEngine(firstRegistry, firstRuntime),
+      runtime: firstRuntime,
+    });
     const firstScheduler = new Scheduler({
-      runtime,
+      dispatcher: firstDispatcher,
       scheduleStore: new FileScheduleStore({ filePath }),
     });
-    firstScheduler.schedule({ id: "daily", version, trigger: { type: "interval", everyMs: 60000 }, createdAt: 42 });
+    firstScheduler.schedule({ id: "daily", pipelineId: "daily", trigger: { type: "interval", everyMs: 60000 }, createdAt: 42 });
 
+    const secondRegistry = new PipelineRegistry();
+    secondRegistry.register(new Pipeline({ id: "daily", name: "Daily", versions: [counterVersion()] }));
     const secondRuntime = new Runtime({ executor });
-    const secondScheduler = new Scheduler({
+    const secondDispatcher = new Dispatcher({
+      engine: new PipelineEngine(secondRegistry, secondRuntime),
       runtime: secondRuntime,
+    });
+    const secondScheduler = new Scheduler({
+      dispatcher: secondDispatcher,
       scheduleStore: new FileScheduleStore({ filePath }),
     });
     const restored = secondScheduler.get("daily");
@@ -256,11 +282,10 @@ describe("persistence across restart", () => {
     assert.deepStrictEqual(restored.trigger, { type: "interval", everyMs: 60000 });
     assert.strictEqual(restored.enabled, true);
     assert.strictEqual(restored.createdAt, 42);
-    assert.strictEqual(restored.version.version, 1);
-    assert.strictEqual(restored.version.graph.nodeCount, 1);
-    assert.strictEqual(restored.version.stateSchema.name, "persistence");
+    assert.strictEqual(restored.pipelineId, "daily");
+    assert.strictEqual(restored.version, undefined);
 
-    const runId = secondScheduler.trigger("daily");
-    await waitForStatus(secondRuntime, runId, "succeeded");
+    const dispatchId = secondScheduler.trigger("daily");
+    await waitForDispatchStatus(secondDispatcher, dispatchId, "succeeded");
   });
 });

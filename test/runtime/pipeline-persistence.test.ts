@@ -5,6 +5,7 @@ import {
   CapabilityRegistry,
   Graph,
   Node,
+  Pipeline,
   PipelineVersion,
   Resource,
   ResourceRegistry,
@@ -18,13 +19,16 @@ import {
   MemoryScheduleStore,
   RegistryResourceResolver,
   Schedule,
+  fromStoredPipeline,
+  fromStoredPipelineVersion,
   fromStoredSchedule,
+  toStoredPipelineVersion,
   toStoredSchedule,
   type CapabilityExecutionContext,
   type CapabilityNodeInput,
   type StoredSchedule,
 } from "../../src/runtime/index.js";
-import { parseStoredSchedule } from "../../src/runtime/persistence/ScheduleStore.js";
+import { parseStoredPipeline } from "../../src/runtime/persistence/PipelineStore.js";
 
 function schema(fields: Readonly<Record<string, SchemaField>> = {}): StateSchema {
   return new StateSchema({ name: "persistence-completeness", fields });
@@ -61,14 +65,11 @@ function registriesFor(
 describe("pipeline persistence completeness", () => {
   it("persists Node.capabilityId across a serialize → JSON → deserialize round trip", () => {
     const version = versionOf([new Node({ id: "a", type: "primitive", capabilityId: "example.capability" })]);
-    const schedule = new Schedule({ id: "cap", version });
+    const stored = toStoredPipelineVersion(version);
+    assert.strictEqual(stored.graph.nodes[0].capabilityId, "example.capability");
 
-    const stored = toStoredSchedule(schedule);
-    assert.strictEqual(stored.version.graph.nodes[0].capabilityId, "example.capability");
-
-    const hydrated = fromStoredSchedule(throughJson(stored));
-    const node = hydrated.version.graph.nodes.get("a");
-    assert.strictEqual(node?.capabilityId, "example.capability");
+    const hydrated = fromStoredPipelineVersion(throughJson(stored));
+    assert.strictEqual(hydrated.graph.nodes.get("a")?.capabilityId, "example.capability");
   });
 
   it("persists multiple resource references in their original order", () => {
@@ -79,98 +80,88 @@ describe("pipeline persistence completeness", () => {
         resourceReferences: [{ resourceId: "database-main" }, { resourceId: "api-main" }],
       }),
     ]);
-    const schedule = new Schedule({ id: "resources", version });
-
-    const stored = toStoredSchedule(schedule);
-    assert.deepStrictEqual(stored.version.graph.nodes[0].resourceReferences, [
+    const stored = toStoredPipelineVersion(version);
+    assert.deepStrictEqual(stored.graph.nodes[0].resourceReferences, [
       { resourceId: "database-main" },
       { resourceId: "api-main" },
     ]);
 
-    const hydrated = fromStoredSchedule(throughJson(stored));
-    const node = hydrated.version.graph.nodes.get("a");
-    assert.deepStrictEqual(node?.resourceReferences, [{ resourceId: "database-main" }, { resourceId: "api-main" }]);
+    const hydrated = fromStoredPipelineVersion(throughJson(stored));
+    assert.deepStrictEqual(hydrated.graph.nodes.get("a")?.resourceReferences, [
+      { resourceId: "database-main" },
+      { resourceId: "api-main" },
+    ]);
   });
 
   it("keeps an explicit empty resourceReferences list valid", () => {
     const version = versionOf([new Node({ id: "a", type: "primitive", resourceReferences: [] })]);
-    const schedule = new Schedule({ id: "empty-refs", version });
-
-    const hydrated = fromStoredSchedule(throughJson(toStoredSchedule(schedule)));
-    assert.deepStrictEqual(hydrated.version.graph.nodes.get("a")?.resourceReferences, []);
-    assert.deepStrictEqual(hydrated.version.graph.nodes.get("a")?.capabilityId, undefined);
+    const hydrated = fromStoredPipelineVersion(throughJson(toStoredPipelineVersion(version)));
+    assert.deepStrictEqual(hydrated.graph.nodes.get("a")?.resourceReferences, []);
+    assert.deepStrictEqual(hydrated.graph.nodes.get("a")?.capabilityId, undefined);
   });
 
   it("hydrates a legacy node without capability/resource fields to its defaults", () => {
     const legacy = {
       id: "legacy",
-      enabled: true,
-      createdAt: 1,
-      trigger: { type: "manual" as const },
-      version: {
-        version: 1,
-        stateSchema: { name: "s", fields: {} },
-        graph: {
-          nodes: [{ id: "a", type: "counter" }],
-          edges: [],
+      name: "Legacy",
+      versions: [
+        {
+          version: 1,
+          stateSchema: { name: "s", fields: {} },
+          graph: {
+            nodes: [{ id: "a", type: "counter" }],
+            edges: [],
+          },
         },
-      },
+      ],
     };
 
-    const parsed = parseStoredSchedule(legacy);
-    const hydrated = fromStoredSchedule(parsed);
-    const node = hydrated.version.graph.nodes.get("a");
+    const pipeline = fromStoredPipeline(parseStoredPipeline(legacy));
+    const version = pipeline.latestVersion() as PipelineVersion;
+    const node = version.graph.nodes.get("a");
     assert.strictEqual(node?.id, "a");
     assert.strictEqual(node?.type, "counter");
     assert.strictEqual(node?.capabilityId, undefined);
     assert.deepStrictEqual(node?.resourceReferences, []);
-    assert.strictEqual(hydrated.version.graph.nodeCount, 1);
+    assert.strictEqual(version.graph.nodeCount, 1);
   });
 
   it("rejects a persisted capabilityId that is not a string", () => {
     const bad = {
       id: "bad",
-      enabled: true,
-      createdAt: 1,
-      trigger: { type: "manual" as const },
-      version: {
-        version: 1,
-        stateSchema: { name: "s", fields: {} },
-        graph: {
-          nodes: [{ id: "a", type: "primitive", capabilityId: 5 }],
-          edges: [],
+      name: "Bad",
+      versions: [
+        {
+          version: 1,
+          stateSchema: { name: "s", fields: {} },
+          graph: {
+            nodes: [{ id: "a", type: "primitive", capabilityId: 5 }],
+            edges: [],
+          },
         },
-      },
+      ],
     };
 
-    assert.throws(() => parseStoredSchedule(bad), (error: unknown) => {
+    assert.throws(() => parseStoredPipeline(bad), (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.ok((error as Error).message.includes("Malformed persisted schedule data"));
+      assert.ok((error as Error).message.includes("Malformed persisted pipeline data"));
       return true;
     });
   });
 
-  it("retains capabilityId and resourceReferences through the full schedule-store restart path", () => {
-    const version = versionOf([
-      new Node({
-        id: "a",
-        type: "primitive",
-        capabilityId: "example.capability",
-        resourceReferences: [{ resourceId: "database-main" }, { resourceId: "api-main" }],
-      }),
-    ]);
-    const schedule = new Schedule({ id: "scheduled-cap", version });
+  it("retains its pipeline reference through the full schedule-store restart path", () => {
+    const schedule = new Schedule({ id: "scheduled-ref", pipelineId: "p", version: 1 });
 
     const firstStore = new MemoryScheduleStore();
     firstStore.save(throughJson(toStoredSchedule(schedule)));
 
     const secondStore = new MemoryScheduleStore();
-    secondStore.save(throughJson(firstStore.get("scheduled-cap") as StoredSchedule));
+    secondStore.save(throughJson(firstStore.get("scheduled-ref") as StoredSchedule));
 
-    const restored = fromStoredSchedule(secondStore.get("scheduled-cap") as StoredSchedule);
-    const node = restored.version.graph.nodes.get("a");
-    assert.strictEqual(node?.capabilityId, "example.capability");
-    assert.deepStrictEqual(node?.resourceReferences, [{ resourceId: "database-main" }, { resourceId: "api-main" }]);
+    const restored = fromStoredSchedule(secondStore.get("scheduled-ref") as StoredSchedule);
+    assert.strictEqual(restored.pipelineId, "p");
+    assert.strictEqual(restored.version, 1);
+    assert.strictEqual(restored.enabled, true);
   });
 
   it("a capability node keeps its resolved resources after hydration and execution", async () => {
@@ -199,10 +190,9 @@ describe("pipeline persistence completeness", () => {
         resourceReferences: [{ resourceId: "database-main" }],
       }),
     ]);
-    const schedule = new Schedule({ id: "exec-cap", version });
-    const hydrated = fromStoredSchedule(throughJson(toStoredSchedule(schedule)));
+    const hydrated = fromStoredPipelineVersion(throughJson(toStoredPipelineVersion(version)));
 
-    const execution = await executor.execute(hydrated.version, { id: "exec-after-restart" });
+    const execution = await executor.execute(hydrated, { id: "exec-after-restart" });
 
     assert.strictEqual(execution.status, "succeeded");
     assert.ok(captured);
@@ -227,21 +217,21 @@ describe("pipeline persistence completeness", () => {
     });
     const legacy = {
       id: "legacy-run",
-      enabled: true,
-      createdAt: 1,
-      trigger: { type: "manual" as const },
-      version: {
-        version: 1,
-        stateSchema: { name: "s", fields: {} },
-        graph: {
-          nodes: [{ id: "a", type: "counter" }],
-          edges: [],
+      name: "Legacy Run",
+      versions: [
+        {
+          version: 1,
+          stateSchema: { name: "s", fields: {} },
+          graph: {
+            nodes: [{ id: "a", type: "counter" }],
+            edges: [],
+          },
         },
-      },
+      ],
     };
 
-    const hydrated = fromStoredSchedule(parseStoredSchedule(legacy));
-    const execution = await executor.execute(hydrated.version, { id: "legacy-after-restart" });
+    const pipeline = fromStoredPipeline(parseStoredPipeline(legacy));
+    const execution = await executor.execute(pipeline.latestVersion() as PipelineVersion, { id: "legacy-after-restart" });
 
     assert.strictEqual(execution.status, "succeeded");
     assert.strictEqual(ran, true);

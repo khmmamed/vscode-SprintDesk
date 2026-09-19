@@ -4,524 +4,612 @@ import {
   EventBus,
   Graph,
   Node,
+  Pipeline,
+  PipelineRegistry,
   PipelineVersion,
   State,
   StateSchema,
-  type Event,
-  type SchemaField,
 } from "../../src/kernel/index.js";
-import { Executor, Runtime, Schedule, Scheduler, type NodeAction } from "../../src/runtime/index.js";
+import {
+  Dispatcher,
+  Executor,
+  PipelineEngine,
+  Runtime,
+  Schedule,
+  Scheduler,
+  type DispatchStatus,
+} from "../../src/runtime/index.js";
+import type { NodeAction } from "../../src/runtime/Executor.js";
 
-function schema(fields: Readonly<Record<string, SchemaField>> = {}): StateSchema {
-  return new StateSchema({ name: "scheduler", fields });
+function schema(): StateSchema {
+  return new StateSchema({ name: "scheduler", fields: { count: { type: "number", required: false } } });
 }
 
-function graphOf(nodes: Array<{ id: string; type: string }>, edges: string[][] = []): Graph {
-  return new Graph({
-    nodes: nodes.map(({ id, type }) => new Node({ id, type })),
-    edges: edges.map(([from, to]) => ({ from, to }) as { from: string; to: string }),
-  });
-}
-
-function counterVersion(): PipelineVersion {
+function version(...types: string[]): PipelineVersion {
   return new PipelineVersion({
     version: 1,
-    graph: graphOf([{ id: "counter", type: "counter" }]),
-    stateSchema: schema({ count: { type: "number", required: false } }),
+    graph: new Graph({ nodes: types.map((type, index) => new Node({ id: `n${index}`, type })) }),
+    stateSchema: schema(),
   });
 }
 
-function failingVersion(): PipelineVersion {
-  return new PipelineVersion({
-    version: 1,
-    graph: graphOf([{ id: "boom", type: "boom" }]),
-    stateSchema: schema({ count: { type: "number", required: false } }),
-  });
-}
-
-function counterAction(): NodeAction {
+function counterAction(type = "counter"): NodeAction {
   return {
-    type: "counter",
-    run: ({ state }) => state.withValue("count", (state.get<number>("count") ?? 0) + 1),
+    type,
+    run: async ({ state }) => state.withValue("count", (state.get<number>("count") ?? 0) + 1),
   };
 }
 
-function boomAction(): NodeAction {
+function boomAction(type = "boom"): NodeAction {
   return {
-    type: "boom",
-    run: () => {
+    type,
+    run: async () => {
       throw new Error("boom");
     },
   };
 }
 
-function schedulerWith(
-  actions: readonly NodeAction[] = [counterAction()],
-  eventBus?: EventBus
-): { scheduler: Scheduler; runtime: Runtime; bus?: EventBus } {
-  const runtime = new Runtime({ executor: new Executor({ actions }) });
-  return { scheduler: new Scheduler({ runtime, eventBus }), runtime, bus: eventBus };
+interface SchedulerEnv {
+  readonly registry: PipelineRegistry;
+  readonly runtime: Runtime;
+  readonly engine: PipelineEngine;
+  readonly dispatcher: Dispatcher;
+  readonly scheduler: Scheduler;
 }
 
-async function waitForStatus(runtime: Runtime, id: string, status: string, timeout = 1000): Promise<void> {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (runtime.status(id).status === status) {
+function schedulerWith(actions: readonly NodeAction[] = [counterAction()], eventBus?: EventBus): SchedulerEnv {
+  const registry = new PipelineRegistry();
+  const runtime = new Runtime({ executor: new Executor({ actions }) });
+  const engine = new PipelineEngine(registry, runtime);
+  const dispatcher = new Dispatcher({ engine, runtime });
+  const scheduler = new Scheduler({ dispatcher, eventBus });
+  return { registry, runtime, engine, dispatcher, scheduler };
+}
+
+function registerPipeline(env: SchedulerEnv, id: string, nodeTypes: readonly string[]): void {
+  env.registry.register(new Pipeline({ id, name: id, versions: [version(...nodeTypes)] }));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(
+  dispatcher: Dispatcher,
+  id: string,
+  status: DispatchStatus,
+  timeoutMs = 2000
+): Promise<void> {
+  const start = Date.now();
+  while (true) {
+    if (dispatcher.status(id).status === status) {
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`Timed out waiting for dispatch "${id}" to reach "${status}"`);
+    }
+    await delay(10);
   }
-  assert.fail(`run "${id}" did not reach status "${status}" in time`);
 }
 
-describe("runtime/Schedule", () => {
-  it("creates an immutable schedule bound to a pipeline version", () => {
-    const version = counterVersion();
-    const schedule = new Schedule({ id: "daily", version, createdAt: 12345 });
+async function waitForDispatchCount(dispatcher: Dispatcher, expected: number, timeoutMs = 2000): Promise<void> {
+  const start = Date.now();
+  while (true) {
+    if (dispatcher.list().length >= expected) {
+      return;
+    }
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`Timed out waiting for at least ${expected} dispatches (got ${dispatcher.list().length})`);
+    }
+    await delay(10);
+  }
+}
 
+async function waitForAnyFailed(dispatcher: Dispatcher, timeoutMs = 2000): Promise<void> {
+  const start = Date.now();
+  while (true) {
+    if (dispatcher.list().some((entry) => entry.status === "failed")) {
+      return;
+    }
+    if (Date.now() - start > timeoutMs) {
+      throw new Error("Timed out waiting for a failed dispatch");
+    }
+    await delay(10);
+  }
+}
+
+async function waitForRunId(dispatcher: Dispatcher, id: string, timeoutMs = 2000): Promise<string> {
+  const start = Date.now();
+  while (true) {
+    const runId = dispatcher.status(id).runId;
+    if (runId) {
+      return runId;
+    }
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`Timed out waiting for a run id on dispatch "${id}"`);
+    }
+    await delay(10);
+  }
+}
+
+describe("Schedule", () => {
+  it("creates an immutable schedule bound to a pipeline and optional version", () => {
+    const schedule = new Schedule({ id: "daily", pipelineId: "p", version: 2, createdAt: 12345 });
     assert.strictEqual(schedule.id, "daily");
-    assert.strictEqual(schedule.version, version);
+    assert.strictEqual(schedule.pipelineId, "p");
+    assert.strictEqual(schedule.version, 2);
     assert.strictEqual(schedule.createdAt, 12345);
     assert.ok(Object.isFrozen(schedule));
+    assert.strictEqual(schedule.toString(), "Schedule daily for p v2");
+
+    const withoutVersion = new Schedule({ id: "latest", pipelineId: "p" });
+    assert.strictEqual(withoutVersion.version, undefined);
+    assert.strictEqual(withoutVersion.toString(), "Schedule latest for p");
   });
 
-  it("defaults createdAt to the current time", () => {
+  it("uses the current epoch time as createdAt by default", () => {
     const before = Date.now();
-    const schedule = new Schedule({ id: "now", version: counterVersion() });
+    const schedule = new Schedule({ id: "now", pipelineId: "p" });
     assert.ok(schedule.createdAt >= before && schedule.createdAt <= Date.now());
   });
 
-  it("rejects a blank schedule id", () => {
-    assert.throws(() => new Schedule({ id: "   ", version: counterVersion() }), (error: unknown) => {
-      assert.ok(error instanceof DomainError);
-      assert.strictEqual((error as DomainError).code, "INVALID_INPUT");
-      return true;
-    });
+  it("rejects a blank id", () => {
+    assert.throws(
+      () => new Schedule({ id: "   ", pipelineId: "p" }),
+      (error) => error instanceof DomainError && error.code === "INVALID_INPUT"
+    );
   });
 
-  it("defaults the trigger to manual and enabled to true", () => {
-    const schedule = new Schedule({ id: "plain", version: counterVersion() });
-    assert.deepStrictEqual(schedule.trigger, { type: "manual" });
-    assert.strictEqual(schedule.enabled, true);
+  it("rejects a blank pipelineId", () => {
+    assert.throws(
+      () => new Schedule({ id: "daily", pipelineId: "  " }),
+      (error) => error instanceof DomainError && error.message.includes("pipelineId")
+    );
   });
 
-  it("holds an interval trigger", () => {
-    const schedule = new Schedule({ id: "every", version: counterVersion(), trigger: { type: "interval", everyMs: 500 } });
-    assert.deepStrictEqual(schedule.trigger, { type: "interval", everyMs: 500 });
-  });
-
-  it("rejects a non-positive or non-finite interval", () => {
-    for (const everyMs of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
+  it("rejects an invalid version", () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       assert.throws(
-        () => new Schedule({ id: "bad", version: counterVersion(), trigger: { type: "interval", everyMs } }),
-        (error: unknown) => {
-          assert.ok(error instanceof DomainError);
-          assert.strictEqual((error as DomainError).code, "INVALID_INPUT");
-          return true;
-        }
+        () => new Schedule({ id: "x", pipelineId: "p", version: bad }),
+        (error) => error instanceof DomainError && error.message.includes("version")
       );
     }
   });
 
-  it("honors an explicit enabled flag", () => {
-    const off = new Schedule({ id: "off", version: counterVersion(), enabled: false });
-    assert.strictEqual(off.enabled, false);
+  it("defaults to a manual trigger and enabled", () => {
+    const schedule = new Schedule({ id: "plain", pipelineId: "p" });
+    assert.deepStrictEqual(schedule.trigger, { type: "manual" });
+    assert.strictEqual(schedule.enabled, true);
   });
 
-  it("holds an event trigger and preserves its eventType", () => {
-    const schedule = new Schedule({ id: "evt", version: counterVersion(), trigger: { type: "event", eventType: "pipeline.tick" } });
-    assert.deepStrictEqual(schedule.trigger, { type: "event", eventType: "pipeline.tick" });
+  it("keeps an interval trigger and validates it", () => {
+    const schedule = new Schedule({ id: "every", pipelineId: "p", trigger: { type: "interval", everyMs: 10_000 } });
+    assert.deepStrictEqual(schedule.trigger, { type: "interval", everyMs: 10_000 });
+    for (const everyMs of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      assert.throws(
+        () => new Schedule({ id: "bad", pipelineId: "p", trigger: { type: "interval", everyMs } }),
+        (error) => error instanceof DomainError && error.code === "INVALID_INPUT"
+      );
+    }
+  });
+
+  it("keeps an explicit enabled flag", () => {
+    const schedule = new Schedule({ id: "off", pipelineId: "p", enabled: false });
+    assert.strictEqual(schedule.enabled, false);
+  });
+
+  it("keeps an event trigger and preserves its eventType", () => {
+    const schedule = new Schedule({ id: "e", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
+    assert.deepStrictEqual(schedule.trigger, { type: "event", eventType: "dev.tick" });
   });
 
   it("holds an event trigger without an eventType", () => {
-    const schedule = new Schedule({ id: "all", version: counterVersion(), trigger: { type: "event" } });
+    const schedule = new Schedule({ id: "all", pipelineId: "p", trigger: { type: "event" } });
     assert.deepStrictEqual(schedule.trigger, { type: "event" });
   });
 
   it("rejects a blank eventType", () => {
     assert.throws(
-      () => new Schedule({ id: "bad", version: counterVersion(), trigger: { type: "event", eventType: "   " } }),
-      (error: unknown) => {
-        assert.ok(error instanceof DomainError);
-        assert.strictEqual((error as DomainError).code, "INVALID_INPUT");
-        return true;
-      }
+      () => new Schedule({ id: "bad", pipelineId: "p", trigger: { type: "event", eventType: "   " } }),
+      (error) => error instanceof DomainError && error.code === "INVALID_INPUT"
     );
   });
 });
 
-describe("runtime/Scheduler", () => {
+describe("Scheduler", () => {
   it("registers a schedule and lists it", () => {
-    const { scheduler } = schedulerWith();
-    const version = counterVersion();
-    const schedule = scheduler.schedule({ id: "daily", version });
-
-    assert.strictEqual(scheduler.list().length, 1);
-    assert.strictEqual(scheduler.list()[0], schedule);
-    assert.strictEqual(scheduler.list()[0].id, "daily");
-    assert.strictEqual(scheduler.list()[0].version, version);
+    const env = schedulerWith();
+    const daily = env.scheduler.schedule({ id: "daily", pipelineId: "p" });
+    assert.strictEqual(env.scheduler.list().length, 1);
+    assert.strictEqual(env.scheduler.list()[0], daily);
+    assert.strictEqual(env.scheduler.list()[0].pipelineId, "p");
   });
 
   it("generates an id when none is provided", () => {
-    const { scheduler } = schedulerWith();
-    const schedule = scheduler.schedule({ version: counterVersion() });
+    const env = schedulerWith();
+    const schedule = env.scheduler.schedule({ pipelineId: "p" });
     assert.match(schedule.id, /^schedule-\d+$/);
+    assert.strictEqual(schedule.pipelineId, "p");
   });
 
   it("rejects duplicate schedule ids", () => {
-    const { scheduler } = schedulerWith();
-    scheduler.schedule({ id: "dup", version: counterVersion() });
-    assert.throws(() => scheduler.schedule({ id: "dup", version: counterVersion() }), (error: unknown) => {
-      assert.ok(error instanceof DomainError);
-      assert.strictEqual((error as DomainError).code, "DUPLICATE_ID");
-      return true;
-    });
-  });
-
-  it("unschedules a schedule and is idempotent", () => {
-    const { scheduler } = schedulerWith();
-    scheduler.schedule({ id: "a", version: counterVersion() });
-
-    assert.strictEqual(scheduler.unschedule("a"), true);
-    assert.strictEqual(scheduler.unschedule("a"), false);
-    assert.strictEqual(scheduler.list().length, 0);
-    assert.throws(() => scheduler.trigger("a"), (error: unknown) => {
-      assert.ok(error instanceof DomainError);
-      assert.strictEqual((error as DomainError).code, "INVALID_INPUT");
-      return true;
-    });
-  });
-
-  it("list returns independent snapshots", () => {
-    const { scheduler } = schedulerWith();
-    const first = scheduler.list();
-    scheduler.schedule({ id: "a", version: counterVersion() });
-    const second = scheduler.list();
-    scheduler.schedule({ id: "b", version: counterVersion() });
-
-    assert.strictEqual(first.length, 0);
-    assert.strictEqual(second.length, 1);
-    assert.strictEqual(scheduler.list().length, 2);
-  });
-
-  it("scheduling alone never starts a run", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "idle", version: counterVersion() });
-
-    assert.strictEqual(runtime.runs().length, 0);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.strictEqual(runtime.runs().length, 0);
-  });
-
-  it("trigger runs the scheduled pipeline through the runtime", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    const schedule = scheduler.schedule({ id: "run", version: counterVersion() });
-
-    const runId = scheduler.trigger(schedule.id);
-    assert.ok(runId.length > 0);
-    await waitForStatus(runtime, runId, "succeeded");
-
-    const info = runtime.status(runId);
-    assert.strictEqual(info.status, "succeeded");
-    assert.strictEqual((info.execution?.run.result?.finalState as State).get("count"), 1);
-  });
-
-  it("trigger passes run options through to the runtime", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    const bus = new EventBus();
-    const events: string[] = [];
-    bus.onAny((event: Event) => events.push(event.type));
-    const schedule = scheduler.schedule({ id: "opts", version: counterVersion() });
-
-    const runId = scheduler.trigger(schedule.id, { id: "custom-run", eventBus: bus });
-    assert.strictEqual(runId, "custom-run");
-    await waitForStatus(runtime, "custom-run", "succeeded");
-    assert.ok(events.includes("runtime.run.started"));
-  });
-
-  it("each trigger starts an independent run", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    const schedule = scheduler.schedule({ id: "multi", version: counterVersion() });
-
-    const a = scheduler.trigger(schedule.id);
-    const b = scheduler.trigger(schedule.id);
-    assert.notStrictEqual(a, b);
-    await waitForStatus(runtime, a, "succeeded");
-    await waitForStatus(runtime, b, "succeeded");
-    assert.strictEqual(runtime.runs().length, 2);
-  });
-
-  it("throws on trigger for an unknown schedule id", () => {
-    const { scheduler } = schedulerWith();
-    assert.throws(() => scheduler.trigger("nope"), (error: unknown) => {
-      assert.ok(error instanceof DomainError);
-      assert.strictEqual((error as DomainError).code, "INVALID_INPUT");
-      return true;
-    });
-  });
-
-  it("requests runs only; the runtime records failures", async () => {
-    const { scheduler, runtime } = schedulerWith([boomAction()]);
-    scheduler.schedule({ id: "failing", version: failingVersion() });
-
-    const runId = scheduler.trigger("failing");
-    assert.ok(runId.length > 0);
-    await waitForStatus(runtime, runId, "failed");
-    assert.ok(runtime.status(runId).error);
-    assert.strictEqual(scheduler.list().length, 1);
-  });
-
-  it("keeps schedules isolated from each other", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    const a = scheduler.schedule({ id: "left", version: counterVersion() });
-    const b = scheduler.schedule({ id: "right", version: counterVersion() });
-
-    const ra = scheduler.trigger(a.id);
-    const rb = scheduler.trigger(b.id);
-    await waitForStatus(runtime, ra, "succeeded");
-    await waitForStatus(runtime, rb, "succeeded");
-
-    assert.strictEqual(scheduler.list().length, 2);
-    assert.strictEqual(runtime.runs().length, 2);
-  });
-
-  it("get returns the registered schedule", () => {
-    const { scheduler } = schedulerWith();
-    const schedule = scheduler.schedule({ id: "found", version: counterVersion() });
-    assert.strictEqual(scheduler.get("found"), schedule);
-    assert.strictEqual(scheduler.get("missing"), undefined);
-  });
-});
-
-async function waitForCount(runtime: Runtime, expected: number, timeout = 2000): Promise<void> {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (runtime.runs().length >= expected) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  assert.fail(`expected at least ${expected} runs; got ${runtime.runs().length}`);
-}
-
-async function waitForAnyFailed(runtime: Runtime, timeout = 2000): Promise<void> {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (runtime.runs().some((run) => runtime.status(run.id).status === "failed")) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  assert.fail("expected at least one failed run");
-}
-
-describe("runtime/Scheduler triggers (timer-based)", () => {
-  it("a manual schedule never runs on its own", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "manual", version: counterVersion(), trigger: { type: "manual" } });
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    assert.strictEqual(runtime.runs().length, 0);
-  });
-
-  it("an interval schedule triggers automatically", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "auto", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, 2);
-    scheduler.unschedule("auto");
-    assert.ok(runtime.runs().length >= 2);
-  });
-
-  it("each automatic trigger is an independent run", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "multi", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, 3);
-    scheduler.unschedule("multi");
-    const ids = new Set(runtime.runs().map((run) => run.id));
-    assert.strictEqual(ids.size, runtime.runs().length);
-    assert.ok(runtime.runs().length >= 3);
-  });
-
-  it("unscheduling stops future automatic triggers", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "stop", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, 2);
-    scheduler.unschedule("stop");
-    const count = runtime.runs().length;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.strictEqual(runtime.runs().length, count);
-  });
-
-  it("a disabled schedule never triggers automatically", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "off", version: counterVersion(), trigger: { type: "interval", everyMs: 20 }, enabled: false });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.strictEqual(runtime.runs().length, 0);
-  });
-
-  it("rejects an invalid interval on schedule registration", () => {
-    const { scheduler } = schedulerWith();
+    const env = schedulerWith();
+    env.scheduler.schedule({ id: "dup", pipelineId: "p" });
     assert.throws(
-      () => scheduler.schedule({ id: "bad", version: counterVersion(), trigger: { type: "interval", everyMs: 0 } }),
-      (error: unknown) => {
-        assert.ok(error instanceof DomainError);
-        assert.strictEqual((error as DomainError).code, "INVALID_INPUT");
-        return true;
-      }
+      () => env.scheduler.schedule({ id: "dup", pipelineId: "p" }),
+      (error) => error instanceof DomainError && error.code === "DUPLICATE_ID"
     );
   });
 
-  it("multiple interval schedules run independently", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "one", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    scheduler.schedule({ id: "two", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, 2);
-    scheduler.stop();
-    assert.strictEqual(runtime.runs().length, 2);
+  it("list returns independent snapshots", () => {
+    const env = schedulerWith();
+    const first = env.scheduler.list();
+    env.scheduler.schedule({ id: "a", pipelineId: "p" });
+    const second = env.scheduler.list();
+    env.scheduler.schedule({ id: "b", pipelineId: "p" });
+    assert.strictEqual(first.length, 0);
+    assert.strictEqual(second.length, 1);
+    assert.strictEqual(env.scheduler.list().length, 2);
   });
 
-  it("stop clears all pending timers; start re-arms them", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    scheduler.schedule({ id: "pause", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, 1);
-    scheduler.stop();
-    const count = runtime.runs().length;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.strictEqual(runtime.runs().length, count);
-    scheduler.start();
-    await waitForCount(runtime, count + 2);
-    scheduler.stop();
+  it("get returns the registered schedule", () => {
+    const env = schedulerWith();
+    const schedule = env.scheduler.schedule({ id: "found", pipelineId: "p", version: 2 });
+    assert.strictEqual(env.scheduler.get("found"), schedule);
+    assert.strictEqual(env.scheduler.get("missing"), undefined);
   });
 
-  it("a failing runtime does not kill the scheduler loop", async () => {
-    const { scheduler, runtime } = schedulerWith([boomAction()]);
-    scheduler.schedule({ id: "fails", version: failingVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, 2);
-    assert.ok(runtime.runs().some((run) => runtime.status(run.id).status === "failed"));
-    assert.strictEqual(scheduler.list().length, 1);
-    scheduler.unschedule("fails");
+  it("unscheduling is idempotent and makes later triggers fail", () => {
+    const env = schedulerWith();
+    env.scheduler.schedule({ id: "a", pipelineId: "p" });
+    assert.strictEqual(env.scheduler.unschedule("a"), true);
+    assert.strictEqual(env.scheduler.unschedule("a"), false);
+    assert.strictEqual(env.scheduler.list().length, 0);
+    assert.throws(
+      () => env.scheduler.trigger("a"),
+      (error) => error instanceof DomainError && error.code === "INVALID_INPUT"
+    );
   });
 
-  it("rescheduling the same id creates one timer", async () => {
-    const { scheduler, runtime } = schedulerWith();
-    const first = scheduler.schedule({ id: "one-timer", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, 1);
-    scheduler.unschedule("one-timer");
-    assert.ok(runtime.runs().length >= 1);
-    const count = runtime.runs().length;
-    scheduler.schedule({ id: "one-timer", version: counterVersion(), trigger: { type: "interval", everyMs: 20 } });
-    await waitForCount(runtime, count + 1);
-    scheduler.unschedule("one-timer");
-    void first;
+  it("a manual schedule never runs on its own", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "manual", pipelineId: "p", trigger: { type: "manual" } });
+    await delay(40);
+    assert.strictEqual(env.dispatcher.list().length, 0);
+    assert.strictEqual(env.runtime.runs().length, 0);
+  });
+
+  it("trigger dispatches the scheduled pipeline through the engine", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "daily", pipelineId: "p" });
+    const dispatchId = env.scheduler.trigger("daily");
+
+    await waitFor(env.dispatcher, dispatchId, "succeeded");
+    const info = env.dispatcher.status(dispatchId);
+    assert.strictEqual(info.pipelineId, "p");
+    const runId = info.runId as string;
+    const run = env.runtime.status(runId);
+    assert.strictEqual(run.status, "succeeded");
+    assert.strictEqual((run.execution?.run.result?.finalState as State).get("count"), 1);
+  });
+
+  it("each trigger starts an independent run", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "daily", pipelineId: "p" });
+
+    const aId = env.scheduler.trigger("daily");
+    const bId = env.scheduler.trigger("daily");
+
+    await waitFor(env.dispatcher, aId, "succeeded");
+    await waitFor(env.dispatcher, bId, "succeeded");
+
+    const aRunId = env.dispatcher.status(aId).runId;
+    const bRunId = env.dispatcher.status(bId).runId;
+    assert.notStrictEqual(aRunId, bRunId);
+    assert.strictEqual(env.runtime.runs().length, 2);
+  });
+
+  it("trigger passes run options through to the runtime", async () => {
+    const bus = new EventBus();
+    const events: string[] = [];
+    bus.onAny((event) => events.push(event.type));
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "daily", pipelineId: "p" });
+
+    const dispatchId = env.scheduler.trigger("daily", { id: "custom-run", eventBus: bus });
+    await waitFor(env.dispatcher, dispatchId, "succeeded");
+
+    assert.strictEqual(env.dispatcher.status(dispatchId).runId, "custom-run");
+    const run = env.runtime.status("custom-run");
+    assert.strictEqual(run.status, "succeeded");
+    assert.strictEqual((run.execution?.run.result?.finalState as State).get("count"), 1);
+    assert.ok(events.includes("runtime.run.started"));
+  });
+
+  it("throws on trigger for an unknown schedule id", () => {
+    const env = schedulerWith();
+    assert.throws(
+      () => env.scheduler.trigger("nope"),
+      (error) => error instanceof DomainError && error.code === "INVALID_INPUT"
+    );
+  });
+
+  it("requests runs only; the runtime records failures", async () => {
+    const env = schedulerWith([boomAction()]);
+    registerPipeline(env, "p", ["boom"]);
+    env.scheduler.schedule({ id: "fragile", pipelineId: "p" });
+
+    const dispatchId = env.scheduler.trigger("fragile");
+    await waitFor(env.dispatcher, dispatchId, "failed");
+
+    const info = env.dispatcher.status(dispatchId);
+    assert.ok(info.error);
+    const runId = info.runId as string;
+    assert.ok(env.runtime.status(runId).error);
+    assert.strictEqual(env.scheduler.list().length, 1);
+  });
+
+  it("keeps schedules isolated from each other", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    registerPipeline(env, "q", ["counter"]);
+    env.scheduler.schedule({ id: "left", pipelineId: "p" });
+    env.scheduler.schedule({ id: "right", pipelineId: "q" });
+
+    const aId = env.scheduler.trigger("left");
+    const bId = env.scheduler.trigger("right");
+    await waitFor(env.dispatcher, aId, "succeeded");
+    await waitFor(env.dispatcher, bId, "succeeded");
+
+    assert.strictEqual(env.scheduler.list().length, 2);
+    assert.strictEqual(env.runtime.runs().length, 2);
+  });
+
+  it("rescheduling the same id is rejected while registered", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "every", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+    assert.throws(
+      () => env.scheduler.schedule({ id: "every", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } }),
+      (error) => error instanceof DomainError && error.code === "DUPLICATE_ID"
+    );
+    env.scheduler.stop();
+  });
+
+  it("unscheduling clears the repeated timer", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "every", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+
+    await waitForDispatchCount(env.dispatcher, 1);
+    assert.strictEqual(env.scheduler.unschedule("every"), true);
+    assert.strictEqual(env.scheduler.get("every"), undefined);
+
+    const after = env.dispatcher.list().length;
+    await delay(40);
+    assert.strictEqual(env.dispatcher.list().length, after);
   });
 });
 
-describe("runtime/Scheduler triggers (event-based)", () => {
-  it("an event trigger fires a run when a matching event is published", async () => {
-    const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "evt", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
+describe("Scheduler triggers (timer-based)", () => {
+  it("an interval schedule triggers automatically", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "auto", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
 
-    bus.publish("dev.tick");
-    await waitForCount(runtime, 1);
-    assert.strictEqual(runtime.runs().length, 1);
+    await waitForDispatchCount(env.dispatcher, 2);
+    assert.ok(env.dispatcher.list().length >= 2);
+    env.scheduler.unschedule("auto");
   });
 
-  it("an event trigger ignores other event types", async () => {
-    const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "tick", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
+  it("each automatic trigger is an independent run", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "multi", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
 
-    bus.publish("dev.other");
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.strictEqual(runtime.runs().length, 0);
+    await waitForDispatchCount(env.dispatcher, 3);
+    const runIds = new Set<string>();
+    for (const entry of env.dispatcher.list()) {
+      runIds.add(await waitForRunId(env.dispatcher, entry.id));
+    }
+    assert.strictEqual(runIds.size, env.dispatcher.list().length);
+    env.scheduler.stop();
   });
 
-  it("an event trigger without eventType reacts to every event", async () => {
+  it("a failing request does not kill the scheduler loop", async () => {
+    const env = schedulerWith([boomAction()]);
+    registerPipeline(env, "p", ["boom"]);
+    env.scheduler.schedule({ id: "boom", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+
+    await waitForDispatchCount(env.dispatcher, 2);
+    await waitForAnyFailed(env.dispatcher);
+    assert.ok(env.dispatcher.list().some((entry) => entry.status === "failed"));
+    assert.strictEqual(env.scheduler.list().length, 1);
+    env.scheduler.stop();
+  });
+
+  it("a disabled schedule never triggers automatically", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "off", pipelineId: "p", trigger: { type: "interval", everyMs: 20 }, enabled: false });
+
+    await delay(40);
+    assert.strictEqual(env.dispatcher.list().length, 0);
+    assert.strictEqual(env.runtime.runs().length, 0);
+  });
+
+  it("multiple interval schedules run independently", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "one", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+    env.scheduler.schedule({ id: "two", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+
+    await waitForDispatchCount(env.dispatcher, 2);
+    env.scheduler.stop();
+    assert.strictEqual(env.dispatcher.list().length, 2);
+  });
+
+  it("rescheduling the same id after unschedule regenerates a single timer", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "once", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+    await waitForDispatchCount(env.dispatcher, 1);
+    env.scheduler.unschedule("once");
+    const count = env.dispatcher.list().length;
+
+    env.scheduler.schedule({ id: "once", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+    await waitForDispatchCount(env.dispatcher, count + 1);
+    await delay(10);
+    assert.strictEqual(env.dispatcher.list().length, count + 1);
+    env.scheduler.unschedule("once");
+  });
+
+  it("stop clears all pending timers; start re-arms them", async () => {
+    const env = schedulerWith();
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "pause", pipelineId: "p", trigger: { type: "interval", everyMs: 20 } });
+
+    await waitForDispatchCount(env.dispatcher, 1);
+    env.scheduler.stop();
+    const count = env.dispatcher.list().length;
+    await delay(40);
+    assert.strictEqual(env.dispatcher.list().length, count);
+
+    env.scheduler.start();
+    await waitForDispatchCount(env.dispatcher, count + 2);
+    env.scheduler.stop();
+  });
+});
+
+describe("Scheduler triggers (event-based)", () => {
+  it("an event-triggered schedule dispatches the pipeline on a matching event", async () => {
     const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "all", version: counterVersion(), trigger: { type: "event" } });
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "tick", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
+
+    bus.publish("dev.tick");
+    await waitForDispatchCount(env.dispatcher, 1);
+    const dispatchId = env.dispatcher.list()[0].id;
+    await waitFor(env.dispatcher, dispatchId, "succeeded");
+    assert.ok(env.dispatcher.status(dispatchId).runId);
+    env.scheduler.stop();
+  });
+
+  it("an event schedule ignores non-matching events", async () => {
+    const bus = new EventBus();
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "tick", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
+
+    bus.publish("dev.other");
+    await delay(30);
+    assert.strictEqual(env.dispatcher.list().length, 0);
+  });
+
+  it("an event schedule without an eventType reacts to any event", async () => {
+    const bus = new EventBus();
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "any", pipelineId: "p", trigger: { type: "event" } });
 
     bus.publish("dev.tick");
     bus.publish("dev.other");
-    await waitForCount(runtime, 2);
-    assert.strictEqual(runtime.runs().length, 2);
+    await waitForDispatchCount(env.dispatcher, 2);
+    assert.strictEqual(env.dispatcher.list().length, 2);
+    env.scheduler.stop();
   });
 
   it("multiple event schedules react independently to one publish", async () => {
     const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "a", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
-    scheduler.schedule({ id: "b", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "a", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
+    env.scheduler.schedule({ id: "b", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
 
     bus.publish("dev.tick");
-    await waitForCount(runtime, 2);
-    assert.strictEqual(runtime.runs().length, 2);
-  });
-
-  it("unschedule removes the event subscription", async () => {
-    const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "gone", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
-
-    bus.publish("dev.tick");
-    await waitForCount(runtime, 1);
-    assert.strictEqual(scheduler.unschedule("gone"), true);
-    const count = runtime.runs().length;
-    bus.publish("dev.tick");
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.strictEqual(runtime.runs().length, count);
+    await waitForDispatchCount(env.dispatcher, 2);
+    assert.strictEqual(env.dispatcher.list().length, 2);
+    env.scheduler.stop();
   });
 
   it("a disabled event schedule never reacts", async () => {
     const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "off", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" }, enabled: false });
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "off", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" }, enabled: false });
 
     bus.publish("dev.tick");
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.strictEqual(runtime.runs().length, 0);
+    await delay(30);
+    assert.strictEqual(env.dispatcher.list().length, 0);
+  });
+
+  it("unschedule removes the event subscription", async () => {
+    const bus = new EventBus();
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "gone", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
+
+    bus.publish("dev.tick");
+    await waitForDispatchCount(env.dispatcher, 1);
+    assert.strictEqual(env.scheduler.unschedule("gone"), true);
+    const count = env.dispatcher.list().length;
+    bus.publish("dev.tick");
+    await delay(30);
+    assert.strictEqual(env.dispatcher.list().length, count);
   });
 
   it("stop unsubscribes all event listeners; start re-subscribes them", async () => {
     const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "pause", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "pause", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
 
     bus.publish("dev.tick");
-    await waitForCount(runtime, 1);
-    scheduler.stop();
-    const count = runtime.runs().length;
+    await waitForDispatchCount(env.dispatcher, 1);
+    env.scheduler.stop();
+    const count = env.dispatcher.list().length;
     bus.publish("dev.tick");
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.strictEqual(runtime.runs().length, count);
-    scheduler.start();
+    await delay(30);
+    assert.strictEqual(env.dispatcher.list().length, count);
+
+    env.scheduler.start();
     bus.publish("dev.tick");
-    await waitForCount(runtime, count + 1);
+    await waitForDispatchCount(env.dispatcher, count + 1);
+    env.scheduler.stop();
   });
 
-  it("a failing runtime does not break the event loop or the schedule", async () => {
+  it("a failing request does not break the event loop or the schedule", async () => {
     const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([boomAction()], bus);
-    scheduler.schedule({ id: "boom", version: failingVersion(), trigger: { type: "event", eventType: "dev.tick" } });
+    const env = schedulerWith([boomAction()], bus);
+    registerPipeline(env, "p", ["boom"]);
+    env.scheduler.schedule({ id: "boom", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
 
     bus.publish("dev.tick");
     bus.publish("dev.tick");
-    await waitForCount(runtime, 2);
-    await waitForAnyFailed(runtime);
-    assert.ok(runtime.runs().some((run) => runtime.status(run.id).status === "failed"));
-    assert.strictEqual(scheduler.list().length, 1);
+    await waitForDispatchCount(env.dispatcher, 2);
+    await waitForAnyFailed(env.dispatcher);
+    assert.ok(env.dispatcher.list().some((entry) => entry.status === "failed"));
+    assert.strictEqual(env.scheduler.list().length, 1);
+    env.scheduler.stop();
   });
 
   it("rescheduling the same id regenerates a single subscription", async () => {
     const bus = new EventBus();
-    const { scheduler, runtime } = schedulerWith([counterAction()], bus);
-    scheduler.schedule({ id: "once", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
-    scheduler.unschedule("once");
-    scheduler.schedule({ id: "once", version: counterVersion(), trigger: { type: "event", eventType: "dev.tick" } });
+    const env = schedulerWith([counterAction()], bus);
+    registerPipeline(env, "p", ["counter"]);
+    env.scheduler.schedule({ id: "once", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
+    env.scheduler.unschedule("once");
+    env.scheduler.schedule({ id: "once", pipelineId: "p", trigger: { type: "event", eventType: "dev.tick" } });
 
     bus.publish("dev.tick");
-    await waitForCount(runtime, 1);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.strictEqual(runtime.runs().length, 1);
+    await waitForDispatchCount(env.dispatcher, 1);
+    await delay(30);
+    assert.strictEqual(env.dispatcher.list().length, 1);
+    env.scheduler.stop();
   });
 });

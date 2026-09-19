@@ -158,7 +158,7 @@ export class DevInspectionProvider implements vscode.TreeDataProvider<DevItem> {
       children: [
         new DevItem({ label: `Trigger: ${s.trigger.type}` }),
         new DevItem({ label: `Enabled: ${s.enabled}` }),
-        new DevItem({ label: `Pipeline v${s.version.version}` }),
+        new DevItem({ label: `Pipeline: ${s.pipelineId} (v${s.version ?? "latest"})` }),
       ]
     }));
   }

@@ -55,7 +55,8 @@ export interface StoredPipelineVersion {
 
 export interface StoredSchedule {
   readonly id: string;
-  readonly version: StoredPipelineVersion;
+  readonly pipelineId: string;
+  readonly version?: number;
   readonly trigger: ScheduleTrigger;
   readonly enabled: boolean;
   readonly createdAt: number;
@@ -71,7 +72,8 @@ export interface ScheduleStore {
 export function toStoredSchedule(schedule: Schedule): StoredSchedule {
   return {
     id: schedule.id,
-    version: toStoredPipelineVersion(schedule.version),
+    pipelineId: schedule.pipelineId,
+    version: schedule.version,
     trigger: schedule.trigger,
     enabled: schedule.enabled,
     createdAt: schedule.createdAt,
@@ -123,28 +125,14 @@ export function parseStoredSchedule(value: unknown): StoredSchedule {
   if (!isTrigger(schedule.trigger)) {
     throw malformed("trigger.type must be manual, interval, or event");
   }
-  const version = schedule.version;
-  if (typeof version !== "object" || version === null) {
-    throw malformed("version must be an object");
+  if (typeof schedule.pipelineId !== "string" || schedule.pipelineId.trim().length === 0) {
+    throw malformed("pipelineId must be a non-empty string");
   }
-  const versionRecord = version as Record<string, unknown>;
-  if (typeof versionRecord.version !== "number") {
-    throw malformed("version.version must be a number");
-  }
-  const graph = versionRecord.graph;
-  if (typeof graph !== "object" || graph === null) {
-    throw malformed("version.graph must be an object");
-  }
-  const graphRecord = graph as Record<string, unknown>;
-  if (!Array.isArray(graphRecord.nodes) || !Array.isArray(graphRecord.edges)) {
-    throw malformed("version.graph must have a nodes array and an edges array");
-  }
-  const stateSchema = versionRecord.stateSchema;
-  if (typeof stateSchema !== "object" || stateSchema === null) {
-    throw malformed("version.stateSchema must be an object");
-  }
-  if (typeof (stateSchema as Record<string, unknown>).name !== "string") {
-    throw malformed("version.stateSchema.name must be a string");
+  if (
+    schedule.version !== undefined &&
+    (typeof schedule.version !== "number" || !Number.isInteger(schedule.version) || schedule.version <= 0)
+  ) {
+    throw malformed("version must be a positive integer when provided");
   }
   const stored = value as unknown as StoredSchedule;
   fromStoredSchedule(stored);
@@ -153,10 +141,10 @@ export function parseStoredSchedule(value: unknown): StoredSchedule {
 
 export function fromStoredSchedule(stored: StoredSchedule): Schedule {
   try {
-    const version = fromStoredPipelineVersion(stored.version);
     return new Schedule({
       id: stored.id,
-      version,
+      pipelineId: stored.pipelineId,
+      version: stored.version,
       trigger: stored.trigger,
       enabled: stored.enabled,
       createdAt: stored.createdAt,

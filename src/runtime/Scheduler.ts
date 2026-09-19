@@ -1,5 +1,6 @@
-import { DomainError, EventBus, type Event, type PipelineVersion, type Unsubscribe } from "../kernel/index.js";
-import type { Runtime, RuntimeRunOptions } from "./Runtime.js";
+import { DomainError, EventBus, type Event, type Unsubscribe } from "../kernel/index.js";
+import type { Dispatcher } from "./Dispatcher.js";
+import type { RuntimeRunOptions } from "./Runtime.js";
 import { Schedule, type ScheduleTrigger } from "./Schedule.js";
 import { MemoryScheduleStore } from "./persistence/MemoryScheduleStore.js";
 import {
@@ -10,14 +11,15 @@ import {
 
 export interface ScheduleDefinition {
   readonly id?: string;
-  readonly version: PipelineVersion;
+  readonly pipelineId: string;
+  readonly version?: number;
   readonly trigger?: ScheduleTrigger;
   readonly enabled?: boolean;
   readonly createdAt?: number;
 }
 
 export interface SchedulerOptions {
-  readonly runtime: Runtime;
+  readonly dispatcher: Dispatcher;
   readonly eventBus?: EventBus;
   readonly scheduleStore?: ScheduleStore;
 }
@@ -25,7 +27,7 @@ export interface SchedulerOptions {
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 export class Scheduler {
-  readonly runtime: Runtime;
+  readonly dispatcher: Dispatcher;
   readonly scheduleStore: ScheduleStore;
   private readonly schedules = new Map<string, Schedule>();
   private readonly timers = new Map<string, TimerHandle>();
@@ -34,7 +36,7 @@ export class Scheduler {
   private running = true;
 
   constructor(options: SchedulerOptions) {
-    this.runtime = options.runtime;
+    this.dispatcher = options.dispatcher;
     this.eventBus = options.eventBus;
     this.scheduleStore = options.scheduleStore ?? new MemoryScheduleStore();
     this.hydrate();
@@ -56,6 +58,7 @@ export class Scheduler {
     }
     const schedule = new Schedule({
       id,
+      pipelineId: definition.pipelineId,
       version: definition.version,
       trigger: definition.trigger,
       enabled: definition.enabled,
@@ -91,7 +94,13 @@ export class Scheduler {
     if (!schedule) {
       throw new DomainError({ code: "INVALID_INPUT", message: `No schedule with id "${id}"` });
     }
-    return this.runtime.start(schedule.version, options);
+    return this.dispatcher.dispatch({
+      pipelineId: schedule.pipelineId,
+      version: schedule.version,
+      id: options?.id,
+      initialState: options?.initialState,
+      eventBus: options?.eventBus,
+    });
   }
 
   start(): void {
@@ -176,9 +185,9 @@ export class Scheduler {
 
   private request(schedule: Schedule): void {
     try {
-      this.runtime.start(schedule.version);
+      this.dispatcher.dispatch({ pipelineId: schedule.pipelineId, version: schedule.version });
     } catch {
-      // A failing runtime must not break the scheduler loop.
+      // A failing request must not break the scheduler loop.
     }
   }
 }

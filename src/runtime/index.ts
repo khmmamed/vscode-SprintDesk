@@ -25,6 +25,13 @@ export {
   PipelineEngine,
   type EngineRunOptions,
 } from "./PipelineEngine.js";
+export {
+  Dispatcher,
+  type DispatchRequest,
+  type DispatchStatus,
+  type DispatchStatusInfo,
+  type DispatcherOptions,
+} from "./Dispatcher.js";
 export { MemoryRunStore } from "./persistence/MemoryRunStore.js";
 export { FileRunStore, type FileRunStoreOptions } from "./persistence/FileRunStore.js";
 export type { RunStore, StoredRun, StoredNodeRun } from "./persistence/RunStore.js";

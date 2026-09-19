@@ -1,4 +1,4 @@
-import { DomainError, type PipelineVersion } from "../kernel/index.js";
+import { DomainError } from "../kernel/index.js";
 
 export type ScheduleTrigger =
   | { readonly type: "manual" }
@@ -7,7 +7,8 @@ export type ScheduleTrigger =
 
 export interface ScheduleOptions {
   readonly id: string;
-  readonly version: PipelineVersion;
+  readonly pipelineId: string;
+  readonly version?: number;
   readonly trigger?: ScheduleTrigger;
   readonly enabled?: boolean;
   readonly createdAt?: number;
@@ -17,7 +18,8 @@ const MANUAL_TRIGGER: ScheduleTrigger = Object.freeze({ type: "manual" });
 
 export class Schedule {
   readonly id: string;
-  readonly version: PipelineVersion;
+  readonly pipelineId: string;
+  readonly version?: number;
   readonly trigger: ScheduleTrigger;
   readonly enabled: boolean;
   readonly createdAt: number;
@@ -27,7 +29,19 @@ export class Schedule {
     if (id.length === 0) {
       throw new DomainError({ code: "INVALID_INPUT", message: "Schedule id must be a non-empty string" });
     }
+    const pipelineId = options.pipelineId.trim();
+    if (pipelineId.length === 0) {
+      throw new DomainError({ code: "INVALID_INPUT", message: "Schedule pipelineId must be a non-empty string" });
+    }
+    if (options.version !== undefined && (!Number.isInteger(options.version) || options.version <= 0)) {
+      throw new DomainError({
+        code: "INVALID_INPUT",
+        message: "Schedule version must be a positive integer when provided",
+        details: { version: options.version },
+      });
+    }
     this.id = id;
+    this.pipelineId = pipelineId;
     this.version = options.version;
     this.trigger = normalizeTrigger(options.trigger);
     this.enabled = options.enabled ?? true;
@@ -36,7 +50,7 @@ export class Schedule {
   }
 
   toString(): string {
-    return `Schedule ${this.id} v${this.version.version}`;
+    return `Schedule ${this.id} for ${this.pipelineId}${this.version !== undefined ? ` v${this.version}` : ""}`;
   }
 }
 

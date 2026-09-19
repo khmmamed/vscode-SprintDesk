@@ -70,7 +70,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const schedule = dev.scheduleIntervalPipeline('dev-schedule', 1000);
         inspectionProvider.refresh();
         vscode.window.showInformationMessage(
-          `📅 Scheduled pipeline "${schedule.id}" every 1s (v${schedule.version.version})`
+          `📅 Scheduled "${schedule.pipelineId}" every 1s (v${schedule.version ?? "latest"})`
         );
       } catch (err: any) {
         vscode.window.showErrorMessage(`❌ Scheduling failed: ${err.message}`);
@@ -97,7 +97,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage("⚠️ No schedules registered. Run 'SprintDesk: Schedule Dev Pipeline' first.");
         return;
       }
-      const summary = schedules.map((schedule) => `${schedule.id} (v${schedule.version.version})`).join(", ");
+      const summary = schedules.map((schedule) => `${schedule.id} (${schedule.pipelineId} v${schedule.version ?? "latest"})`).join(", ");
       vscode.window.showInformationMessage(`📋 Schedules: ${summary} | Runs: ${dev.getRunCount()}`);
     })
   );
@@ -108,7 +108,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const schedule = dev.scheduleEventPipeline('dev-event-schedule', 'dev.tick');
         inspectionProvider.refresh();
         vscode.window.showInformationMessage(
-          `📡 Scheduled pipeline "${schedule.id}" on event "dev.tick" (v${schedule.version.version})`
+          `📡 Scheduled "${schedule.pipelineId}" on event "dev.tick" (v${schedule.version ?? "latest"})`
         );
       } catch (err: any) {
         vscode.window.showErrorMessage(`❌ Event scheduling failed: ${err.message}`);

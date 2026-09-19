@@ -26,6 +26,7 @@ import {
   FileScheduleStore,
   FilePipelineStore,
   PipelineEngine,
+  Dispatcher,
   fromStoredPipeline,
   toStoredPipeline,
   ArtifactStore,
@@ -43,8 +44,10 @@ export class DevHarness {
   private runtime: Runtime;
   private scheduler: Scheduler;
   private pipelineEngine: PipelineEngine;
+  private dispatcher: Dispatcher;
   private eventBus: EventBus;
   private currentRunId?: string;
+  private currentDispatchId?: string;
   private readonly pipelineRegistry = new PipelineRegistry();
   private readonly filePipelineStore?: FilePipelineStore;
   private readonly capabilityRegistry = new CapabilityRegistry();
@@ -105,17 +108,21 @@ export class DevHarness {
       executor: this.executor,
       runStore: options.runStoreFile ? new FileRunStore({ filePath: options.runStoreFile }) : undefined,
     });
-    this.scheduler = new Scheduler({
+    this.pipelineEngine = new PipelineEngine(
+      this.pipelineRegistry,
+      this.runtime
+    );
+    this.dispatcher = new Dispatcher({
+      engine: this.pipelineEngine,
       runtime: this.runtime,
+    });
+    this.scheduler = new Scheduler({
+      dispatcher: this.dispatcher,
       eventBus: this.eventBus,
       scheduleStore: options.scheduleStoreFile
         ? new FileScheduleStore({ filePath: options.scheduleStoreFile })
         : undefined,
     });
-    this.pipelineEngine = new PipelineEngine(
-      this.pipelineRegistry,
-      this.runtime
-    );
 
     this.filePipelineStore = options.pipelineStoreFile
       ? new FilePipelineStore({ filePath: options.pipelineStoreFile })
@@ -187,20 +194,37 @@ export class DevHarness {
   }
 
   runPipeline(pipelineId: string): string {
-    this.currentRunId = this.pipelineEngine.start({ pipelineId });
-    return this.currentRunId;
+    this.currentDispatchId = this.dispatcher.dispatch({ pipelineId });
+    const info = this.dispatcher.status(this.currentDispatchId);
+    this.currentRunId = info.runId;
+    return this.currentRunId ?? this.currentDispatchId;
   }
 
-  schedulePipeline(id: string, version: PipelineVersion = this.buildExampleVersion()): Schedule {
-    return this.scheduler.schedule({ id, version });
+  schedulePipeline(id: string, version?: number): Schedule {
+    this.ensurePipeline(id);
+    return this.scheduler.schedule({ id, pipelineId: id, version });
   }
 
-  scheduleIntervalPipeline(id: string, everyMs = 1000, version: PipelineVersion = this.buildExampleVersion()): Schedule {
-    return this.scheduler.schedule({ id, version, trigger: { type: "interval", everyMs } });
+  scheduleIntervalPipeline(id: string, everyMs = 1000, version?: number): Schedule {
+    this.ensurePipeline(id);
+    return this.scheduler.schedule({ id, pipelineId: id, version, trigger: { type: "interval", everyMs } });
   }
 
-  scheduleEventPipeline(id: string, eventType: string, version: PipelineVersion = this.buildExampleVersion()): Schedule {
-    return this.scheduler.schedule({ id, version, trigger: { type: "event", eventType } });
+  scheduleEventPipeline(id: string, eventType: string, version?: number): Schedule {
+    this.ensurePipeline(id);
+    return this.scheduler.schedule({ id, pipelineId: id, version, trigger: { type: "event", eventType } });
+  }
+
+  private ensurePipeline(id: string): void {
+    if (this.pipelineRegistry.has(id)) {
+      return;
+    }
+    const pipeline = new Pipeline({
+      id,
+      name: `Dev ${id} Pipeline`,
+      versions: [this.buildExampleVersion()],
+    });
+    this.registerPipeline(pipeline);
   }
 
   publishDevEvent(type: string): void {
@@ -208,8 +232,9 @@ export class DevHarness {
   }
 
   triggerPipeline(id: string): string {
-    this.currentRunId = this.scheduler.trigger(id);
-    return this.currentRunId;
+    this.currentDispatchId = this.scheduler.trigger(id);
+    this.currentRunId = this.dispatcher.status(this.currentDispatchId).runId;
+    return this.currentRunId ?? this.currentDispatchId;
   }
 
   listSchedules(): readonly Schedule[] {
@@ -233,6 +258,9 @@ export class DevHarness {
   }
 
   cancelRun() {
+    if (this.currentDispatchId) {
+      return this.dispatcher.cancel(this.currentDispatchId);
+    }
     if (!this.currentRunId) {
       return false;
     }
@@ -248,6 +276,10 @@ export class DevHarness {
 
   getPipelineEngine() {
     return this.pipelineEngine;
+  }
+
+  getDispatcher() {
+    return this.dispatcher;
   }
 
   listPipelines(): readonly Pipeline[] {
