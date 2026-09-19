@@ -297,6 +297,8 @@ export class Runtime {
       initialState: options.initialState,
       eventBus: options.eventBus ?? this.eventBus,
       signal: record.controller.signal,
+      pipelineId: record.pipelineId,
+      pipelineVersion: version.version,
     };
     try {
       const execution = await this.executor.execute(version, executeOptions);

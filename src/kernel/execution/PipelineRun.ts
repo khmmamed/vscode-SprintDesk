@@ -9,6 +9,8 @@ export interface PipelineRunOptions {
   readonly finishedAt?: number;
   readonly error?: string;
   readonly result?: Readonly<Record<string, unknown>>;
+  readonly pipelineId?: string;
+  readonly pipelineVersion?: number;
 }
 
 const TRANSITIONS: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
@@ -26,6 +28,8 @@ export class PipelineRun {
   readonly finishedAt?: number;
   readonly error?: string;
   readonly result?: Readonly<Record<string, unknown>>;
+  readonly pipelineId?: string;
+  readonly pipelineVersion?: number;
 
   constructor(options: PipelineRunOptions) {
     const id = options.id.trim();
@@ -38,6 +42,22 @@ export class PipelineRun {
     this.finishedAt = options.finishedAt;
     this.error = options.error;
     this.result = options.result ? Object.freeze({ ...options.result }) : undefined;
+    if (options.pipelineId !== undefined) {
+      const pipelineId = options.pipelineId.trim();
+      if (pipelineId.length === 0) {
+        throw new DomainError({ code: "INVALID_INPUT", message: "PipelineRun pipelineId must be a non-empty string" });
+      }
+      this.pipelineId = pipelineId;
+    }
+    if (options.pipelineVersion !== undefined) {
+      if (!Number.isInteger(options.pipelineVersion) || options.pipelineVersion <= 0) {
+        throw new DomainError({
+          code: "INVALID_INPUT",
+          message: "PipelineRun pipelineVersion must be a positive integer",
+        });
+      }
+      this.pipelineVersion = options.pipelineVersion;
+    }
     Object.freeze(this);
   }
 
@@ -60,6 +80,8 @@ export class PipelineRun {
       finishedAt: patch.finishedAt ?? this.finishedAt,
       error: patch.error ?? this.error,
       result: patch.result ?? this.result,
+      pipelineId: this.pipelineId,
+      pipelineVersion: this.pipelineVersion,
     });
   }
 

@@ -4,9 +4,10 @@ import {
   DomainError,
   EventBus,
   Execution,
+  NodeRun,
+  PipelineRun,
   PipelineVersion,
   State,
-  NodeRun,
   type Capability,
   type CapabilityHandler,
   type EventPayload,
@@ -64,6 +65,8 @@ export interface ExecuteOptions {
   readonly initialState?: State;
   readonly eventBus?: EventBus;
   readonly signal?: AbortSignal;
+  readonly pipelineId?: string;
+  readonly pipelineVersion?: number;
 }
 
 export class Executor {
@@ -111,7 +114,16 @@ export class Executor {
     const signal = options.signal ?? new AbortController().signal;
     const order = version.graph.topologicalOrder();
 
-    let execution = new Execution({ id, version, initialState });
+    let execution = new Execution({
+      id,
+      version,
+      initialState,
+      run: new PipelineRun({
+        id: `${id}:run`,
+        pipelineId: options.pipelineId,
+        pipelineVersion: options.pipelineVersion,
+      }),
+    });
     const started = execution.run.start(startTime());
     execution = execution.withRun(started);
     for (const node of order) {

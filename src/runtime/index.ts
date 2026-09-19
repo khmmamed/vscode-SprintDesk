@@ -21,6 +21,10 @@ export {
 } from "./Runtime.js";
 export { Schedule, type ScheduleOptions, type ScheduleTrigger } from "./Schedule.js";
 export { Scheduler, type ScheduleDefinition, type SchedulerOptions } from "./Scheduler.js";
+export {
+  PipelineEngine,
+  type EngineRunOptions,
+} from "./PipelineEngine.js";
 export { MemoryRunStore } from "./persistence/MemoryRunStore.js";
 export { FileRunStore, type FileRunStoreOptions } from "./persistence/FileRunStore.js";
 export type { RunStore, StoredRun, StoredNodeRun } from "./persistence/RunStore.js";

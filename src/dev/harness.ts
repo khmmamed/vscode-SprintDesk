@@ -6,7 +6,6 @@ import {
 import { 
   PipelineVersion, 
   Pipeline,
-  PipelineRegistry,
   Graph, 
   Node, 
   StateSchema, 
@@ -17,7 +16,7 @@ import {
   CapabilityHandlerRegistry,
   Resource,
   ResourceRegistry,
-  DomainError,
+  PipelineRegistry,
 } from "../kernel/index.js";
 import { Runtime } from "../runtime/Runtime.js";
 import {
@@ -26,10 +25,11 @@ import {
   FileRunStore,
   FileScheduleStore,
   FilePipelineStore,
+  PipelineEngine,
   fromStoredPipeline,
   toStoredPipeline,
   ArtifactStore,
-  MemoryArtifactStore
+  MemoryArtifactStore,
 } from "../runtime/index.js";
 
 export interface DevHarnessOptions {
@@ -42,9 +42,9 @@ export class DevHarness {
   private executor: Executor;
   private runtime: Runtime;
   private scheduler: Scheduler;
+  private pipelineEngine: PipelineEngine;
   private eventBus: EventBus;
   private currentRunId?: string;
-  private currentVersion?: PipelineVersion;
   private readonly pipelineRegistry = new PipelineRegistry();
   private readonly filePipelineStore?: FilePipelineStore;
   private readonly capabilityRegistry = new CapabilityRegistry();
@@ -112,6 +112,10 @@ export class DevHarness {
         ? new FileScheduleStore({ filePath: options.scheduleStoreFile })
         : undefined,
     });
+    this.pipelineEngine = new PipelineEngine(
+      this.pipelineRegistry,
+      this.runtime
+    );
 
     this.filePipelineStore = options.pipelineStoreFile
       ? new FilePipelineStore({ filePath: options.pipelineStoreFile })
@@ -183,17 +187,7 @@ export class DevHarness {
   }
 
   runPipeline(pipelineId: string): string {
-    const pipeline = this.pipelineRegistry.get(pipelineId);
-    const version = pipeline.latestVersion();
-    if (!version) {
-      throw new DomainError({
-        code: "NOT_FOUND",
-        message: `Pipeline "${pipelineId}" has no versions to run`,
-        details: { pipelineId },
-      });
-    }
-    this.currentVersion = version;
-    this.currentRunId = this.runtime.start(version, { pipelineId });
+    this.currentRunId = this.pipelineEngine.start({ pipelineId });
     return this.currentRunId;
   }
 
@@ -252,8 +246,8 @@ export class DevHarness {
     return this.runtime.status(this.currentRunId);
   }
 
-  getVersion() {
-    return this.currentVersion;
+  getPipelineEngine() {
+    return this.pipelineEngine;
   }
 
   listPipelines(): readonly Pipeline[] {
@@ -304,7 +298,7 @@ export class DevHarness {
     const schema = new StateSchema({
       name: "DevSchema",
       fields: {
-        counter: { type: "number" }
+        counter: { type: "number", required: false }
       }
     });
 
@@ -331,7 +325,7 @@ export class DevHarness {
     const schema = new StateSchema({
       name: "CancelSchema",
       fields: {
-        counter: { type: "number" }
+        counter: { type: "number", required: false }
       }
     });
 
